@@ -31,4 +31,12 @@ public class ParserTest {
         assertTrue(j, j.contains("\\\"חשובה\\\"") && j.contains("\"location\":\"תל אביב\""));
         assertFalse(j.contains("description"));
     }
+
+    @Test public void eveningTimeFeedsClassifier() throws Exception {
+        HebrewParser p = new HebrewParser(r("Code.gs"));
+        String j = p.parseJson("לשחק עם אלון בסוני פלייסטיישן היום ב-7:00 בערב", 2026, 10, 22, 4, 60);
+        assertTrue(j, j.contains("2026-10-22 19:00") && j.contains("\"timeDefaulted\":false") && j.contains("\"hour\":19"));
+        // the classifier gets explicitTime=true from the same parse: an action phrase stays a task, with due_time 19:00
+        assertEquals(Classifier.Kind.TASK, Classifier.classify("לשחק עם אלון בסוני פלייסטיישן היום ב-7:00 בערב", true).kind);
+    }
 }
