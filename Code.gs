@@ -28,6 +28,17 @@ var SYNONYMS = [
   [/(\s)(?:תזכיר לי|תזכירי לי|תכניס|תכניסי|תיצור|צור|תקבעו)(?=$|[\s,.!?])/g, '$1תקבע'],
   [/(\s)(?:ב-?חצות)(?=$|[\s,.!?])/g, '$1ב-00:00']
 ];
+// Command prefixes ("תוסיף לי", "תקבע לי", "שים לי"...) and leftover time-of-day words never belong in a title.
+var CMD_PREFIX_ = /^(?:(?:תוסיף|תוסיפי|הוסף|הוסיפי|תקבע|תקבעי|קבע|קבעי|תרשום|תרשמי|רשום|רשמי|שים|תשים|תשימי|תכניס|תכניסי|הכנס|תיצור|תיצרי|צור|צרי|תזמן|תזמני)(?:\s+(?:לי|לנו))?\s+|(?:לי|לנו)\s+)+/;
+var TOD_ = /(^|\s)(?:בערב|בבוקר|בצהריים|בצהרים|בלילה|אחה"צ|אחר הצהריים|אחרי הצהריים|לפנות ערב)(?=$|[\s,.!?])/g;
+function cleanTitle_(t) {
+  t = t.replace(CMD_PREFIX_, '');
+  t = t.replace(TOD_, ' – ');                      // a removed time word between two phrases becomes a separator
+  t = t.replace(/\s+/g, ' ').replace(/(?:\s*–\s*)+/g, ' – ');
+  t = t.replace(/^[\s–,.\-:]+|[\s–,.\-:]+$/g, '');
+  t = t.replace(/(\s)(?:עם|של|ב|ל|ב-|ל-|בשעה) – /g, '$1').replace(/ – (?=(?:עם|של)\s)/g, ' ');
+  return t.trim();
+}
 function toNum_(w) { return /^\d+$/.test(w) ? parseInt(w, 10) : HE_NUMS[w]; }
 function pad2_(n) { return (n < 10 ? '0' : '') + n; }
 function addDays_(y, m, d, k) {
@@ -143,6 +154,7 @@ function parseHebrewEvent(text, now) {
   t = t.replace(/\s+/g, ' ').replace(/^[\s,.\-:]+|[\s,.\-:]+$/g, '').trim();
   // strip dangling prepositions left from removed parts (repeat)
   for (var j = 0; j < 3; j++) t = t.replace(/(?:^|\s)(?:ב|ל|ב-|ל-|ביום|בשעה)$/, '').replace(/[\s,.\-:]+$/, '').trim();
+  t = cleanTitle_(t);
   r.title = t || 'פגישה';
   r.y = date.y; r.m = date.m; r.d = date.d; r.dow = date.dow; r.hour = h; r.minute = min;
   r.startStr = date.y + '-' + pad2_(date.m) + '-' + pad2_(date.d) + ' ' + pad2_(h) + ':' + pad2_(min);

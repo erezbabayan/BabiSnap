@@ -51,10 +51,6 @@ public class MainActivity extends Activity {
         });
         l.addView(sp);
 
-        CheckBox pv = new CheckBox(this); pv.setText("תצוגה מקדימה לפגישות: להציג מה הובן ולבקש אישור לפני שמירה ביומן");
-        pv.setChecked(Core.preview(this));
-        pv.setOnCheckedChangeListener((c, on) -> Core.prefs(this).edit().putBoolean("preview", on).apply());
-        l.addView(pv);
 
         text(l, "\nבדיקת פענוח (לא שומר ביומן):");
         EditText in = new EditText(this); in.setHint("פגישה עם דני מחר ב-14:00"); in.setInputType(InputType.TYPE_CLASS_TEXT);

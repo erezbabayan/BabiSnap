@@ -40,6 +40,13 @@ public class ClassifierTest {
         {"להיפגש עם יוסי מחר באחת", MEETING, true},
         {"ישיבת צוות ביום ראשון בתשע", MEETING, true},
         {"פגישה עם רואה החשבון", MEETING, false},
+        // command prefixes ("תוסיף לי", "שים לי", "תרשום לי"...) are ignored
+        {"תוסיף לי פגישה היום בערב עם רוני בשעה 9:00 בערב משחק של מכבי", MEETING, true},
+        {"שים לי ארוחת ערב עם אמא ביום שישי בשמונה בערב", MEETING, true},
+        {"תוסיף לי משימה לקנות חלב", TASK, false},
+        {"תרשום לי לקנות חלב", TASK, false},
+        {"תוסיף לי הערה הקוד של השער הוא 4521", NOTE, false},
+        {"תקבע לי פגישה עם דני", MEETING, false},
     };
 
     @Test public void hebrewExamples() {

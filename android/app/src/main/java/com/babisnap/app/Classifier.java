@@ -38,13 +38,16 @@ public final class Classifier {
     static final Pattern GATHERING = Pattern.compile("(^|\\s)(פגישה|פגישת|ישיבה|ישיבת|ראיון|זום|שיחת זום|שיחת וידאו|ארוחה|ארוחת|כנס|תור|אסיפה|מסיבה|יום הולדת)(\\s|$)");
     static final Pattern WITH_PERSON = Pattern.compile("(^|\\s)(עם|אצל)\\s+\\S+");
 
+    /** Leading command words ("תוסיף לי", "תקבע לי", "שים לי", a leftover "לי") carry no meaning for classification. */
+    static final Pattern COMMAND = Pattern.compile("^(?:(?:תוסיף|תוסיפי|הוסף|הוסיפי|שים|תשים|תשימי|תכניס|תכניסי|הכנס|תיצור|צור)(?:\\s+(?:לי|לנו))?\\s+|(?:תרשום|תרשמי|רשום)\\s+(?:לי|לנו)\\s+|(?:תקבע|תקבעי)\\s+(?:לי|לנו)\\s+(?=פגישה|משימה|הערה|תזכורת)|(?:לי|לנו)\\s+)+");
+
     public static String normalize(String s) {
         return s == null ? "" : s.replaceAll("[\\u0591-\\u05C7]", "").replaceAll("[.,!?;:\"'״׳]", " ").replaceAll("\\s+", " ").trim();
     }
 
     /** @param explicitTime true when the user said a time of day (parser timeDefaulted == false). */
     public static Result classify(String text, boolean explicitTime) {
-        String t = normalize(text);
+        String t = COMMAND.matcher(normalize(text)).replaceFirst("");
         String s;
         if ((s = strip(t, MEETING_PREFIX)) != null) return new Result(Kind.MEETING, t);
         if ((s = strip(t, TASK_PREFIX)) != null) return new Result(Kind.TASK, s);

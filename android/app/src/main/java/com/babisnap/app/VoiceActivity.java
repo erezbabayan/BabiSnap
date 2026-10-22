@@ -1,7 +1,6 @@
 package com.babisnap.app;
 
 import android.app.Activity;
-import android.app.AlertDialog;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.os.Bundle;
@@ -142,9 +141,7 @@ public class VoiceActivity extends Activity {
         try { parsed = Core.parse(this, spoken); } catch (Exception e) { done("שגיאת פענוח: " + e.getMessage()); return; }
         Classifier.Result c = Classifier.classify(spoken, !parsed.optBoolean("timeDefaulted", true));
         if (c.kind != Classifier.Kind.MEETING) { showSaved(c); return; }
-        // Meetings: unchanged Google Calendar flow.
-        if (status != null) status.setText("שומר ביומן…");
-        if (Core.preview(this)) confirm(); else authorize();
+        showMeeting(); // Google Calendar only, written after the 3s undo window
     }
 
     @Override protected void onActivityResult(int req, int res, Intent data) {
@@ -158,14 +155,6 @@ public class VoiceActivity extends Activity {
         }
     }
 
-    private void confirm() {
-        String msg = parsed.optString("confirm").replaceFirst("^נקבע: ", "") + "\n\nנשמע: \"" + spoken + "\"";
-        new AlertDialog.Builder(this).setTitle("לשמור ביומן?").setMessage(msg)
-            .setPositiveButton("שמור", (d, w) -> authorize())
-            .setNegativeButton("ביטול", (d, w) -> done("בוטל"))
-            .setOnCancelListener(d -> done("בוטל")).show();
-    }
-
     private void authorize() { Core.requestAuth(this, REQ_AUTH, this::save, err -> done("שגיאת התחברות: " + err)); }
 
     private void save(String token) {
@@ -177,7 +166,7 @@ public class VoiceActivity extends Activity {
                     retried = true; GoogleAuthUtil.clearToken(this, token);
                     runOnUiThread(this::authorize); return;
                 }
-                m = code / 100 == 2 ? parsed.optString("confirm") : "שגיאה מיומן גוגל (" + code + ")";
+                m = code / 100 == 2 ? null : "שגיאה מיומן גוגל (" + code + ")"; // success card already shown
             } catch (Exception e) { m = "אין חיבור לאינטרנט? " + e.getMessage(); }
             final String fm = m; runOnUiThread(() -> done(fm));
         }).start();
@@ -186,7 +175,28 @@ public class VoiceActivity extends Activity {
     // ---- Tasks & notes -> BabiTk "notebook" board, sent after a 3s undo window ----
     private static final long UNDO_MS = 3000;
     private final android.os.Handler ui = new android.os.Handler(android.os.Looper.getMainLooper());
-    private String pendingId, pendingBody; private boolean committed;
+    private String pendingId, pendingBody; private boolean committed, pendingMeeting;
+
+    private void showMeeting() {
+        JSONObject p = parsed;
+        setContentView(R.layout.card_saved);
+        getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+        ((TextView) findViewById(R.id.check)).setText("📅");
+        ((TextView) findViewById(R.id.headline)).setText("נרשם ביומן גוגל · פגישה");
+        TextView chip = findViewById(R.id.chip); chip.setText("פגישה");
+        chip.setBackgroundResource(R.drawable.chip_meeting); chip.setTextColor(0xFFFFFFFF);
+        StringBuilder sum = new StringBuilder(p.optString("title"));
+        sum.append("\n📅 ").append(p.optInt("d")).append("/").append(p.optInt("m")).append("/").append(p.optInt("y"))
+            .append(String.format(java.util.Locale.US, " · %02d:%02d", p.optInt("hour"), p.optInt("minute")));
+        if (p.optBoolean("timeDefaulted")) sum.append(" (לא נאמרה שעה)");
+        String loc = p.optString("location", ""); if (!loc.isEmpty()) sum.append("\n📍 ").append(loc);
+        ((TextView) findViewById(R.id.summary)).setText(sum);
+        android.widget.ProgressBar bar = findViewById(R.id.countdown);
+        android.animation.ObjectAnimator.ofInt(bar, "progress", (int) UNDO_MS, 0).setDuration(UNDO_MS).start();
+        pendingMeeting = true;
+        findViewById(R.id.undo).setOnClickListener(v -> { ui.removeCallbacks(commit); pendingMeeting = false; done("בוטל – לא נרשם ביומן"); });
+        ui.postDelayed(commit, UNDO_MS);
+    }
     private final Runnable commit = this::commitPending;
 
     private void showSaved(Classifier.Result c) {
@@ -221,13 +231,15 @@ public class VoiceActivity extends Activity {
 
     /** Undo window closed (or the card was left): queue locally and let WorkManager send with the same client_id. */
     private void commitPending() {
-        if (committed || pendingBody == null) return;
+        if (committed) return;
+        if (pendingMeeting) { committed = true; ui.removeCallbacks(commit); findViewById(R.id.undo).setVisibility(View.INVISIBLE); authorize(); return; }
+        if (pendingBody == null) return;
         committed = true; ui.removeCallbacks(commit);
         BabiTk.enqueue(getApplicationContext(), pendingId, pendingBody);
         done(BabiTk.hasToken(this) ? null : "BabiTk לא מחובר: הפריט נשמר במכשיר ויישלח אחרי חיבור (הגדרות ← חיבור BabiTk)");
     }
 
-    @Override protected void onStop() { if (pendingBody != null && !committed) commitPending(); super.onStop(); }
+    @Override protected void onStop() { if ((pendingBody != null || pendingMeeting) && !committed) commitPending(); super.onStop(); }
 
     private void done(String msg) {
         if (msg != null) Toast.makeText(getApplicationContext(), msg, Toast.LENGTH_LONG).show();
