@@ -38,8 +38,8 @@ public class VoiceActivity extends Activity {
         getWindow().setBackgroundDrawableResource(android.R.color.transparent);
         logo = findViewById(R.id.logo); halo = findViewById(R.id.halo);
         status = findViewById(R.id.status); partial = findViewById(R.id.partial);
-        findViewById(R.id.cancel).setOnClickListener(v -> { stopRec(); done(null); });
-        logo.setOnClickListener(v -> { if (rec != null) rec.stopListening(); });
+        findViewById(R.id.cancel).setOnClickListener(v -> { ended = true; tick.removeCallbacks(ticker); stopRec(); done(null); });
+        logo.setOnClickListener(v -> tapToFinish()); halo.setOnClickListener(v -> tapToFinish());
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) listen();
         else requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, REQ_MIC);
     }
@@ -55,6 +55,8 @@ public class VoiceActivity extends Activity {
             .putExtra(RecognizerIntent.EXTRA_LANGUAGE, "he-IL")
             .putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "he-IL")
             .putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+            .putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 1500L)
+            .putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 1500L)
             .putExtra(RecognizerIntent.EXTRA_PROMPT, "פגישה, משימה או הערה?");
     }
 
@@ -70,28 +72,62 @@ public class VoiceActivity extends Activity {
         logo.animate().scaleX(1f + (s - 1f) * 0.25f).scaleY(1f + (s - 1f) * 0.25f).setDuration(90).start();
     }
 
+    // ---- our own end-of-speech: silence timer, hard cap, tap-to-finish ----
+    private SilenceDetector silence; private boolean ended;
+    private final android.os.Handler tick = new android.os.Handler(android.os.Looper.getMainLooper());
+    private final Runnable ticker = new Runnable() { public void run() {
+        if (ended || silence == null) return;
+        SilenceDetector.Action a = silence.check(android.os.SystemClock.elapsedRealtime());
+        if (a == SilenceDetector.Action.WAIT) { tick.postDelayed(this, 250); return; }
+        String t = silence.lastText();
+        if (t.isEmpty()) { endRecording(null); done("לא נשמע דיבור"); } else endRecording(t);
+    } };
+
+    private void tapToFinish() {
+        if (ended) return;
+        String t = silence == null ? "" : silence.lastText();
+        if (!t.isEmpty()) endRecording(t);
+        else if (rec != null) { rec.stopListening(); status.setText("מעבד…"); } // nothing heard yet: let the recognizer finish (cap still applies)
+    }
+
+    /** Ends the session exactly once; text != null continues the normal flow (classify, then save). */
+    private void endRecording(String text) {
+        if (ended) return;
+        ended = true; tick.removeCallbacks(ticker);
+        if (rec != null) { try { rec.stopListening(); } catch (Exception ignored) {} }
+        stopRec();
+        if (text != null && !text.isEmpty()) { partial.setText(text); handleSpoken(text); }
+    }
+
     private void listen() {
+        silence = new SilenceDetector(android.os.SystemClock.elapsedRealtime()); ended = false;
+        tick.postDelayed(ticker, 250);
         rec = SpeechRecognizer.createSpeechRecognizer(this);
         rec.setRecognitionListener(new RecognitionListener() {
-            public void onReadyForSpeech(Bundle p) { status.setText("מקשיב…"); }
+            public void onReadyForSpeech(Bundle p) { status.setText("מקשיב… (הקש לסיום)"); }
             public void onBeginningOfSpeech() {}
             public void onRmsChanged(float db) { pulse(db); }
             public void onBufferReceived(byte[] buf) {}
             public void onEndOfSpeech() { status.setText("מעבד…"); pulse(-2f); }
             public void onError(int err) {
+                if (ended) return;
+                String t = silence.lastText();
+                if (!t.isEmpty()) { endRecording(t); return; } // keep what was heard
+                ended = true; tick.removeCallbacks(ticker);
                 stopRec();
                 if (err == SpeechRecognizer.ERROR_NO_MATCH || err == SpeechRecognizer.ERROR_SPEECH_TIMEOUT) done("לא נשמע דיבור");
                 else systemDialog();
             }
             public void onPartialResults(Bundle r) {
                 ArrayList<String> a = r.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
-                if (a != null && !a.isEmpty()) partial.setText(a.get(0));
+                if (ended || a == null || a.isEmpty()) return;
+                partial.setText(a.get(0)); silence.partial(a.get(0), android.os.SystemClock.elapsedRealtime());
             }
             public void onResults(Bundle r) {
                 ArrayList<String> a = r.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
-                stopRec();
-                if (a == null || a.isEmpty()) { done(null); return; }
-                partial.setText(a.get(0)); handleSpoken(a.get(0));
+                if (ended) return;
+                String t = SilenceDetector.pick(a, silence.lastText());
+                if (t.isEmpty()) { endRecording(null); done(null); } else endRecording(t);
             }
             public void onEvent(int t, Bundle p) {}
         });
@@ -99,7 +135,7 @@ public class VoiceActivity extends Activity {
     }
 
     private void stopRec() { if (rec != null) { rec.destroy(); rec = null; } }
-    @Override protected void onDestroy() { stopRec(); super.onDestroy(); }
+    @Override protected void onDestroy() { ended = true; tick.removeCallbacks(ticker); stopRec(); super.onDestroy(); }
 
     private void handleSpoken(String text) {
         spoken = text;
