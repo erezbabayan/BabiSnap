@@ -9,6 +9,7 @@ import android.widget.RemoteViews;
 
 public class MicWidget extends AppWidgetProvider {
     protected int layout() { return R.layout.widget_mic; }
+    protected void customize(AppWidgetManager m, int id, RemoteViews v) {}
     @Override public void onUpdate(Context c, AppWidgetManager m, int[] ids) {
         Intent i = new Intent(c, VoiceActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
         PendingIntent pi = PendingIntent.getActivity(c, 0, i, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
@@ -16,6 +17,7 @@ public class MicWidget extends AppWidgetProvider {
             RemoteViews v = new RemoteViews(c.getPackageName(), layout());
             v.setOnClickPendingIntent(R.id.root, pi);
             v.setOnClickPendingIntent(R.id.mic, pi);
+            customize(m, id, v);
             m.updateAppWidget(id, v);
         }
     }
