@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">BabiSnap</string>
+    <string name="widget_hint">הקש ודבר · פגישה, משימה או הערה</string>
+    <string name="widget_desc">BabiSnap – הקלטת פגישה ביומן בהקשה אחת</string>
+    <string name="widget_button_label">BabiSnap – כפתור</string>
+    <string name="widget_button_desc">כפתור BabiSnap – הקשה אחת להקלטת פגישה</string>
+</resources>

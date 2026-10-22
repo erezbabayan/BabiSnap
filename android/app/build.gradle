@@ -1,0 +1,46 @@
+plugins { id 'com.android.application' }
+
+def ksProps = new Properties()
+def ksFile = file(System.getenv('VOICECAL_KEYSTORE_PROPS') ?: '/workspace/secrets/voicecal-keystore.properties')
+if (ksFile.exists()) ksFile.withInputStream { ksProps.load(it) }
+
+android {
+    namespace 'com.babisnap.app'
+    compileSdk 34
+    defaultConfig {
+        applicationId 'com.babisnap.app'
+        minSdk 26
+        targetSdk 34
+        versionCode 7
+        versionName '1.6'
+    }
+    signingConfigs {
+        release {
+            if (ksFile.exists()) {
+                storeFile file(ksProps['storeFile']); storePassword ksProps['storePassword']
+                keyAlias ksProps['keyAlias']; keyPassword ksProps['keyPassword']
+            }
+        }
+    }
+    buildTypes {
+        release { minifyEnabled false; signingConfig signingConfigs.release }
+    }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+    sourceSets { main { assets.srcDirs += ["$buildDir/genassets"] } }
+    testOptions { unitTests.returnDefaultValues = true }
+}
+
+// Single source of truth: the parser lives in ../../Code.gs (also the Apps Script fallback).
+tasks.register('copyParser', Copy) {
+    from("${rootDir}/../Code.gs") { rename { 'parser.js' } }
+    into "$buildDir/genassets"
+}
+preBuild.dependsOn copyParser
+
+dependencies {
+    implementation 'com.google.android.gms:play-services-auth:21.2.0'
+    implementation 'org.mozilla:rhino:1.7.15'
+    implementation 'androidx.security:security-crypto:1.1.0-alpha06'
+    implementation 'androidx.work:work-runtime:2.9.1'
+    testImplementation 'junit:junit:4.13.2'
+}

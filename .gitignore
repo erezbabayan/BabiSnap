@@ -1,0 +1,35 @@
+# Build outputs
+build/
+**/build/
+out/
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+# Gradle / IDE
+.gradle/
+.idea/
+*.iml
+.DS_Store
+captures/
+.externalNativeBuild/
+.cxx/
+local.properties
+# Signing & secrets
+*.jks
+*.keystore
+*.p12
+*.pem
+*.key
+keystore.properties
+*keystore*.properties
+signing.properties
+secrets/
+.env
+.env.*
+google-services.json
+client_secret*.json
+*credentials*.json
+# Python
+__pycache__/

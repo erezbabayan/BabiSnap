@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <queries><intent><action android:name="android.speech.RecognitionService" /></intent></queries>
+    <queries>
+        <intent><action android:name="android.speech.action.RECOGNIZE_SPEECH" /></intent>
+    </queries>
+    <application android:label="@string/app_name" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true" android:theme="@android:style/Theme.DeviceDefault.Light.DarkActionBar">
+        <activity android:name=".MainActivity" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <activity android:name=".BabiTkSettingsActivity" android:exported="true" android:label="חיבור BabiTk" android:launchMode="singleTop">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="babisnap" android:host="pair" />
+            </intent-filter>
+        </activity>
+        <activity android:name=".VoiceActivity" android:exported="true" android:excludeFromRecents="true"
+            android:taskAffinity="com.babisnap.app.voice" android:launchMode="singleTask"
+            android:theme="@android:style/Theme.DeviceDefault.Light.Dialog.NoActionBar" />
+        <receiver android:name=".MicWidget" android:exported="false" android:label="@string/app_name">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/mic_widget" />
+        </receiver>
+        <receiver android:name=".ButtonWidget" android:exported="false" android:label="@string/widget_button_label">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/button_widget" />
+        </receiver>
+    </application>
+</manifest>
