@@ -185,12 +185,8 @@ public class VoiceActivity extends Activity {
         ((TextView) findViewById(R.id.headline)).setText("נרשם ביומן גוגל · פגישה");
         TextView chip = findViewById(R.id.chip); chip.setText("פגישה");
         chip.setBackgroundResource(R.drawable.chip_meeting); chip.setTextColor(0xFFFFFFFF);
-        StringBuilder sum = new StringBuilder(p.optString("title"));
-        sum.append("\n📅 ").append(p.optInt("d")).append("/").append(p.optInt("m")).append("/").append(p.optInt("y"))
-            .append(String.format(java.util.Locale.US, " · %02d:%02d", p.optInt("hour"), p.optInt("minute")));
-        if (p.optBoolean("timeDefaulted")) sum.append(" (לא נאמרה שעה)");
-        String loc = p.optString("location", ""); if (!loc.isEmpty()) sum.append("\n📍 ").append(loc);
-        ((TextView) findViewById(R.id.summary)).setText(sum);
+        ((TextView) findViewById(R.id.summary)).setText(CardText.meeting(p.optString("title"), p.optInt("d"), p.optInt("m"), p.optInt("y"),
+            p.optInt("hour"), p.optInt("minute"), p.optBoolean("timeDefaulted"), p.optString("location", "")));
         android.widget.ProgressBar bar = findViewById(R.id.countdown);
         android.animation.ObjectAnimator.ofInt(bar, "progress", (int) UNDO_MS, 0).setDuration(UNDO_MS).start();
         pendingMeeting = true;
@@ -206,7 +202,8 @@ public class VoiceActivity extends Activity {
         boolean noDate = p.optBoolean("dateDefaulted", true) && p.optBoolean("timeDefaulted", true);
         String date = noDate ? null : String.format(java.util.Locale.US, "%04d-%02d-%02d", p.optInt("y"), p.optInt("m"), p.optInt("d"));
         String time = p.optBoolean("timeDefaulted", true) ? null : String.format(java.util.Locale.US, "%02d:%02d", p.optInt("hour"), p.optInt("minute"));
-        String title = p.optString("title", "").trim(); if (title.isEmpty()) title = spoken;
+        // Tasks/notes keep the place inside the title ("לקנות חלב בסופר") and also get it in the location field.
+        String title = p.optString("titleFull", p.optString("title", "")).trim(); if (title.isEmpty()) title = spoken;
         pendingId = BabiTkJson.newClientId(); // unique per recording, matches the server client_id pattern
         pendingBody = BabiTkJson.build(title, date, time, "נוצר בהכתבה: " + spoken, p.optString("location", ""), c.kind.api(), pendingId);
 
@@ -217,12 +214,7 @@ public class VoiceActivity extends Activity {
             : "נשמר במכשיר · " + c.kind.he() + "\n" + (BabiTk.needsRepair(this) ? "BabiTk " + BabiTk.NOT_CONNECTED : "BabiTk לא מחובר") + " – פתחו את BabiSnap ← חיבור BabiTk");
         TextView chip = findViewById(R.id.chip); chip.setText(c.kind.he());
         if (c.kind == Classifier.Kind.NOTE) { chip.setBackgroundResource(R.drawable.chip_note); chip.setTextColor(0xFF2A1B7A); }
-        StringBuilder sum = new StringBuilder(title);
-        if (date != null) sum.append("\n📅 ").append(p.optInt("d")).append("/").append(p.optInt("m")).append("/").append(p.optInt("y"))
-            .append(time != null ? " · " + time : "");
-        else sum.append("\nללא תאריך");
-        String loc = p.optString("location", ""); if (!loc.isEmpty()) sum.append("\n📍 ").append(loc);
-        ((TextView) findViewById(R.id.summary)).setText(sum);
+        ((TextView) findViewById(R.id.summary)).setText(CardText.saved(title, date != null, p.optInt("d"), p.optInt("m"), p.optInt("y"), time, p.optString("location", "")));
         android.widget.ProgressBar bar = findViewById(R.id.countdown);
         android.animation.ObjectAnimator.ofInt(bar, "progress", (int) UNDO_MS, 0).setDuration(UNDO_MS).start();
         findViewById(R.id.undo).setOnClickListener(v -> { ui.removeCallbacks(commit); pendingBody = null; done("בוטל – לא נשלח ל-BabiTk"); });

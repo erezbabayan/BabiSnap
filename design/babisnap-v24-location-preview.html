@@ -1,0 +1,69 @@
+<!doctype html><html dir="rtl" lang="he"><head><meta charset="utf-8"><style>
+@font-face{font-family:R;src:url('file:///usr/share/fonts/truetype/sand-box/google/Rubik/Rubik-VariableFont_wght.ttf');font-weight:300 900}
+*{box-sizing:border-box;margin:0;padding:0}
+body{width:1080px;height:640px;font-family:R,'Noto Sans Hebrew','Noto Color Emoji',sans-serif;background:#E9E7F3;display:flex;flex-direction:column;align-items:center;padding:22px 24px}
+h1{font-size:19px;color:#2A1B7A;font-weight:600;margin-bottom:4px}
+.sub{font-size:13px;color:#5d5a6e;margin-bottom:16px}
+.sub b{color:#2A1B7A}
+.row{display:flex;gap:22px;direction:rtl}
+.ph{width:330px;height:520px;border-radius:26px;background:linear-gradient(180deg,#14112B,#231B57);position:relative;display:flex;align-items:center;justify-content:center}
+.ph .cap{position:absolute;top:14px;left:0;right:0;text-align:center;color:#d9d4f5;font-size:12.5px}
+.ph .cap b{color:#FFC72C;font-weight:600}
+/* card_saved.xml: 300dp wide, #FFFBEA, radius 28dp, padding 24dp */
+.card{width:276px;background:#FFFBEA;border-radius:26px;padding:22px 20px 12px;display:flex;flex-direction:column;align-items:center;box-shadow:0 10px 30px rgba(0,0,0,.35)}
+.circ{width:66px;height:66px;border-radius:50%;background:#FFE9A8;display:flex;align-items:center;justify-content:center;font-size:32px;font-family:'Noto Color Emoji'}
+.hl{margin-top:12px;font-size:16.5px;font-weight:700;color:#2A1B7A;text-align:center}
+.chip{margin-top:6px;background:#1A73E8;color:#fff;font-size:11px;font-weight:700;border-radius:11px;padding:1px 10px}
+.sum{margin-top:11px;width:100%;background:#fff;border:1.5px solid #EADFB5;border-radius:13px;padding:10px 12px;color:#2A1B7A;font-size:13.5px;line-height:1.75;text-align:start}
+.sum .e{font-family:'Noto Color Emoji';font-size:12.5px;margin-left:4px}
+.sum .new{background:#FFF4CC;border-radius:6px;margin:0 -5px;padding:0 5px}
+.bar{margin-top:13px;width:100%;height:4px;background:#EADFB5;border-radius:2px;overflow:hidden;direction:ltr}
+.bar i{display:block;height:100%;width:58%;background:#6A5FA8}
+.undo{margin-top:5px;padding:7px;color:#6A5FA8;font-size:13.5px}
+.tag{position:absolute;bottom:16px;left:0;right:0;text-align:center;color:#bdb6e6;font-size:11.5px;line-height:1.5;padding:0 18px}
+/* Google Calendar event (what the API receives) */
+.gc{width:290px;background:#fff;border-radius:18px;padding:18px 18px 16px;color:#1f1f1f;box-shadow:0 10px 30px rgba(0,0,0,.35);font-family:R,sans-serif}
+.gc .t{display:flex;gap:10px;align-items:flex-start}
+.gc .sq{width:14px;height:14px;border-radius:4px;background:#1A73E8;margin-top:6px;flex:none}
+.gc .tt{font-size:19px;font-weight:500}
+.gc .d{font-size:12.5px;color:#5f6368;margin-top:3px}
+.gc .ln{display:flex;gap:10px;align-items:flex-start;margin-top:14px;font-size:13px;color:#3c4043;line-height:1.45}
+.gc .ic{width:18px;flex:none;text-align:center;font-family:'Noto Color Emoji';font-size:14px}
+.gc .lk{color:#1A73E8;text-decoration:underline}
+.gc .muted{color:#70757a;font-size:12px}
+</style></head><body>
+<h1>BabiSnap v2.4 · מיקום בפגישות – הצעת עיצוב (שלב 1)</h1>
+<div class="sub">הכתבה: <b>"להיפגש עם תמר במסעדת כפית במודיעין מחר בשבע בערב"</b> · השינוי היחיד בכרטיס: שורת 📍 מתחת לתאריך (מוצגת רק כשזוהה מקום)</div>
+<div class="row">
+  <div class="ph"><div class="cap">היום · <b>v2.3</b></div>
+    <div class="card">
+      <div class="circ">📅</div>
+      <div class="hl">נרשם ביומן גוגל · פגישה</div>
+      <div class="chip">פגישה</div>
+      <div class="sum">להיפגש עם תמר במסעדת כפית במודיעין<br><span class="e">📅</span>23/10/2026 · 19:00</div>
+      <div class="bar"><i></i></div>
+      <div class="undo">ביטול (Undo)</div>
+    </div>
+    <div class="tag">המקום נשאר בתוך הכותרת, שדה המיקום ביומן ריק</div>
+  </div>
+  <div class="ph"><div class="cap">מוצע · <b>v2.4</b> (כרטיס ביטול, 3 שניות)</div>
+    <div class="card">
+      <div class="circ">📅</div>
+      <div class="hl">נרשם ביומן גוגל · פגישה</div>
+      <div class="chip">פגישה</div>
+      <div class="sum">פגישה עם תמר<br><span class="e">📅</span>23/10/2026 · 19:00<br><span class="new"><span class="e">📍</span>מסעדת כפית, מודיעין</span></div>
+      <div class="bar"><i></i></div>
+      <div class="undo">ביטול (Undo)</div>
+    </div>
+    <div class="tag">כותרת נקייה + שורת 📍 · מיקום ארוך מקוצר בכרטיס ל-80 תווים עם "…"<br>(ההדגשה הצהובה רק לסימון השינוי במוקאפ)</div>
+  </div>
+  <div class="ph"><div class="cap">ביומן גוגל אחרי 3 שניות</div>
+    <div class="gc">
+      <div class="t"><div class="sq"></div><div><div class="tt">פגישה עם תמר</div><div class="d">יום שישי, 23 באוקטובר · 19:00–20:00</div></div></div>
+      <div class="ln"><div class="ic">📍</div><div><span class="lk">מסעדת כפית, מודיעין</span><div class="muted">גוגל הופך את הטקסט לקישור למפות</div></div></div>
+      <div class="ln"><div class="ic">📝</div><div class="muted">נוצר בהכתבה: להיפגש עם תמר במסעדת כפית במודיעין מחר בשבע בערב</div></div>
+    </div>
+    <div class="tag">שדה המיקום באירוע: "מסעדת כפית, מודיעין"<br>טקסט בלבד – בלי API בתשלום</div>
+  </div>
+</div>
+</body></html>
