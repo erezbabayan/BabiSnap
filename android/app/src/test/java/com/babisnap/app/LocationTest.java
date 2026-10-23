@@ -57,4 +57,52 @@ public class LocationTest {
         assertEquals("", CardText.locationLine("   "));
         assertEquals("", CardText.locationLine(null));
     }
+
+    // ---- 2.4.x: complete CBS locality list + meeting context ----
+    static String field(String j, String k) {
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("\"" + k + "\":\"((?:[^\"\\\\]|\\\\.)*)\"").matcher(j);
+        return m.find() ? m.group(1) : "";
+    }
+    static String loc(String j) { return field(j, "location"); }
+    static String title(String j) { return field(j, "title"); }
+
+    @Test public void bruchinBothSpeechForms() throws Exception {
+        for (String s : new String[]{"פגישה בברוכין לראות את הבית ביום שני ב-11", "פגישה וברוכין לראות את הבית ביום שני ב-11",
+                                     "פגישה וברוכין לראות את הבית ב-26/10 בשעה 11"}) {
+            String j = parse(s);
+            assertEquals(s, "ברוכין", loc(j));
+            assertEquals(s, "פגישה – לראות את הבית", title(j));
+            assertTrue(j, j.contains("\"startStr\":\"2026-10-26 11:00\""));
+            assertEquals(Classifier.Kind.MEETING, Classifier.classify(s, true).kind);
+        }
+    }
+
+    @Test public void unknownPlaceInMeetingContext() throws Exception {
+        String j = parse("פגישה בגבעת הפרחים לדבר על החוזה מחר ב-10");
+        assertEquals("גבעת הפרחים", loc(j)); assertEquals("פגישה – לדבר על החוזה", title(j));
+        j = parse("פגישה עם יוסי בנווה צדק מחר בשש");
+        assertEquals("נווה צדק", loc(j)); assertEquals("פגישה עם יוסי", title(j));
+        assertEquals("יפו העתיקה", loc(parse("פגישה ביפו העתיקה מחר בשבע בערב")));
+    }
+
+    @Test public void atTheDentistKeepsPersonInTitle() throws Exception {
+        String j = parse("פגישה אצל רופא השיניים מחר בעשר");
+        assertEquals("אצל רופא השיניים", loc(j)); assertEquals("פגישה אצל רופא השיניים", title(j));
+    }
+
+    @Test public void localitiesFromCbsList() throws Exception {
+        assertEquals("כרכור", loc(parse("פגישה בכרכור מחר ב-9")));
+        assertEquals("שדה בוקר", loc(parse("פגישה בשדה בוקר מחר ב-9")));
+        assertEquals("קרית שמונה", loc(parse("פגישה בקרית שמונה מחר ב-9")));
+        assertEquals("ברוכין", loc(parse("לאסוף את הילדים בברוכין מחר בחמש"))); // known town: any kind
+    }
+
+    @Test public void noFalsePlaces() throws Exception {
+        for (String s : new String[]{"פגישה בזום מחר ב-10", "פגישה בטלפון עם דני מחר ב-10", "פגישה בנוגע לחוזה מחר ב-10",
+                "פגישה עם ברק מחר ב-10", "פגישה עם שני בשני ב-10", "פגישה בעוד שבוע בשבע בערב", "לקנות חלב בבקשה",
+                "לשלוח את הדוח בדחיפות מחר", "לקנות פרחים בדרך הביתה", "לאסוף את הילדים וברוכין מחר בחמש"}) {
+            assertEquals(s, "", loc(parse(s)));
+        }
+        assertTrue(parse("פגישה בשבע בערב בברוכין").contains(" 19:00\""));
+    }
 }

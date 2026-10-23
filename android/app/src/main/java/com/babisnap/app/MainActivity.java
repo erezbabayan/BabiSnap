@@ -95,7 +95,7 @@ public class MainActivity extends Activity {
         inv.setChecked(Core.sendInvites(this));
         inv.setContentDescription("שליחת הזמנות");
         inv.setOnCheckedChangeListener((s, on) -> Core.prefs(this).edit().putBoolean("send_invites", on).apply());
-        row(prefs, "✉️", false, "שליחת הזמנות", plain("כשמזכירים איש קשר בפגישה · בקרוב"), inv);
+        row(prefs, "✉️", false, "שליחת הזמנות", plain("כשמזכירים איש קשר בפגישה"), inv);
         row(prefs, "➕", true, "כפתור במסך הבית", null, link("הוסף", false, v -> addWidget()));
 
         footer();
@@ -177,9 +177,16 @@ public class MainActivity extends Activity {
         }
     }
 
-    private void openAppInfo() {
-        try { startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", getPackageName(), null))); }
-        catch (Exception e) { Toast.makeText(this, "פתחו: הגדרות ← אפליקציות ← BabiSnap", Toast.LENGTH_LONG).show(); }
+    private void openAppInfo() { openAppInfo(this); }
+
+    static void openAppInfo(Activity a) {
+        try { a.startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", a.getPackageName(), null))); }
+        catch (Exception e) { Toast.makeText(a, "פתחו: הגדרות ← אפליקציות ← BabiSnap", Toast.LENGTH_LONG).show(); }
+    }
+
+    /** Denied twice: Android no longer shows its dialog, only App info can grant it. */
+    static boolean isBlocked(Activity a, String perm) {
+        return Core.prefs(a).getBoolean(blockedKey(perm), false) && !a.shouldShowRequestPermissionRationale(perm);
     }
 
     // ---- preferences ----

@@ -36,6 +36,8 @@ public final class Classifier {
         "תוריד", "תורידי", "תעדכן", "תעדכני", "תחדש", "תחדשי", "תגיש", "תגישי", "תמלא", "תמלאי", "תאשר", "תאשרי", "תברר", "תבררי"));
     static final Pattern OBLIGATION = Pattern.compile("(^|\\s)(צריך|צריכה|צריכים|חייב|חייבת|חייבים|דחוף|אל תשכח|אל תשכחי|לא לשכוח|דדליין|עד סוף|עד מחר|עד יום|עד ה)(\\s|$)");
     static final Pattern GATHERING = Pattern.compile("(^|\\s)(פגישה|פגישת|ישיבה|ישיבת|ראיון|זום|שיחת זום|שיחת וידאו|ארוחה|ארוחת|כנס|תור|אסיפה|מסיבה|יום הולדת)(\\s|$)");
+    /** "תזמין את תמר לפגישה מחר" is a meeting with an invite (stage 2), not a "תזמין" (order) task. */
+    static final Pattern INVITE_TO_MEETING = Pattern.compile("^(?:תזמין|תזמיני|הזמן|הזמיני)\\s+את\\s.*(?:^|\\s)ל?(?:פגישה|פגישת|ישיבה|ישיבת|מפגש)(?:\\s|$)");
     static final Pattern WITH_PERSON = Pattern.compile("(^|\\s)(עם|אצל)\\s+\\S+");
 
     /** Leading command words ("תוסיף לי", "תקבע לי", "שים לי", a leftover "לי") carry no meaning for classification. */
@@ -53,6 +55,7 @@ public final class Classifier {
         if ((s = strip(t, TASK_PREFIX)) != null) return new Result(Kind.TASK, s);
         if ((s = strip(t, NOTE_PREFIX)) != null) return new Result(Kind.NOTE, s);
 
+        if (INVITE_TO_MEETING.matcher(t).find()) return new Result(Kind.MEETING, t);
         String first = t.isEmpty() ? "" : t.split(" ")[0];
         boolean meetingVerb = MEETING_VERBS.contains(first);
         boolean action = !meetingVerb && (isInfinitive(first) || IMPERATIVES.contains(first));
