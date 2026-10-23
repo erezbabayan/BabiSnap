@@ -79,9 +79,9 @@ public class ClassifierTest {
 
     @Test public void responseOutcomes() {
         assertEquals(BabiTkJson.Outcome.DONE, BabiTkJson.outcome(201));
-        assertEquals(BabiTkJson.Outcome.DROP, BabiTkJson.outcome(400));
-        assertEquals(BabiTkJson.Outcome.WAIT_TOKEN, BabiTkJson.outcome(401));
-        assertEquals(BabiTkJson.Outcome.RETRY, BabiTkJson.outcome(429));
+        assertEquals(BabiTkJson.Outcome.FAILED, BabiTkJson.outcome(400));
+        assertEquals(BabiTkJson.Outcome.UNAUTHORIZED, BabiTkJson.outcome(401));
+        assertEquals(BabiTkJson.Outcome.RATE_LIMITED, BabiTkJson.outcome(429));
         assertEquals(BabiTkJson.Outcome.RETRY, BabiTkJson.outcome(500));
         assertEquals(BabiTkJson.Outcome.RETRY, BabiTkJson.outcome(-1));
     }

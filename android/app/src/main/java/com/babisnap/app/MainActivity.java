@@ -101,19 +101,26 @@ public class MainActivity extends Activity {
         new Thread(() -> {
             String email; try { email = Core.fetchEmail(token); } catch (Exception e) { email = null; }
             String fe = email == null ? "(חשבון Google)" : email;
-            Core.prefs(this).edit().putString("email", fe).putString("tok", token).apply();
+            Core.prefs(this).edit().putString("email", fe).apply(); // the Google access token itself is never stored by us
             runOnUiThread(this::refreshAccount);
         }).start();
     }
 
+    /** Sign out = forget the account locally AND revoke BabiSnap's Calendar grant at Google (we never keep Google tokens,
+     *  so a fresh one is fetched silently from Play services just to revoke it). */
     private void signOut() {
-        String tok = Core.prefs(this).getString("tok", null);
         Core.prefs(this).edit().remove("email").remove("tok").apply();
         refreshAccount();
-        if (tok != null) new Thread(() -> {
-            Core.revoke(tok);
-            try { GoogleAuthUtil.clearToken(this, tok); } catch (Exception ignored) {}
-        }).start();
+        android.content.Context app = getApplicationContext();
+        com.google.android.gms.auth.api.identity.Identity.getAuthorizationClient(this).authorize(Core.authRequest())
+            .addOnSuccessListener(res -> {
+                String tok = res.hasResolution() ? null : res.getAccessToken(); // needs UI = no grant left to revoke
+                if (tok != null) new Thread(() -> {
+                    Core.revoke(tok);
+                    try { GoogleAuthUtil.clearToken(app, tok); } catch (Exception ignored) {}
+                }).start();
+            });
+        Toast.makeText(this, "התנתקת מ-Google – הגישה ליומן מבוטלת", Toast.LENGTH_SHORT).show();
     }
 
     private void showWidgetPicker(AppWidgetManager m) {

@@ -12,6 +12,7 @@ public class BabiTkSettingsActivity extends Activity {
 
     @Override protected void onCreate(Bundle b) {
         super.onCreate(b);
+        getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE); // no screenshots / recents thumbnail of this screen
         setTitle("חיבור BabiTk");
         LinearLayout l = new LinearLayout(this);
         l.setOrientation(LinearLayout.VERTICAL); l.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
@@ -21,7 +22,8 @@ public class BabiTkSettingsActivity extends Activity {
         l.addView(info);
         state = new TextView(this); state.setTextSize(16); l.addView(state);
         EditText in = new EditText(this); in.setHint("טוקן מכשיר או קישור babisnap://pair…");
-        in.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        in.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+        in.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
         l.addView(in);
         Button save = new Button(this); save.setText("שמור וחבר"); l.addView(save);
         save.setOnClickListener(v -> {
@@ -30,13 +32,13 @@ public class BabiTkSettingsActivity extends Activity {
             if (t.toLowerCase(java.util.Locale.ROOT).startsWith("babisnap:") || t.toLowerCase(java.util.Locale.ROOT).startsWith("intent:")) {
                 in.setText(""); applyLink(t, "הדבקה"); return; // a whole pairing link was pasted
             }
-            if (t.matches(".*\\s.*")) { Toast.makeText(this, "הטוקן לא יכול להכיל רווחים", Toast.LENGTH_LONG).show(); return; }
+            if (!PairLink.validToken(t)) { in.setText(""); Toast.makeText(this, "זה לא טוקן BabiTk תקין (babi_…)", Toast.LENGTH_LONG).show(); return; }
             boolean ok = BabiTk.setToken(this, t); in.setText("");
             BabiTk.note(this, "babitk_last_pair", ok ? "טוקן הודבק ונשמר ✓" : "הדבקה – שמירה נכשלה");
             Toast.makeText(this, ok ? "מחובר BabiSnap ✓" : "שמירה נכשלה: " + Core.prefs(this).getString("babitk_store_error", ""), Toast.LENGTH_LONG).show(); refresh();
         });
         Button off = new Button(this); off.setText("נתק BabiTk"); l.addView(off);
-        off.setOnClickListener(v -> { BabiTk.setToken(this, null); refresh(); });
+        off.setOnClickListener(v -> { BabiTk.disconnect(this); Toast.makeText(this, "נותק – הטוקן נמחק מהמכשיר", Toast.LENGTH_SHORT).show(); refresh(); });
         Button test = new Button(this); test.setText("שלח בדיקה"); l.addView(test);
         test.setOnClickListener(v -> {
             test.setEnabled(false); state.append("\nשולח בדיקה…");
@@ -57,7 +59,7 @@ public class BabiTkSettingsActivity extends Activity {
 
     /** babisnap://pair?token=..&url=.. ; url must be the exact BabiTk endpoint. Token is never logged or displayed. */
     private void handlePair(android.content.Intent i) {
-        if (i == null || i.getData() == null) return;
+        if (i == null || i.getData() == null || !android.content.Intent.ACTION_VIEW.equals(i.getAction())) return;
         String link = i.getDataString();
         setIntent(new android.content.Intent(this, BabiTkSettingsActivity.class)); // drop the link (and token) from the intent
         applyLink(link, "קישור");
@@ -77,8 +79,12 @@ public class BabiTkSettingsActivity extends Activity {
 
     private void refresh() {
         android.content.SharedPreferences p = Core.prefs(this);
-        StringBuilder sb = new StringBuilder("\nמצב: ").append(BabiTk.hasToken(this) ? "מחובר ✓" : "לא מחובר")
-            .append("\nפריטים ממתינים לשליחה: ").append(BabiTk.pending(this));
+        boolean on = BabiTk.hasToken(this);
+        StringBuilder sb = new StringBuilder("\nמצב: ").append(on ? "מחובר ✓" : BabiTk.needsRepair(this) ? BabiTk.NOT_CONNECTED : "לא מחובר");
+        if (on) sb.append("\nטוקן: babi_•••••••• (מוסתר)"); // never shown, not even partially
+        sb.append("\nפריטים ממתינים לשליחה: ").append(BabiTk.pending(this));
+        int failed = BabiTk.failed(this);
+        if (failed > 0) sb.append("\nפריטים שנדחו (נשמרו במכשיר): ").append(failed);
         line(sb, p, "babitk_last_attempt", "ניסיון שליחה אחרון");
         line(sb, p, "babitk_last_error", "שגיאה אחרונה");
         line(sb, p, "babitk_last_pair", "חיבור אחרון");

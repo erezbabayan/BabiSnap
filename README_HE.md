@@ -70,3 +70,11 @@
 - `android/`: קוד המקור (Java). בנייה: `./gradlew assembleRelease`.
 - `Code.gs`: המפענח העברי (מקור יחיד: נארז באפליקציה ומשמש גם לחלופת Apps Script).
 - `test-cases.json`, `run-cases.js`, `parser.test.js`: בדיקות (`node parser.test.js`, `ClassifierTest`/`PairLinkTest` לסיווג ולקישור החיבור, וגם `./gradlew testReleaseUnitTest` שמריץ את אותם מקרים במנוע של הטלפון).
+
+## אבטחה (גרסה 2.2)
+- טוקן BabiTk נשמר מוצפן במכשיר בלבד, לא מוצג (רק `babi_••••`), לא נרשם בלוג, ונשלח רק כ-Bearer ב-HTTPS לכתובת הקבועה של BabiTk.
+- קישור חיבור מתקבל רק אם `url` הוא בדיוק כתובת BabiTk והטוקן בפורמט `babi_…`. חיבור חדש מחליף את הקודם.
+- 401 מהשרת: הטוקן נמחק, המצב "לא מחובר – חבר מחדש", הפריטים נשארים בתור ונשלחים אחרי חיבור מחדש.
+- 429: המתנה הולכת וגדלה (או לפי Retry-After). 400: הפריט מסומן "נדחה" ונשאר במכשיר, בלי ניסיונות אינסופיים.
+- HTTPS בלבד, בלי גיבוי ענן, צילומי מסך חסומים במסך חיבור BabiTk. התנתקות מ-Google מבטלת את הגישה ליומן.
+- הגנת סודות ב-repo: `git config core.hooksPath .githooks` (חוסם keystore/‏.env/טוקנים) + סריקת gitleaks ב-GitHub Actions.

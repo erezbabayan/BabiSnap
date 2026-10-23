@@ -33,3 +33,11 @@ client_secret*.json
 *credentials*.json
 # Python
 __pycache__/
+# 2.2 hygiene: more key/token shapes
+*.pfx
+*.p8
+*.der
+*.env
+*token*.txt
+*.token
+babitk-android-signing-backup*

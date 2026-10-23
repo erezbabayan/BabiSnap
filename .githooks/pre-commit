@@ -1,0 +1,28 @@
+#!/bin/sh
+# BabiSnap — block secrets from being committed (enable once per clone: git config core.hooksPath .githooks)
+
+staged=$(git diff --cached --name-only --diff-filter=ACMR)
+blocked=0
+for file in $staged; do
+  base=$(basename "$file")
+  case "$file" in
+    secrets/*|*/secrets/*) bad=1 ;;
+    *) bad=0 ;;
+  esac
+  case "$base" in
+    .env|.env.*|*.env|*.jks|*.keystore|*.p12|*.pfx|*.pem|*.key|*.p8|*.der|keystore.properties|*keystore*.properties|signing.properties|google-services.json|client_secret*.json|*credentials*.json|*token*.txt|*-token|*.token|babitk-android-signing-backup*)
+      bad=1 ;;
+  esac
+  if [ "$bad" -eq 1 ]; then
+    echo "❌ חסום: $file — קובצי סודות/מפתחות חתימה/טוקנים לא נכנסים ל-git."
+    blocked=1
+  fi
+done
+[ "$blocked" -ne 0 ] && exit 1
+
+# Content scan of the staged diff when gitleaks is installed.
+if command -v gitleaks >/dev/null 2>&1; then
+  gitleaks git --pre-commit --staged --redact --no-banner --config .gitleaks.toml . || {
+    echo "❌ gitleaks מצא משהו שנראה כמו סוד בשינויים. הסירו אותו לפני commit."; exit 1; }
+fi
+exit 0

@@ -207,14 +207,14 @@ public class VoiceActivity extends Activity {
         String date = noDate ? null : String.format(java.util.Locale.US, "%04d-%02d-%02d", p.optInt("y"), p.optInt("m"), p.optInt("d"));
         String time = p.optBoolean("timeDefaulted", true) ? null : String.format(java.util.Locale.US, "%02d:%02d", p.optInt("hour"), p.optInt("minute"));
         String title = p.optString("title", "").trim(); if (title.isEmpty()) title = spoken;
-        pendingId = java.util.UUID.randomUUID().toString();
+        pendingId = BabiTkJson.newClientId(); // unique per recording, matches the server client_id pattern
         pendingBody = BabiTkJson.build(title, date, time, "נוצר בהכתבה: " + spoken, p.optString("location", ""), c.kind.api(), pendingId);
 
         setContentView(R.layout.card_saved);
         getWindow().setBackgroundDrawableResource(android.R.color.transparent);
         boolean hasTok = BabiTk.hasToken(this);
         ((TextView) findViewById(R.id.headline)).setText(hasTok ? "נכנס למחברת ב-BabiTk · " + c.kind.he()
-            : "נשמר במכשיר · " + c.kind.he() + "\nBabiTk לא מחובר – פתחו את BabiSnap ← חיבור BabiTk");
+            : "נשמר במכשיר · " + c.kind.he() + "\n" + (BabiTk.needsRepair(this) ? "BabiTk " + BabiTk.NOT_CONNECTED : "BabiTk לא מחובר") + " – פתחו את BabiSnap ← חיבור BabiTk");
         TextView chip = findViewById(R.id.chip); chip.setText(c.kind.he());
         if (c.kind == Classifier.Kind.NOTE) { chip.setBackgroundResource(R.drawable.chip_note); chip.setTextColor(0xFF2A1B7A); }
         StringBuilder sum = new StringBuilder(title);
@@ -236,7 +236,7 @@ public class VoiceActivity extends Activity {
         if (pendingBody == null) return;
         committed = true; ui.removeCallbacks(commit);
         BabiTk.enqueue(getApplicationContext(), pendingId, pendingBody);
-        done(BabiTk.hasToken(this) ? null : "BabiTk לא מחובר: הפריט נשמר במכשיר ויישלח אחרי חיבור (הגדרות ← חיבור BabiTk)");
+        done(BabiTk.hasToken(this) ? null : (BabiTk.needsRepair(this) ? "BabiTk " + BabiTk.NOT_CONNECTED : "BabiTk לא מחובר") + ": הפריט נשמר במכשיר ויישלח אחרי חיבור (הגדרות ← חיבור BabiTk)");
     }
 
     @Override protected void onStop() { if ((pendingBody != null || pendingMeeting) && !committed) commitPending(); super.onStop(); }

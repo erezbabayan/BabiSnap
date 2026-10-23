@@ -1,0 +1,12 @@
+title = "BabiSnap"
+
+[extend]
+useDefault = true
+
+# The BabiTk endpoint URL is public and hard-coded on purpose (pairing is only accepted for it); it is not a secret.
+# Device tokens in unit tests are generated at runtime from fixed bytes (PairLinkTest.fakeToken), never real ones.
+[[allowlists]]
+description = "Unit tests use generated fake BabiTk tokens"
+paths = [
+  '''(?:^|/)android/app/src/test/''',
+]

@@ -25,7 +25,11 @@ public final class Core {
     public static final String SCOPE = "https://www.googleapis.com/auth/calendar.events";
     private static HebrewParser parser;
 
-    public static SharedPreferences prefs(Context c) { return c.getSharedPreferences("babisnap", Context.MODE_PRIVATE); }
+    public static SharedPreferences prefs(Context c) {
+        SharedPreferences p = c.getSharedPreferences("babisnap", Context.MODE_PRIVATE);
+        if (p.contains("tok")) p.edit().remove("tok").apply(); // 2.1 kept a Google access token here; 2.2 never stores Google tokens
+        return p;
+    }
     public static int defaultDuration(Context c) { return prefs(c).getInt("dur", 60); }
     public static boolean preview(Context c) { return prefs(c).getBoolean("preview", true); }
 
@@ -53,10 +57,18 @@ public final class Core {
         return http("POST", "https://www.googleapis.com/calendar/v3/calendars/primary/events", token, body).code;
     }
 
-    static final class Resp { final int code; final String body; Resp(int c, String b) { code = c; body = b; } }
+    static final class Resp {
+        final int code; final String body, retryAfter;
+        Resp(int c, String b) { this(c, b, null); }
+        Resp(int c, String b, String ra) { code = c; body = b; retryAfter = ra; }
+    }
 
+    /** Bearer token is only ever sent over https, and redirects are never followed (a redirect cannot carry the token elsewhere). */
     static Resp http(String method, String url, String token, String body) throws Exception {
+        if (url == null || !url.startsWith("https://")) throw new SecurityException("https only");
         HttpURLConnection h = (HttpURLConnection) new URL(url).openConnection();
+        h.setInstanceFollowRedirects(false);
+        h.setUseCaches(false);
         h.setRequestMethod(method);
         h.setConnectTimeout(15000); h.setReadTimeout(20000);
         h.setRequestProperty("Authorization", "Bearer " + token);
@@ -68,7 +80,9 @@ public final class Core {
         int code = h.getResponseCode();
         InputStream in = code < 400 ? h.getInputStream() : h.getErrorStream();
         String resp = in == null ? "" : read(in);
-        return new Resp(code, resp);
+        String ra = h.getHeaderField("Retry-After");
+        h.disconnect();
+        return new Resp(code, resp, ra);
     }
 
     /** Account email = summary of the primary calendar (allowed by calendar.events scope). */
@@ -78,10 +92,17 @@ public final class Core {
         return new JSONObject(r.body).optString("summary", null);
     }
 
+    /** Revokes the Google grant behind an access token (token goes in the POST body, never in a URL). */
     public static void revoke(String token) {
         try {
-            HttpURLConnection h = (HttpURLConnection) new URL("https://oauth2.googleapis.com/revoke?token=" + token).openConnection();
-            h.setRequestMethod("POST"); h.setDoOutput(true); h.getOutputStream().close(); h.getResponseCode();
+            HttpURLConnection h = (HttpURLConnection) new URL("https://oauth2.googleapis.com/revoke").openConnection();
+            h.setInstanceFollowRedirects(false);
+            h.setRequestMethod("POST"); h.setDoOutput(true);
+            h.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
+            try (OutputStream o = h.getOutputStream()) {
+                o.write(("token=" + java.net.URLEncoder.encode(token, "UTF-8")).getBytes(StandardCharsets.UTF_8));
+            }
+            h.getResponseCode(); h.disconnect();
         } catch (Exception ignored) {}
     }
 
