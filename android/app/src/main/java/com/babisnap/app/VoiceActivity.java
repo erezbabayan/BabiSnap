@@ -45,6 +45,7 @@ public class VoiceActivity extends Activity {
 
     @Override public void onRequestPermissionsResult(int req, String[] p, int[] g) {
         if (req != REQ_MIC) return;
+        MainActivity.noteResult(this, Manifest.permission.RECORD_AUDIO, g.length > 0 && g[0] == PackageManager.PERMISSION_GRANTED);
         if (g.length > 0 && g[0] == PackageManager.PERMISSION_GRANTED) listen(); else systemDialog();
     }
 
@@ -211,7 +212,7 @@ public class VoiceActivity extends Activity {
         getWindow().setBackgroundDrawableResource(android.R.color.transparent);
         boolean hasTok = BabiTk.hasToken(this);
         ((TextView) findViewById(R.id.headline)).setText(hasTok ? "נכנס למחברת ב-BabiTk · " + c.kind.he()
-            : "נשמר במכשיר · " + c.kind.he() + "\n" + (BabiTk.needsRepair(this) ? "BabiTk " + BabiTk.NOT_CONNECTED : "BabiTk לא מחובר") + " – פתחו את BabiSnap ← חיבור BabiTk");
+            : "נשמר במכשיר · " + c.kind.he() + "\n" + (BabiTk.needsRepair(this) ? "BabiTk " + BabiTk.NOT_CONNECTED : "BabiTk לא מחובר") + " – פתחו את BabiSnap ← הגדרות ← BabiTk");
         TextView chip = findViewById(R.id.chip); chip.setText(c.kind.he());
         if (c.kind == Classifier.Kind.NOTE) { chip.setBackgroundResource(R.drawable.chip_note); chip.setTextColor(0xFF2A1B7A); }
         ((TextView) findViewById(R.id.summary)).setText(CardText.saved(title, date != null, p.optInt("d"), p.optInt("m"), p.optInt("y"), time, p.optString("location", "")));
@@ -228,7 +229,7 @@ public class VoiceActivity extends Activity {
         if (pendingBody == null) return;
         committed = true; ui.removeCallbacks(commit);
         BabiTk.enqueue(getApplicationContext(), pendingId, pendingBody);
-        done(BabiTk.hasToken(this) ? null : (BabiTk.needsRepair(this) ? "BabiTk " + BabiTk.NOT_CONNECTED : "BabiTk לא מחובר") + ": הפריט נשמר במכשיר ויישלח אחרי חיבור (הגדרות ← חיבור BabiTk)");
+        done(BabiTk.hasToken(this) ? null : (BabiTk.needsRepair(this) ? "BabiTk " + BabiTk.NOT_CONNECTED : "BabiTk לא מחובר") + ": הפריט נשמר במכשיר ויישלח אחרי חיבור (BabiSnap ← הגדרות ← BabiTk)");
     }
 
     @Override protected void onStop() { if ((pendingBody != null || pendingMeeting) && !committed) commitPending(); super.onStop(); }

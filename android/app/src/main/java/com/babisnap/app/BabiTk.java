@@ -61,7 +61,7 @@ public final class BabiTk {
             if (ok && v != null && !v.isEmpty()) {
                 ok = v.equals(token(c)); // read back to prove it was stored
                 if (ok) {
-                    Core.prefs(c).edit().remove(NEEDS_REPAIR).remove(N429).remove(NEXT_AT).remove("babitk_store_error").apply();
+                    Core.prefs(c).edit().remove(NEEDS_REPAIR).remove(N429).remove(NEXT_AT).remove("babitk_store_error").remove("babitk_last_error").apply();
                     kick(c); // anything queued while disconnected goes out now
                 }
             }
@@ -75,6 +75,20 @@ public final class BabiTk {
         setToken(c, null);
         Core.prefs(c).edit().remove(NEEDS_REPAIR).apply();
         note(c, "babitk_last_pair", "נותק ידנית – הטוקן נמחק מהמכשיר");
+    }
+    /** Settings: test/retry/diagnostics are shown only when something is waiting or wrong. */
+    public static boolean showDiagnostics(Context c) {
+        SharedPreferences p = Core.prefs(c);
+        return SettingsLogic.showBabiTkDiagnostics(pending(c), failed(c), hasToken(c),
+            p.getString("babitk_last_error", null), p.getString("babitk_store_error", null));
+    }
+    /** "Delete all data from this device": stop sending, drop the token (and its encrypted store) and the queue. */
+    public static void wipeAll(Context c) {
+        try { WorkManager.getInstance(c).cancelUniqueWork("babitk-send"); WorkManager.getInstance(c).cancelUniqueWork("babitk-send-later"); }
+        catch (Exception ignored) {}
+        try { secure(c).edit().clear().commit(); } catch (Exception ignored) {}
+        c.deleteSharedPreferences("babitk_secure");
+        synchronized (BabiTk.class) { Core.prefs(c).edit().remove(QUEUE).commit(); }
     }
     /** Server said 401 for this token: wipe it (if still current), keep the queue, show 'reconnect'. */
     static void unauthorized(Context c, String rejected) {

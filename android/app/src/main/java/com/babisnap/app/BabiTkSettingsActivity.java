@@ -8,7 +8,7 @@ import android.widget.*;
 
 /** One-time "BabiTk connection" screen: paste the device token; stored only in EncryptedSharedPreferences, never shown back. */
 public class BabiTkSettingsActivity extends Activity {
-    private TextView state;
+    private TextView state; private Button test, retry;
     /** 2.3: a new token waiting for the user's "replace?" answer. Memory only: never persisted, never put in savedInstanceState. */
     private String pendingToken, pendingVia;
     private android.app.AlertDialog confirm;
@@ -41,7 +41,7 @@ public class BabiTkSettingsActivity extends Activity {
         });
         Button off = new Button(this); off.setText("נתק BabiTk"); l.addView(off);
         off.setOnClickListener(v -> { BabiTk.disconnect(this); Toast.makeText(this, "נותק – הטוקן נמחק מהמכשיר", Toast.LENGTH_SHORT).show(); refresh(); });
-        Button test = new Button(this); test.setText("שלח בדיקה"); l.addView(test);
+        test = new Button(this); test.setText("שלח בדיקה"); l.addView(test);
         test.setOnClickListener(v -> {
             test.setEnabled(false); state.append("\nשולח בדיקה…");
             new Thread(() -> {
@@ -50,7 +50,7 @@ public class BabiTkSettingsActivity extends Activity {
                     Toast.makeText(this, res, Toast.LENGTH_LONG).show(); });
             }).start();
         });
-        Button retry = new Button(this); retry.setText("שלח עכשיו פריטים ממתינים"); l.addView(retry);
+        retry = new Button(this); retry.setText("שלח עכשיו פריטים ממתינים"); l.addView(retry);
         retry.setOnClickListener(v -> { BabiTk.kick(this); Toast.makeText(this, "נשלח לתור", Toast.LENGTH_SHORT).show(); });
         ScrollView sv = new ScrollView(this); sv.addView(l); setContentView(sv);
         refresh();
@@ -153,13 +153,19 @@ public class BabiTkSettingsActivity extends Activity {
         boolean on = BabiTk.hasToken(this);
         StringBuilder sb = new StringBuilder("\nמצב: ").append(on ? "מחובר ✓" : BabiTk.needsRepair(this) ? BabiTk.NOT_CONNECTED : "לא מחובר");
         if (on) sb.append("\nטוקן: babi_•••••••• (מוסתר)"); // never shown, not even partially
-        sb.append("\nפריטים ממתינים לשליחה: ").append(BabiTk.pending(this));
-        int failed = BabiTk.failed(this);
-        if (failed > 0) sb.append("\nפריטים שנדחו (נשמרו במכשיר): ").append(failed);
-        line(sb, p, "babitk_last_attempt", "ניסיון שליחה אחרון");
-        line(sb, p, "babitk_last_error", "שגיאה אחרונה");
+        // 2.4: test / retry / diagnostics only when something is waiting or wrong
+        boolean diag = BabiTk.showDiagnostics(this);
+        test.setVisibility(diag && on ? View.VISIBLE : View.GONE);
+        retry.setVisibility(diag && on && BabiTk.pending(this) > 0 ? View.VISIBLE : View.GONE);
+        if (diag) {
+            sb.append("\nפריטים ממתינים לשליחה: ").append(BabiTk.pending(this));
+            int failed = BabiTk.failed(this);
+            if (failed > 0) sb.append("\nפריטים שנדחו (נשמרו במכשיר): ").append(failed);
+            line(sb, p, "babitk_last_attempt", "ניסיון שליחה אחרון");
+            line(sb, p, "babitk_last_error", "שגיאה אחרונה");
+            line(sb, p, "babitk_store_error", "אחסון");
+        }
         line(sb, p, "babitk_last_pair", "חיבור אחרון");
-        line(sb, p, "babitk_store_error", "אחסון");
         state.setText(sb.append("\n"));
     }
     private void line(StringBuilder sb, android.content.SharedPreferences p, String key, String label) {
