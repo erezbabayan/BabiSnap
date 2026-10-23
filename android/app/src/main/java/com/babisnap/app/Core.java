@@ -32,7 +32,7 @@ public final class Core {
         return p;
     }
     public static int defaultDuration(Context c) { return prefs(c).getInt("dur", 60); }
-    /** Stage-2 invites: stored only, default OFF; nothing reads it yet. */
+    /** Stage-2 invites ('שליחת הזמנות'), default OFF. */
     public static boolean sendInvites(Context c) { return prefs(c).getBoolean("send_invites", false); }
 
     public static AuthorizationRequest authRequest() {
@@ -52,11 +52,26 @@ public final class Core {
         return new JSONObject(parser(c).parseJson(text, t.getYear(), t.getMonthValue(), t.getDayOfMonth(), dow, defaultDuration(c)));
     }
 
+    static final String EVENTS = "https://www.googleapis.com/calendar/v3/calendars/primary/events";
+
     /** Inserts into primary calendar. Returns HTTP code; throws on network error. */
-    public static int insertEvent(String token, JSONObject p, String spoken) throws Exception {
+    public static int insertEvent(String token, JSONObject p, String spoken) throws Exception { return insert(token, p, spoken).code; }
+
+    static Resp insert(String token, JSONObject p, String spoken) throws Exception {
         String body = EventJson.build(p.getString("title"), p.getString("startStr"), p.getInt("durationMin"),
                 p.optString("location", ""), "נוצר בהכתבה: " + spoken);
-        return http("POST", "https://www.googleapis.com/calendar/v3/calendars/primary/events", token, body).code;
+        return http("POST", EVENTS, token, body);
+    }
+
+    /** id of the event just created (from the insert response), or null. */
+    static String eventId(Resp r) {
+        try { String id = new JSONObject(r.body).optString("id", ""); return id.isEmpty() ? null : id; } catch (Exception e) { return null; }
+    }
+
+    /** Stage-2 invites: adds the attendees and lets Google email them (sendUpdates=all). Same calendar.events scope. */
+    static int addAttendees(String token, String eventId, java.util.List<String> emails) throws Exception {
+        String url = EVENTS + "/" + java.net.URLEncoder.encode(eventId, "UTF-8") + "?sendUpdates=all";
+        return http("PATCH", url, token, EventJson.attendees(emails)).code;
     }
 
     static final class Resp {
@@ -71,7 +86,9 @@ public final class Core {
         HttpURLConnection h = (HttpURLConnection) new URL(url).openConnection();
         h.setInstanceFollowRedirects(false);
         h.setUseCaches(false);
-        h.setRequestMethod(method);
+        // HttpURLConnection has no PATCH: Google APIs accept POST + X-HTTP-Method-Override
+        if ("PATCH".equals(method)) { h.setRequestMethod("POST"); h.setRequestProperty("X-HTTP-Method-Override", "PATCH"); }
+        else h.setRequestMethod(method);
         h.setConnectTimeout(15000); h.setReadTimeout(20000);
         h.setRequestProperty("Authorization", "Bearer " + token);
         if (body != null) {

@@ -21,6 +21,13 @@ public final class EventJson {
         return sb.append("}").toString();
     }
 
+    /** Body of the attendee PATCH: {"attendees":[{"email":"a@b"}, ...]} (stage-2 invites). */
+    public static String attendees(java.util.List<String> emails) {
+        StringBuilder sb = new StringBuilder("{\"attendees\":[");
+        for (int i = 0; i < emails.size(); i++) sb.append(i == 0 ? "" : ",").append("{\"email\":").append(q(emails.get(i))).append("}");
+        return sb.append("]}").toString();
+    }
+
     static String q(String s) {
         StringBuilder b = new StringBuilder("\"");
         for (char c : s.toCharArray()) {

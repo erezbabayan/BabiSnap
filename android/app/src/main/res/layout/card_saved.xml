@@ -15,6 +15,8 @@
     <TextView android:id="@+id/summary" android:layout_width="match_parent" android:layout_height="wrap_content"
         android:layout_marginTop="12dp" android:background="@drawable/summary_bg" android:gravity="start"
         android:lineSpacingMultiplier="1.3" android:padding="12dp" android:textColor="#2A1B7A" android:textSize="14sp" />
+    <LinearLayout android:id="@+id/invites" android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="vertical" android:visibility="gone" />
     <ProgressBar android:id="@+id/countdown" style="@android:style/Widget.ProgressBar.Horizontal"
         android:layout_width="match_parent" android:layout_height="4dp" android:layout_marginTop="14dp"
         android:max="3000" android:progress="3000" android:progressTint="#6A5FA8" android:progressBackgroundTint="#EADFB5" />

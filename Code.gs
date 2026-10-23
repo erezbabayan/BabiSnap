@@ -243,8 +243,102 @@ function extractMeetingPlace_(s) {
   toks.splice(j, end - j, PLACE_MARK_ + (trail ? trail[0] : ''));
   return { s: ' ' + toks.join(' ') + ' ', location: words.join(' ') + (city ? ', ' + city : ''), raw: raw, keep: '' };
 }
+/* ---- stage 2: explicit invites only ("תזמין את תמר", "ותשלח לה זימון", "ותזמין אותה" -> back to "עם תמר").
+ * Each invitee is a contact query: the name plus any marker words said after it ("תמר עבודה", "דני מהגן").
+ * The invite phrase leaves the text; in the title only the first word of each name stays ("פגישה עם תמר"). ---- */
+var INV_VERB_RE_ = /^ו?(?:תזמין|תזמיני|תזמינו|להזמין|הזמן|הזמיני)$/;
+var SEND_VERB_RE_ = /^ו?(?:תשלח|תשלחי|תשלחו|שלח|שלחי|לשלוח)$/;
+var INV_NOUN_RE_ = /^(?:זימון|הזמנה|זימונים|הזמנות)$/;
+var INV_PRON_RE_ = /^(?:לה|לו|להם|להן)$/;
+var INV_OBJ_RE_ = /^(?:אותה|אותו|אותם|אותן)$/;
+var NAME_STOP_RE_ = /^ו?(?:מחר|מחרתיים|היום|הערב|הבוקר|הלילה|השבוע|יום|שעה|על|לגבי|בנושא|כדי|כי|ש|אצל|עם|של|את|גם|בבקשה|ליד|דרך|אחרי|לפני|עד|מ|מ-|ב|ל|ב-|ל-|זימון|הזמנה|לפגישה|לישיבה|למפגש|אותה|אותו|אותם|אותן|לה|לו|להם|להן)$/;
+function nameStop_(w) {
+  if (!w || NAME_STOP_RE_.test(w) || /^[בלמ]?-?\d/.test(w) || w.indexOf(PLACE_MARK_) >= 0) return true;
+  if (!/^[א-תA-Za-z][א-תA-Za-z'"\-]*$/.test(w)) return true;
+  if (/^ו?ב/.test(w) && !B_NAMES_[w.replace(/^ו/, '')]) return true;          // "במסעדת", "בשבע" (but "ברק" is a name)
+  if (/^ו?ל-?(?:שעה|שעתיים|חצי|רבע|משך|גבי|דבר|ראות|סגור|תאם|פגישה|ישיבה|ארוחת|קפה|כבוד|בדוק|עבור)/.test(w)) return true;
+  if (/^ו?ש[א-ת]{3,}$/.test(w) && /^ו?ש(?:נ|י|ת)/.test(w) && w.length > 4) return true; // "שנדבר", "שיביא", "שתביא"
+  return PLACE_STOP_[w] === 1 || MEETING_KW_.test(w) || INV_VERB_RE_.test(w) || SEND_VERB_RE_.test(w);
+}
+/** People starting at toks[i]: "תמר", "תמר כהן", "תמר ויוסי", "תמר ואת יוסי", "תמר, יוסי ודני". @return {people:[[words]], end} */
+function readPeople_(toks, i) {
+  var people = [], cur = [];
+  while (i < toks.length) {
+    var raw = toks[i], w = bare_(raw), punct = w !== raw;
+    if (cur.length && (w === 'ואת' || w === 'וגם')) { people.push(cur); cur = []; i++; continue; }
+    if (cur.length && /^ו[א-ת]{2,}$/.test(w) && !nameStop_(w.slice(1)) && !nameStop_(w)) {
+      people.push(cur); cur = [w.slice(1)]; i++; if (punct && raw.slice(-1) !== ',') break; continue;
+    }
+    if (nameStop_(w) || cur.length >= 3) break;
+    cur.push(w); i++;
+    if (punct) { if (raw.slice(-1) === ',' && i < toks.length && !nameStop_(bare_(toks[i]).replace(/^ו/, ''))) { people.push(cur); cur = []; continue; } break; }
+  }
+  if (cur.length) people.push(cur);
+  return { people: people, end: i };
+}
+/** @return {s, invite:[query], names:[first words to show in the title when the text did not say "עם X"]} */
+function extractInvites_(s) {
+  var toks = s.replace(/^\s+|\s+$/g, '').split(/\s+/), cut = [], explicit = [], backRef = false, i, k, rp;
+  function at(j) { return j < toks.length ? bare_(toks[j]) : ''; }
+  for (i = 0; i < toks.length; i++) {
+    var w = at(i);
+    if (INV_VERB_RE_.test(w)) {
+      k = i + 1; if (at(k) === 'גם') k++;
+      if (INV_OBJ_RE_.test(at(k))) { backRef = true; k++; }
+      else {
+        if (at(k) !== 'את') continue;                // "להזמין שולחן" is not an invite
+        rp = readPeople_(toks, ++k);
+        if (!rp.people.length) continue;
+        explicit = explicit.concat(rp.people); k = rp.end;
+      }
+      if (/^(?:לפגישה|לישיבה|למפגש)$/.test(at(k)) && k + 1 >= toks.length) k++;   // trailing "...ותזמין אותה לפגישה"
+      cut.push([i, k]); i = k - 1;
+    } else if (SEND_VERB_RE_.test(w) || (w === 'עם' && INV_NOUN_RE_.test(at(i + 1)))) {
+      k = i + 1;
+      if (INV_PRON_RE_.test(at(k)) && INV_NOUN_RE_.test(at(k + 1))) { backRef = true; k += 2; }
+      else if (INV_NOUN_RE_.test(at(k)) && INV_PRON_RE_.test(at(k + 1))) { backRef = true; k += 2; }
+      else if (INV_NOUN_RE_.test(at(k)) && /^ל-?[א-תA-Za-z]/.test(at(k + 1))) {
+        var t2 = toks.slice(); t2[k + 1] = toks[k + 1].replace(/^ל-?/, '');
+        rp = readPeople_(t2, k + 1);
+        if (!rp.people.length) continue;
+        explicit = explicit.concat(rp.people); k = rp.end;
+      } else continue;
+      cut.push([i, k]); i = k - 1;
+    }
+  }
+  if (!cut.length) return { s: s, invite: [], names: [] };
+  var people = [];
+  if (backRef) {   // "עם תמר (מהעבודה) ... ותזמין אותה": the people after the first "עם"; their marker words leave the title
+    for (i = 0; i < toks.length; i++) {
+      if (at(i) !== 'עם' || INV_NOUN_RE_.test(at(i + 1)) || inCut_(cut, i)) continue;
+      rp = readPeople_(toks, i + 1);
+      people = rp.people;
+      for (k = i + 1; k < rp.end; k++) {               // keep "תמר", "ויוסי"; drop the marker words, keep trailing punctuation
+        var keep = false, tw = at(k);
+        for (var q = 0; q < people.length; q++) if (tw === people[q][0] || tw === 'ו' + people[q][0] || tw === 'ואת' || tw === 'וגם') keep = true;
+        if (!keep) { var pu = toks[k].match(/[,.!?:;]+$/); toks[k] = ''; if (pu && k > 0) toks[k - 1] = bare_(toks[k - 1]) + pu[0]; }
+      }
+      break;
+    }
+  }
+  people = people.concat(explicit);
+  var seen = {}, invite = [], names = [];
+  for (i = 0; i < people.length; i++) {
+    var qy = people[i].join(' ');
+    if (seen[qy]) continue; seen[qy] = 1; invite.push(qy);
+  }
+  for (i = cut.length - 1; i >= 0; i--) toks.splice(cut[i][0], cut[i][1] - cut[i][0]);
+  var rest = ' ' + toks.join(' ').replace(/\s+/g, ' ') + ' ';
+  for (i = 0; i < explicit.length; i++) if (rest.indexOf(' ' + explicit[i][0]) < 0 && names.indexOf(explicit[i][0]) < 0) names.push(explicit[i][0]);
+  return { s: rest, invite: invite, names: names };
+}
+function inCut_(cut, i) { for (var c = 0; c < cut.length; c++) if (i >= cut[c][0] && i < cut[c][1]) return true; return false; }
+function withNames_(t, n) { var i = t.indexOf(' – '), w = ' עם ' + joinNames_(n); return i < 0 ? t + w : t.slice(0, i) + w + t.slice(i); }
+function joinNames_(n) { return n.length < 2 ? n.join('') : n.slice(0, -1).join(', ') + ' ו' + n[n.length - 1]; }
+
 // "להיפגש עם תמר" / "לפגוש את תמר" / "נפגש עם תמר" -> "פגישה עם תמר"
 function meetingTitle_(t) {
+  t = t.replace(/^ל(?=(?:פגישה|ישיבה|מפגש)(?:\s|$))/, '');   // "תזמין את תמר לפגישה" -> "פגישה עם תמר"
   return t.replace(/^(?:להיפגש|להפגש|ניפגש|נפגש|נפגשים|ניפגשים)(?:\s+עם)?(?=\s|$)/, 'פגישה עם')
           .replace(/^(?:לפגוש|נפגוש)(?:\s+את)?(?=\s|$)/, 'פגישה עם').replace(/^פגישה עם$/, 'פגישה');
 }
@@ -279,6 +373,9 @@ function parseHebrewEvent(text, now) {
   // leading command words
   s = s.replace(new RegExp('^\\s*(?:תקבע לי|תקבעי לי|קבע לי|קבעי לי|תקבע|תקבעי|קבע|תוסיף|תוסיפי|הוסף|תרשום|תרשמי|רשום)' + E), ' ');
   s = s.replace(new RegExp(B + '(?:ביומן|ליומן|בבקשה)' + E, 'g'), ' ');
+  // ---- stage 2: invitees (only an explicit "תזמין" / "תשלח לה זימון"); removed from the text before anything else
+  var inv = MEETING_RE_.test(s) || /(?:^|\s)ל(?:פגישה|ישיבה|מפגש)(?=$|[\s,.!?])/.test(s) ? extractInvites_(s) : { s: s, invite: [], names: [] };
+  s = inv.s; r.invite = inv.invite;
 
   // ---- location: "במקום X" / "בכתובת X" / "מיקום X" (until comma or end)
   var m = cut(/(?:^|\s)(?:במקום|בכתובת|מיקום:?|כתובת:?)\s+([^,]+?)\s*(?=,|$)/);
@@ -386,6 +483,7 @@ function parseHebrewEvent(text, now) {
   // a purpose right after the removed place gets a separator: "פגישה – לראות את הבית"
   var ts = s.replace(new RegExp(PLACE_MARK_ + '(?=\\s+(?!(?:לגבי|לכבוד|למען|לקראת|לפני|לאחר|ליד|למשך|לשם|לבד|לבין|לכל|לנו|לי|לו|לה|להם)(?:\\s|$))ל-?[א-ת]{2,})'), ' – ');
   r.title = titleOf_(ts.split(PLACE_MARK_).join(place && place.keep ? ' ' + place.keep + ' ' : ' ')) || 'פגישה';
+  if (inv.names.length) r.title = withNames_(r.title, inv.names);
   r.titleFull = place ? (titleOf_(s.split(PLACE_MARK_).join(place.raw)) || r.title) : r.title;
   r.y = date.y; r.m = date.m; r.d = date.d; r.dow = date.dow; r.hour = h; r.minute = min;
   r.startStr = date.y + '-' + pad2_(date.m) + '-' + pad2_(date.d) + ' ' + pad2_(h) + ':' + pad2_(min);
