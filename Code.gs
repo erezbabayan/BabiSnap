@@ -186,7 +186,7 @@ function extractPlace_(s, meeting) {
     toks.splice(i, end - i, PLACE_MARK_ + (trail ? trail[0] : ''));
     // "פגישה אצל רופא השיניים": who you meet stays in the title, the city does not
     var keep = /^אצל/.test(parts[0]) ? parts[0] : '';
-    return { s: ' ' + toks.join(' ') + ' ', location: parts.join(', '), raw: raw, keep: keep };
+    return { s: ' ' + toks.join(' ') + ' ', location: parts.join(', '), raw: raw, keep: keep, cityOnly: parts.length === 1 && !!city };
   }
   return null;
 }
@@ -230,15 +230,18 @@ function extractMeetingPlace_(s) {
   var asB = 'ב' + pm[2];
   if (isPlaceStop_(t) || isPlaceStop_(asB) || NON_PLACE_B_[t] || NON_PLACE_B_[asB] || B_NAMES_[t] || PERIOD_WORDS_[asB] || TOD_.test(' ' + asB + ' ')) { TOD_.lastIndex = 0; return null; }
   TOD_.lastIndex = 0;
-  var words = [pm[2]], end = j + 1;
+  var words = [pm[2]], end = j + 1, city = null, c;
   while (words.length < 3 && end < toks.length && bare_(toks[end - 1]) === toks[end - 1]) {
     var w = bare_(toks[end]);
-    if (!w || isPlaceStop_(w) || isPurposeWord_(w) || /^[בוש]/.test(w) || /^\d/.test(w) || MEETING_KW_.test(w) || NON_PLACE_B_[w]) break;
+    if (!w || w.indexOf(PLACE_MARK_) >= 0) break;
+    // "באיקאה ראשון לציון": a known town right after the business name, said without ב
+    if ((c = matchPhrase_(toks, end, CITIES_SORTED_, false))) { city = c.phrase; end += c.len; break; }
+    if (isPlaceStop_(w) || isPurposeWord_(w) || /^[בוש]/.test(w) || /^\d/.test(w) || MEETING_KW_.test(w) || NON_PLACE_B_[w]) break;
     words.push(w); end++;
   }
   var raw = toks.slice(j, end).join(' ').replace(/[,.!?:;]+$/, ''), trail = toks[end - 1].match(/[,.!?:;]+$/);
   toks.splice(j, end - j, PLACE_MARK_ + (trail ? trail[0] : ''));
-  return { s: ' ' + toks.join(' ') + ' ', location: words.join(' '), raw: raw, keep: '' };
+  return { s: ' ' + toks.join(' ') + ' ', location: words.join(' ') + (city ? ', ' + city : ''), raw: raw, keep: '' };
 }
 // "להיפגש עם תמר" / "לפגוש את תמר" / "נפגש עם תמר" -> "פגישה עם תמר"
 function meetingTitle_(t) {
@@ -370,7 +373,16 @@ function parseHebrewEvent(text, now) {
 
   // ---- title: r.title without the place (Calendar has a location field), r.titleFull keeps it (BabiTk task/note titles)
   // ---- meeting place by context ("פגישה בברוכין לראות את הבית"): after time/date are gone, so "בשבע"/"במחר" never reach it
-  if (!r.location && meeting && (place = extractMeetingPlace_(s))) { s = place.s; r.location = place.location; }
+  var g;
+  if (meeting && (!r.location || (place && place.cityOnly)) && (g = extractMeetingPlace_(s))) {
+    if (!r.location) { place = g; s = g.s; r.location = g.location; }
+    else if (g.s.indexOf(PLACE_MARK_ + ' ' + PLACE_MARK_) >= 0) {
+      // "פגישה בארומה ברמת אביב": business name + the town found earlier -> one place "ארומה, רמת אביב"
+      s = g.s.replace(PLACE_MARK_ + ' ' + PLACE_MARK_, PLACE_MARK_);
+      place = { location: g.location + ', ' + place.location, raw: g.raw + ' ' + place.raw, keep: '' };
+      r.location = place.location;
+    }
+  }
   // a purpose right after the removed place gets a separator: "פגישה – לראות את הבית"
   var ts = s.replace(new RegExp(PLACE_MARK_ + '(?=\\s+(?!(?:לגבי|לכבוד|למען|לקראת|לפני|לאחר|ליד|למשך|לשם|לבד|לבין|לכל|לנו|לי|לו|לה|להם)(?:\\s|$))ל-?[א-ת]{2,})'), ' – ');
   r.title = titleOf_(ts.split(PLACE_MARK_).join(place && place.keep ? ' ' + place.keep + ' ' : ' ')) || 'פגישה';
