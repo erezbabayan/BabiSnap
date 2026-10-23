@@ -2,6 +2,7 @@ package com.babisnap.app;
 
 import android.app.Activity;
 import android.content.ActivityNotFoundException;
+import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
 import android.speech.RecognizerIntent;
@@ -15,15 +16,19 @@ import android.view.Window;
 import android.widget.TextView;
 
 import com.google.android.gms.auth.GoogleAuthUtil;
+import com.google.android.gms.auth.api.identity.AuthorizationResult;
+import com.google.android.gms.auth.api.identity.Identity;
+import com.google.android.gms.tasks.Tasks;
 
 import org.json.JSONObject;
 
 import java.util.ArrayList;
+import java.util.concurrent.TimeUnit;
 
 /** Widget/launcher target: speech (he-IL) -> parse on device -> (optional confirm) -> Google Calendar. */
 public class VoiceActivity extends Activity {
     static final int REQ_SPEECH = 1, REQ_AUTH = 2;
-    private JSONObject parsed; private String spoken; private boolean retried;
+    private JSONObject parsed; private String spoken;
 
     static final int REQ_MIC = 3;
     private SpeechRecognizer rec; private View logo, halo; private TextView status, partial;
@@ -151,30 +156,59 @@ public class VoiceActivity extends Activity {
             if (res != RESULT_OK || r == null || r.isEmpty()) { done(null); return; }
             handleSpoken(r.get(0));
         } else if (req == REQ_AUTH) {
-            if (res != RESULT_OK) { done("לא אושרה גישה ליומן"); return; }
-            try { save(Core.tokenFromResult(this, data)); } catch (Exception e) { done("שגיאת התחברות: " + e.getMessage()); }
+            if (res != RESULT_OK) { done("לא אושרה גישה ליומן – לא נרשם"); return; }
+            try { insertInBackground(getApplicationContext(), parsed, spoken, Core.tokenFromResult(this, data)); done(null); }
+            catch (Exception e) { done("שגיאת התחברות: " + e.getMessage()); }
         }
     }
 
-    private void authorize() { Core.requestAuth(this, REQ_AUTH, this::save, err -> done("שגיאת התחברות: " + err)); }
+    // ---- meeting commit: authorize, then insert in the BACKGROUND; the card never waits for the network ----
+    private boolean cardClosed;
+    private final Runnable closeCard = () -> { if (!cardClosed) done(null); }; // auth still resolving: close anyway
 
-    private void save(String token) {
+    private void commitMeeting() {
+        ui.postDelayed(closeCard, CardFlow.CLOSE_GRACE_MS);
+        final Context app = getApplicationContext();
+        final JSONObject p = parsed; final String sp = spoken;
+        Identity.getAuthorizationClient(app).authorize(Core.authRequest())
+            .addOnSuccessListener(res -> {
+                switch (CardFlow.afterAuth(res.hasResolution(), !cardClosed)) {
+                    case SEND_IN_BACKGROUND_AND_CLOSE:
+                        insertInBackground(app, p, sp, res.getAccessToken());
+                        if (!cardClosed) done(null);
+                        break;
+                    case ASK_CONSENT: // Google's consent screen; the card waits for the user, not for the network
+                        ui.removeCallbacks(closeCard);
+                        try { startIntentSenderForResult(res.getPendingIntent().getIntentSender(), REQ_AUTH, null, 0, 0, 0, null); }
+                        catch (Exception e) { done("שגיאת התחברות: " + e.getMessage()); }
+                        break;
+                    default: toast(app, CardFlow.CONSENT_NEEDED);
+                }
+            })
+            .addOnFailureListener(e -> { if (!cardClosed) done("שגיאת התחברות: " + e); else toast(app, "לא נרשם ביומן – שגיאת התחברות: " + e); });
+    }
+
+    /** Runs after the card is gone: uses only the application context; errors come back as a toast. */
+    static void insertInBackground(Context app, JSONObject p, String spoken, String token) {
         new Thread(() -> {
             String m;
             try {
-                int code = Core.insertEvent(token, parsed, spoken);
-                if (code == 401 && !retried) {
-                    retried = true; GoogleAuthUtil.clearToken(this, token);
-                    runOnUiThread(this::authorize); return;
+                int code = Core.insertEvent(token, p, spoken);
+                if (CardFlow.retryWithFreshToken(code, false)) {
+                    GoogleAuthUtil.clearToken(app, token);
+                    AuthorizationResult r = Tasks.await(Identity.getAuthorizationClient(app).authorize(Core.authRequest()), 20, TimeUnit.SECONDS);
+                    code = r.hasResolution() ? 401 : Core.insertEvent(r.getAccessToken(), p, spoken);
                 }
-                m = code / 100 == 2 ? null : "שגיאה מיומן גוגל (" + code + ")"; // success card already shown
-            } catch (Exception e) { m = "אין חיבור לאינטרנט? " + e.getMessage(); }
-            final String fm = m; runOnUiThread(() -> done(fm));
-        }).start();
+                m = CardFlow.resultMessage(code);
+            } catch (Exception e) { m = CardFlow.networkMessage(e.getMessage()); }
+            if (m != null) { final String fm = m; new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> toast(app, fm)); }
+        }, "babisnap-calendar-insert").start();
     }
 
+    private static void toast(Context app, String msg) { Toast.makeText(app, msg, Toast.LENGTH_LONG).show(); }
+
     // ---- Tasks & notes -> BabiTk "notebook" board, sent after a 3s undo window ----
-    private static final long UNDO_MS = 3000;
+    private static final long UNDO_MS = CardFlow.UNDO_MS;
     private final android.os.Handler ui = new android.os.Handler(android.os.Looper.getMainLooper());
     private String pendingId, pendingBody; private boolean committed, pendingMeeting;
 
@@ -225,7 +259,7 @@ public class VoiceActivity extends Activity {
     /** Undo window closed (or the card was left): queue locally and let WorkManager send with the same client_id. */
     private void commitPending() {
         if (committed) return;
-        if (pendingMeeting) { committed = true; ui.removeCallbacks(commit); findViewById(R.id.undo).setVisibility(View.INVISIBLE); authorize(); return; }
+        if (pendingMeeting) { committed = true; ui.removeCallbacks(commit); findViewById(R.id.undo).setVisibility(View.INVISIBLE); commitMeeting(); return; }
         if (pendingBody == null) return;
         committed = true; ui.removeCallbacks(commit);
         BabiTk.enqueue(getApplicationContext(), pendingId, pendingBody);
@@ -235,7 +269,8 @@ public class VoiceActivity extends Activity {
     @Override protected void onStop() { if ((pendingBody != null || pendingMeeting) && !committed) commitPending(); super.onStop(); }
 
     private void done(String msg) {
-        if (msg != null) Toast.makeText(getApplicationContext(), msg, Toast.LENGTH_LONG).show();
-        finish();
+        cardClosed = true; ui.removeCallbacks(closeCard); ui.removeCallbacks(commit);
+        if (msg != null) toast(getApplicationContext(), msg);
+        if (!isFinishing()) finish();
     }
 }
