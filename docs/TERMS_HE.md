@@ -49,7 +49,7 @@ BabiSnap מאפשרת להקליט דיבור קצר בטלפון, לפרש או
 
 - זיהוי דיבור במכשיר
 - Google Calendar
-- BabiTk
+- BabiTk — [תנאי שימוש](https://erezbabayan.github.io/BabiTk/terms.html) · [פרטיות](https://erezbabayan.github.io/BabiTk/privacy.html)
 
 השימוש בהם כפוף גם לתנאי אותם ספקים. תקלה אצלם עלולה להשפיע על BabiSnap — אין לנו שליטה מלאה עליהם.
 
