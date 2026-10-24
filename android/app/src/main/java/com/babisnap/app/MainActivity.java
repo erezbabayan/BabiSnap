@@ -226,15 +226,25 @@ public class MainActivity extends Activity {
         content.addView(del, new LinearLayout.LayoutParams(-1, -2));
     }
 
+    static final String PRIVACY_URL =
+        "https://github.com/erezbabayan/BabiSnap/blob/main/docs/PRIVACY_HE.md";
+
     static final String PRIVACY_HE =
         "• הדיבור מתומלל ע\"י שירות זיהוי הדיבור של הטלפון, והפענוח (פגישה/משימה/הערה, תאריך, שעה, מקום) נעשה בטלפון עצמו.\n\n" +
         "• פגישות נשמרות ישירות ביומן Google שלך, דרך החשבון שחיברת. BabiSnap לא שומר סיסמה או טוקן של Google.\n\n" +
         "• משימות והערות נשלחות רק ללוח \"מחברת\" ב-BabiTk שלך. מפתח החיבור נשמר מוצפן בטלפון.\n\n" +
-        "• אנשי קשר נקראים בטלפון בלבד ולא נשלחים לשום מקום.\n\n" +
-        "• אין ל-BabiSnap שרת משלו, אין פרסומות ואין מעקב. כל השאר נשאר בטלפון, ו\"מחק את כל הנתונים מהמכשיר\" מוחק אותו.";
+        "• אנשי קשר נקראים בטלפון בלבד ולא נשלחים לשום מקום (אימייל מוזמן עובר ל-Google רק אם ביקשת לשלוח הזמנה).\n\n" +
+        "• אין ל-BabiSnap שרת משלו, אין פרסומות ואין מעקב. \"מחק את כל הנתונים מהמכשיר\" מוחק את נתוני האפליקציה מהטלפון.\n\n" +
+        "• מדיניות הפרטיות המלאה זמינה בקישור \"מדיניות מלאה\".";
 
     private void showPrivacy() {
-        rtl(new AlertDialog.Builder(this).setTitle("פרטיות").setMessage(PRIVACY_HE).setPositiveButton("הבנתי", null).show());
+        AlertDialog d = new AlertDialog.Builder(this).setTitle("פרטיות").setMessage(PRIVACY_HE)
+            .setPositiveButton("הבנתי", null)
+            .setNeutralButton("מדיניות מלאה", (x, w) -> {
+                try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(PRIVACY_URL))); }
+                catch (Exception e) { Toast.makeText(this, "לא ניתן לפתוח את הקישור", Toast.LENGTH_SHORT).show(); }
+            }).show();
+        rtl(d);
     }
 
     private void confirmDeleteAll() {
