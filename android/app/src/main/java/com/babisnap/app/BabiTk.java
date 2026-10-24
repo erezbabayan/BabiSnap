@@ -137,8 +137,14 @@ public final class BabiTk {
         try {
             JSONObject o = new JSONObject(bodyJson);
             return BabiTkJson.build(o.optString("title", ""), o.optString("due_date", null), o.optString("due_time", null),
-                o.optString("notes", ""), o.optString("location", ""), o.optString("type", "task"), o.optString("client_id", null));
+                o.optString("notes", ""), o.optString("location", ""), o.optString("type", "task"), o.optString("client_id", null), tagList(o.optJSONArray("tags")));
         } catch (Exception e) { return bodyJson; }
+    }
+
+    static java.util.List<String> tagList(JSONArray a) {
+        java.util.List<String> l = new java.util.ArrayList<>();
+        if (a != null) for (int i = 0; i < a.length(); i++) l.add(a.optString(i));
+        return l;
     }
 
     /** Sends one real test note right now (blocking; call off the UI thread). Returns a Hebrew result line. */

@@ -15,6 +15,10 @@ public final class BabiTkJson {
 
     /** dueDate "YYYY-MM-DD" or null, dueTime "HH:MM" or null; invalid date/time are dropped, long text is cut, empty optional fields are omitted. */
     public static String build(String title, String dueDate, String dueTime, String notes, String location, String type, String clientId) {
+        return build(title, dueDate, dueTime, notes, location, type, clientId, null);
+    }
+    /** tags: BabiTk tag names (תיוגים), sent as "tags":[..] only when non-empty; cleaned, unique, max 12, each max 40. */
+    public static String build(String title, String dueDate, String dueTime, String notes, String location, String type, String clientId, java.util.List<String> tags) {
         String t = clip(title, TITLE_MAX); if (t.isEmpty()) t = FALLBACK_TITLE;
         String d = validDate(dueDate) ? dueDate : null;
         String tm = validTime(dueTime) ? dueTime : null; // time-only = today on the server
@@ -27,6 +31,9 @@ public final class BabiTkJson {
         if (!n.isEmpty()) sb.append(",\"notes\":").append(EventJson.q(n));
         if (!loc.isEmpty()) sb.append(",\"location\":").append(EventJson.q(loc));
         sb.append(",\"source\":\"voice\",\"client_id\":").append(EventJson.q(id));
+        java.util.List<String> tg = new java.util.ArrayList<>();
+        if (tags != null) for (String x : tags) { String c = Tags.clean(x); if (!c.isEmpty() && c.length() <= Tags.TAG_MAX && !tg.contains(c) && tg.size() < Tags.MAX_TAGS) tg.add(c); }
+        if (!tg.isEmpty()) { sb.append(",\"tags\":["); for (int i = 0; i < tg.size(); i++) sb.append(i > 0 ? "," : "").append(EventJson.q(tg.get(i))); sb.append("]"); }
         sb.append(",\"type\":").append(EventJson.q(ty)).append(",\"board\":\"notebook\"}");
         return sb.toString();
     }

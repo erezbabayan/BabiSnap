@@ -27,7 +27,7 @@ import java.util.List;
 /** Widget/launcher target: speech (he-IL) -> parse on device -> (optional confirm) -> Google Calendar. */
 public class VoiceActivity extends Activity {
     static final int REQ_SPEECH = 1, REQ_AUTH = 2;
-    private JSONObject parsed; private String spoken;
+    private JSONObject parsed; private String spoken; private java.util.List<String> spokenTags = new java.util.ArrayList<>();
 
     static final int REQ_MIC = 3;
     private SpeechRecognizer rec; private View logo, halo; private TextView status, partial;
@@ -148,7 +148,8 @@ public class VoiceActivity extends Activity {
     @Override protected void onDestroy() { ended = true; tick.removeCallbacks(ticker); stopRec(); super.onDestroy(); }
 
     private void handleSpoken(String text) {
-        spoken = text;
+        Tags.Result tr = Tags.extract(text, Tags.names(this)); // "תתייג מילואים" is removed, topic words stay
+        spoken = tr.text; spokenTags = tr.tags;
         try { parsed = Core.parse(this, spoken); } catch (Exception e) { done("שגיאת פענוח: " + e.getMessage()); return; }
         Classifier.Result c = Classifier.classify(spoken, !parsed.optBoolean("timeDefaulted", true));
         if (c.kind != Classifier.Kind.MEETING) { showSaved(c); return; }
@@ -333,14 +334,14 @@ public class VoiceActivity extends Activity {
         pendingId = BabiTkJson.newClientId(); // unique per recording, matches the server client_id pattern
         // No "נוצר בהכתבה: …" notes: BabiTk rebuilds task titles from the longest text it has (title vs content), so the
         // provenance line leaked into card titles ("קוד לשער נוצר בהכתבה: קוד"). Provenance is already in metadata.source=voice.
-        pendingBody = BabiTkJson.build(title, date, time, "", p.optString("location", ""), c.kind.api(), pendingId);
+        pendingBody = BabiTkJson.build(title, date, time, "", p.optString("location", ""), c.kind.api(), pendingId, spokenTags);
 
         setContentView(R.layout.card_saved);
         getWindow().setBackgroundDrawableResource(android.R.color.transparent);
         boolean hasTok = BabiTk.hasToken(this);
         ((TextView) findViewById(R.id.headline)).setText(hasTok ? "נכנס למחברת ב-BabiTk · " + c.kind.he()
             : "נשמר במכשיר · " + c.kind.he() + "\n" + (BabiTk.needsRepair(this) ? "BabiTk " + BabiTk.NOT_CONNECTED : "BabiTk לא מחובר") + " – פתחו את BabiSnap ← הגדרות ← BabiTk");
-        TextView chip = findViewById(R.id.chip); chip.setText(c.kind.he());
+        TextView chip = findViewById(R.id.chip); chip.setText(c.kind.he() + (spokenTags.isEmpty() ? "" : " · #" + String.join(" #", spokenTags)));
         if (c.kind == Classifier.Kind.NOTE) { chip.setBackgroundResource(R.drawable.chip_note); chip.setTextColor(0xFF2A1B7A); }
         ((TextView) findViewById(R.id.summary)).setText(CardText.saved(title, date != null, p.optInt("d"), p.optInt("m"), p.optInt("y"), time, p.optString("location", "")));
         android.widget.ProgressBar bar = findViewById(R.id.countdown);
