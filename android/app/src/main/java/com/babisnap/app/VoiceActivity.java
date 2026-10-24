@@ -153,7 +153,7 @@ public class VoiceActivity extends Activity {
         try { parsed = Core.parse(this, spoken); } catch (Exception e) { done("שגיאת פענוח: " + e.getMessage()); return; }
         Classifier.Result c = Classifier.classify(spoken, !parsed.optBoolean("timeDefaulted", true));
         if (c.kind != Classifier.Kind.MEETING) { showSaved(c); return; }
-        showMeeting(); // Google Calendar only, written after the 3s undo window
+        showMeeting(); // Google Calendar only, written after the 5s undo window
     }
 
     @Override protected void onActivityResult(int req, int res, Intent data) {
@@ -200,7 +200,7 @@ public class VoiceActivity extends Activity {
 
     private static void toast(Context app, String msg) { Toast.makeText(app, msg, Toast.LENGTH_LONG).show(); }
 
-    // ---- Tasks & notes -> BabiTk "notebook" board, sent after a 3s undo window ----
+    // ---- Tasks & notes -> BabiTk "notebook" board, sent after a 5s undo window ----
     private static final long UNDO_MS = CardFlow.UNDO_MS;
     private final android.os.Handler ui = new android.os.Handler(android.os.Looper.getMainLooper());
     private String pendingId, pendingBody; private boolean committed, pendingMeeting;

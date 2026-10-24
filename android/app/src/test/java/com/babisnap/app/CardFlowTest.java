@@ -16,9 +16,9 @@ public class CardFlowTest {
     }
 
     @Test public void cardNeverWaitsForTheNetwork() {
-        assertEquals(3000, CardFlow.UNDO_MS);
-        assertEquals(3000, CardFlow.latestAutoCloseMs(false));          // task/note: closes right at the end of the window
-        assertTrue(CardFlow.latestAutoCloseMs(true) <= 5000);           // meeting: at most 2s more while auth resolves
+        assertEquals(5000, CardFlow.UNDO_MS);
+        assertEquals(5000, CardFlow.latestAutoCloseMs(false));          // task/note: closes right at the end of the window
+        assertTrue(CardFlow.latestAutoCloseMs(true) <= 7000);           // meeting: at most 2s more while auth resolves
         // the old path could hold the card for a 15s connect + 20s read timeout, twice on a 401
         assertTrue(CardFlow.latestAutoCloseMs(true) < 15000 + 20000);
     }
