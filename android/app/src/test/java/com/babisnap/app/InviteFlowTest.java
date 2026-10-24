@@ -74,4 +74,13 @@ public class InviteFlowTest {
         assertTrue(InviteFlow.jitBody(Collections.singletonList("דני")).startsWith("כדי להזמין את דני לפגישה, BabiSnap צריך למצוא את המייל"));
         assertTrue(InviteFlow.patchFailed(403).contains("לאשר שוב"));
     }
+
+    @Test public void settingOffShowsHint() {
+        java.util.List<String> q = java.util.Arrays.asList("תמרי");
+        assertTrue(InviteFlow.settingOffHint(q, false));
+        assertFalse(InviteFlow.settingOffHint(q, true));
+        assertFalse(InviteFlow.settingOffHint(new java.util.ArrayList<>(), false));
+        assertFalse(InviteFlow.wanted(q, false, true));
+        assertEquals("שליחת הזמנות כבויה בהגדרות", InviteFlow.SETTING_OFF_STRIP);
+    }
 }

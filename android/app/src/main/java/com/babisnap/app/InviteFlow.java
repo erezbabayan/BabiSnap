@@ -40,6 +40,10 @@ final class InviteFlow {
         return settingOn && meeting && invite != null && !invite.isEmpty();
     }
 
+    /** Orange strip when the user asked for an invite but the 'שליחת הזמנות' setting is off (no silent failure). */
+    static final String SETTING_OFF_STRIP = "שליחת הזמנות כבויה בהגדרות";
+    static boolean settingOffHint(List<String> invite, boolean settingOn) { return !settingOn && invite != null && !invite.isEmpty(); }
+
     /** Several matches for any name -> countdown stops, meeting is saved now, pickers are shown one after another. */
     static boolean needsPicker(List<Invitee> all) {
         for (Invitee i : all) if (i.kind == Kind.MANY) return true;

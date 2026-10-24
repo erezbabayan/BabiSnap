@@ -314,6 +314,8 @@ public class VoiceActivity extends Activity {
                     break;
             }
         }
+        if (InviteFlow.settingOffHint(inviteQueries, Core.sendInvites(this)))
+            box.addView(InviteViews.strip(this, false, InviteFlow.SETTING_OFF_STRIP, null));
         box.setVisibility(box.getChildCount() > 0 ? View.VISIBLE : View.GONE);
     }
 

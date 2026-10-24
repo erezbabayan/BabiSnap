@@ -103,12 +103,58 @@ final class ContactMatcher {
         return String.join(" · ", parts);
     }
 
+    /** Name tokens of a contact (display name + every field but emails), normalized. */
+    private static List<String> nameTokens(Contact c) {
+        List<String> t = new ArrayList<>();
+        for (String w : norm(c.displayName).split(" ")) if (w.length() >= 2) t.add(w);
+        return t;
+    }
+
+    /**
+     * STT glues a name to the next word ("תמרי" = "תמר" + "רי"/"י"). The first spoken word starts with a contact's name token:
+     * the remainder must be found as a marker (whole word or the start of a word in any field); every other word as usual.
+     */
+    static boolean matchesSplit(Contact c, List<String> qw, boolean needRemainder) {
+        if (qw.isEmpty()) return false;
+        String w0 = qw.get(0);
+        List<String> rest = qw.subList(1, qw.size());
+        if (!rest.isEmpty() && !matches(c, rest)) return false;
+        for (String t : nameTokens(c)) {
+            if (!w0.startsWith(t) || w0.length() == t.length()) continue;
+            if (!needRemainder) return true;
+            String rem = w0.substring(t.length());
+            for (String f : c.fields) for (String ft : norm(f).split(" ")) {
+                if (ft.equals(t) || ft.isEmpty()) continue;
+                if (ft.startsWith(rem) || w0.equals(t + ft)) return true;
+                if (ft.charAt(0) == t.charAt(t.length() - 1) && w0.equals(t + ft.substring(1))) return true;   // "תמר"+"רי" -> "תמרי"
+            }
+        }
+        return false;
+    }
+
+    /** The first spoken word is the start of a contact's name ("תמ" -> "תמר"). */
+    static boolean matchesNamePrefix(Contact c, List<String> qw) {
+        if (qw.isEmpty() || qw.get(0).length() < 2) return false;
+        List<String> rest = qw.subList(1, qw.size());
+        if (!rest.isEmpty() && !matches(c, rest)) return false;
+        for (String t : nameTokens(c)) if (t.startsWith(qw.get(0)) && !t.equals(qw.get(0))) return true;
+        return false;
+    }
+
     static Result find(String query, List<Contact> contacts) {
+        Result r = findBy(query, contacts, 0);
+        for (int mode = 1; mode <= 3 && r.matches.isEmpty() && !r.matchedWithoutEmail; mode++) r = findBy(query, contacts, mode);
+        return r;
+    }
+
+    /** mode 0 exact words; 1 glued name + marker remainder; 2 glued name (remainder ignored); 3 name prefix. No memory. */
+    private static Result findBy(String query, List<Contact> contacts, int mode) {
         Result r = new Result();
         List<String> qw = words(query);
         Set<String> seen = new LinkedHashSet<>();
         for (Contact c : contacts) {
-            if (!matches(c, qw)) continue;
+            boolean ok = mode == 0 ? matches(c, qw) : mode == 1 ? matchesSplit(c, qw, true) : mode == 2 ? matchesSplit(c, qw, false) : matchesNamePrefix(c, qw);
+            if (!ok) continue;
             if (c.emails.isEmpty()) { r.matchedWithoutEmail = true; continue; }
             String e = c.emails.get(0);
             if (!seen.add(e.toLowerCase(Locale.ROOT))) continue;     // the same person saved twice

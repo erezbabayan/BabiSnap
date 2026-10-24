@@ -80,4 +80,30 @@ public class ContactMatcherTest {
         for (ContactMatcher.Match m : find(q)) e.add(m.email);
         return e;
     }
+
+    // v2.6: STT glues a name and a marker ("תמר רי" -> "תמרי")
+    @Test public void gluedNameAndMarkerSplits() {
+        List<ContactMatcher.Match> m = find("תמרי");
+        assertEquals(1, m.size());
+        assertEquals("tamar.ri@example.org", m.get(0).email);
+    }
+    @Test public void gluedNameWithUnknownRemainderShowsAllWithThatName() {
+        List<ContactMatcher.Match> m = find("תמרז");
+        assertEquals(3, m.size());   // picker: every "תמר" (remainder not a marker of anyone)
+    }
+    @Test public void gluedNameStillNeedsOtherWords() {
+        List<ContactMatcher.Match> m = find("תמרז עבודה");
+        assertEquals(1, m.size());
+        assertEquals("tamar.cohen@example.com", m.get(0).email);
+    }
+    @Test public void exactNameWinsOverSplit() {
+        assertEquals("tamara@example.com", find("תמרה").get(0).email);
+        assertEquals(1, find("תמרה").size());
+    }
+    @Test public void namePrefixMatch() {
+        List<ContactMatcher.Match> m = find("מיכ");
+        assertEquals(1, m.size());
+        assertEquals("michael@example.com", m.get(0).email);
+    }
+    @Test public void noMatchStaysEmpty() { assertTrue(find("זאב").isEmpty()); }
 }

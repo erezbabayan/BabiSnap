@@ -54,6 +54,25 @@ public class ClassifierTest {
         {"תרשום לי לקנות חלב", TASK, false},
         {"תוסיף לי הערה הקוד של השער הוא 4521", NOTE, false},
         {"תקבע לי פגישה עם דני", MEETING, false},
+        // v2.6: more meeting words (also ו/ה/ל-prefixed) and invite verbs
+        {"זימון מחר בעשר עם דני", MEETING, true},
+        {"זימון עם דני", MEETING, false},
+        {"ישיבה עם הצוות", MEETING, false},
+        {"מפגש הורים ביום שלישי", MEETING, false},
+        {"ראיון עבודה ביום שני", MEETING, false},
+        {"תור לרופא שיניים ביום חמישי", MEETING, false},
+        {"כנס סייבר בתל אביב ביום רביעי", MEETING, false},
+        {"סטנדאפ מחר בתשע", MEETING, true},
+        {"שיחת וידאו עם אבי מחר", MEETING, false},
+        {"והפגישה עם דני מחר בעשר", MEETING, true},
+        {"לפגישה עם דני מחר", MEETING, false},
+        {"ניפגש עם יוסי מחר באחת", MEETING, true},
+        {"אירוע חברה ביום חמישי", MEETING, false},
+        {"קביעה עם רונית ביום שני", MEETING, false},
+        {"שיחה עם דני מחר בעשר", MEETING, true},
+        {"לזמן את תמר לפגישה מחר", MEETING, false},
+        {"פגישה בברוכין ביום שני ב-11:00 לראות את הבית לזמן את תמרי", MEETING, true},
+        {"פגישה עם דני מחר בעשר ותשלח לו זימון", MEETING, true},
     };
 
     @Test public void hebrewExamples() {

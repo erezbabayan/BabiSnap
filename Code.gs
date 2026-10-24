@@ -191,8 +191,8 @@ function extractPlace_(s, meeting) {
   return null;
 }
 /* ---- meeting context: "פגישה (עם X) ב<place> ..." -> the ב-word is a place even when it is not a known town ---- */
-var MEETING_RE_ = /(?:^|\s)(?:ה?פגישה|פגישת|ה?פגישות|להיפגש|להפגש|ניפגש|נפגש|נפגשים|ניפגשים|לפגוש|נפגוש|ה?מפגש|מפגשים|ה?ישיבה|ישיבת)(?=$|[\s,.!?])/;
-var MEETING_KW_ = /^(?:ה?פגישה|פגישת|ה?פגישות|להיפגש|להפגש|ניפגש|נפגש|נפגשים|ניפגשים|לפגוש|נפגוש|ה?מפגש|מפגשים|ה?ישיבה|ישיבת)$/;
+var MEETING_RE_ = /(?:^|\s)(?:ו?(?:[הל]?פגישה|פגישת|ה?פגישות|להיפגש|להפגש|ניפגש|נפגש|נפגשים|ניפגשים|לפגוש|נפגוש|[הל]?מפגש|מפגשים|[הל]?ישיבה|ישיבת|[הל]?זימון|[הל]?ראיון|ראיון|ראיונות|[הל]?כנס|[הל]?סטנדאפ|[הל]?ספרינט|[הל]?זום|שיחת|ל?שיחת))(?=$|[\s,.!?])/;
+var MEETING_KW_ = /^(?:ו?(?:[הל]?פגישה|פגישת|ה?פגישות|להיפגש|להפגש|ניפגש|נפגש|נפגשים|ניפגשים|לפגוש|נפגוש|[הל]?מפגש|מפגשים|[הל]?ישיבה|ישיבת|[הל]?זימון|[הל]?ראיון|ראיון|ראיונות|[הל]?כנס|[הל]?סטנדאפ|[הל]?ספרינט|[הל]?זום|שיחת|ל?שיחת))$/;
 // ב-words that are never a place: topics, manner, online tools, time spans, pronouns, holidays
 var NON_PLACE_B_ = {};
 ('בנוגע בקשר בעניין בענין בנושא בהקדם בדחיפות דחוף בבקשה בזמן בסביבות בערך בשבוע בחודש בשנה בסוף בתחילת באמצע בווידאו בוידאו ' +
@@ -246,12 +246,14 @@ function extractMeetingPlace_(s) {
 /* ---- stage 2: explicit invites only ("תזמין את תמר", "ותשלח לה זימון", "ותזמין אותה" -> back to "עם תמר").
  * Each invitee is a contact query: the name plus any marker words said after it ("תמר עבודה", "דני מהגן").
  * The invite phrase leaves the text; in the title only the first word of each name stays ("פגישה עם תמר"). ---- */
-var INV_VERB_RE_ = /^ו?(?:תזמין|תזמיני|תזמינו|להזמין|הזמן|הזמיני)$/;
+var INV_VERB_RE_ = /^ו?(?:תזמין|תזמיני|תזמינו|להזמין|הזמן|הזמיני|הזמינו|לזמן|תזמן|תזמני|תזמנו|זמן|זמני|זמנו)$/;
+// "לזמן תמר" (schedule-family verbs) may skip "את"; "להזמין שולחן" may not
+var INV_NOAT_RE_ = /^ו?(?:לזמן|תזמן|תזמני|תזמנו|זמני|זמנו)$/;
 var SEND_VERB_RE_ = /^ו?(?:תשלח|תשלחי|תשלחו|שלח|שלחי|לשלוח)$/;
 var INV_NOUN_RE_ = /^(?:זימון|הזמנה|זימונים|הזמנות)$/;
 var INV_PRON_RE_ = /^(?:לה|לו|להם|להן)$/;
 var INV_OBJ_RE_ = /^(?:אותה|אותו|אותם|אותן)$/;
-var NAME_STOP_RE_ = /^ו?(?:מחר|מחרתיים|היום|הערב|הבוקר|הלילה|השבוע|יום|שעה|על|לגבי|בנושא|כדי|כי|ש|אצל|עם|של|את|גם|בבקשה|ליד|דרך|אחרי|לפני|עד|מ|מ-|ב|ל|ב-|ל-|זימון|הזמנה|לפגישה|לישיבה|למפגש|אותה|אותו|אותם|אותן|לה|לו|להם|להן)$/;
+var NAME_STOP_RE_ = /^ו?(?:מחר|מחרתיים|היום|הערב|הבוקר|הלילה|השבוע|יום|שעה|על|לגבי|בנושא|כדי|כי|ש|אצל|עם|של|את|גם|בבקשה|ליד|דרך|אחרי|לפני|עד|מ|מ-|ב|ל|ב-|ל-|זימון|הזמנה|לפגישה|לישיבה|למפגש|אותה|אותו|אותם|אותן|לה|לו|להם|להן|לי|לנו|הזמנה|זימון)$/;
 function nameStop_(w) {
   if (!w || NAME_STOP_RE_.test(w) || /^[בלמ]?-?\d/.test(w) || w.indexOf(PLACE_MARK_) >= 0) return true;
   if (!/^[א-תA-Za-z][א-תA-Za-z'"\-]*$/.test(w)) return true;
@@ -286,8 +288,9 @@ function extractInvites_(s) {
       k = i + 1; if (at(k) === 'גם') k++;
       if (INV_OBJ_RE_.test(at(k))) { backRef = true; k++; }
       else {
-        if (at(k) !== 'את') continue;                // "להזמין שולחן" is not an invite
-        rp = readPeople_(toks, ++k);
+        if (at(k) === 'את') k++;
+        else if (!INV_NOAT_RE_.test(w) || i === 0) continue;   // "להזמין שולחן" / "תזמן פגישה" are not invites
+        rp = readPeople_(toks, k);
         if (!rp.people.length) continue;
         explicit = explicit.concat(rp.people); k = rp.end;
       }
@@ -338,7 +341,8 @@ function joinNames_(n) { return n.length < 2 ? n.join('') : n.slice(0, -1).join(
 
 // "להיפגש עם תמר" / "לפגוש את תמר" / "נפגש עם תמר" -> "פגישה עם תמר"
 function meetingTitle_(t) {
-  t = t.replace(/^ל(?=(?:פגישה|ישיבה|מפגש)(?:\s|$))/, '');   // "תזמין את תמר לפגישה" -> "פגישה עם תמר"
+  t = t.replace(/^ו?ה?זימון(?=\s|$)/, 'פגישה');                 // "זימון מחר עם דני" -> "פגישה עם דני"
+  t = t.replace(/^ו?[לה]?(?=(?:פגישה|פגישת|ישיבה|ישיבת|מפגש|זימון|ראיון|כנס|סטנדאפ|ספרינט|זום|שיחת|שיחה)(?:\s|$))/, '');   // "תזמין את תמר לפגישה" -> "פגישה עם תמר"
   return t.replace(/^(?:להיפגש|להפגש|ניפגש|נפגש|נפגשים|ניפגשים)(?:\s+עם)?(?=\s|$)/, 'פגישה עם')
           .replace(/^(?:לפגוש|נפגוש)(?:\s+את)?(?=\s|$)/, 'פגישה עם').replace(/^פגישה עם$/, 'פגישה');
 }
@@ -483,7 +487,7 @@ function parseHebrewEvent(text, now) {
   // a purpose right after the removed place gets a separator: "פגישה – לראות את הבית"
   var ts = s.replace(new RegExp(PLACE_MARK_ + '(?=\\s+(?!(?:לגבי|לכבוד|למען|לקראת|לפני|לאחר|ליד|למשך|לשם|לבד|לבין|לכל|לנו|לי|לו|לה|להם)(?:\\s|$))ל-?[א-ת]{2,})'), ' – ');
   r.title = titleOf_(ts.split(PLACE_MARK_).join(place && place.keep ? ' ' + place.keep + ' ' : ' ')) || 'פגישה';
-  if (inv.names.length) r.title = withNames_(r.title, inv.names);
+  // v2.6: the invite phrase (verb + name + markers) never reaches the title; invitees are in r.invite only
   r.titleFull = place ? (titleOf_(s.split(PLACE_MARK_).join(place.raw)) || r.title) : r.title;
   r.y = date.y; r.m = date.m; r.d = date.d; r.dow = date.dow; r.hour = h; r.minute = min;
   r.startStr = date.y + '-' + pad2_(date.m) + '-' + pad2_(date.d) + ' ' + pad2_(h) + ':' + pad2_(min);
