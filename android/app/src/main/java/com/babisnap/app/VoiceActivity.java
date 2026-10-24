@@ -331,7 +331,9 @@ public class VoiceActivity extends Activity {
         // Tasks/notes keep the place inside the title ("לקנות חלב בסופר") and also get it in the location field.
         String title = p.optString("titleFull", p.optString("title", "")).trim(); if (title.isEmpty()) title = spoken;
         pendingId = BabiTkJson.newClientId(); // unique per recording, matches the server client_id pattern
-        pendingBody = BabiTkJson.build(title, date, time, "נוצר בהכתבה: " + spoken, p.optString("location", ""), c.kind.api(), pendingId);
+        // No "נוצר בהכתבה: …" notes: BabiTk rebuilds task titles from the longest text it has (title vs content), so the
+        // provenance line leaked into card titles ("קוד לשער נוצר בהכתבה: קוד"). Provenance is already in metadata.source=voice.
+        pendingBody = BabiTkJson.build(title, date, time, "", p.optString("location", ""), c.kind.api(), pendingId);
 
         setContentView(R.layout.card_saved);
         getWindow().setBackgroundDrawableResource(android.R.color.transparent);

@@ -23,7 +23,7 @@ public final class Classifier {
     // Explicit leading trigger words (longest first). Stripped from the title.
     static final String[] MEETING_PREFIX = {"קבע פגישה", "תקבע פגישה", "תקבעי פגישה", "קבעי", "תקבע", "תקבעי", "קבע", "תזמן", "תזמני"};
     static final String[] TASK_PREFIX = {"תזכיר לי ל", "תזכירי לי ל", "תזכיר לי", "תזכירי לי", "תזכורת", "משימה חדשה", "משימה", "לעשות", "אל תשכח ל", "אל תשכחי ל", "לא לשכוח ל", "לא לשכוח"};
-    static final String[] NOTE_PREFIX = {"הערה חדשה", "הערה", "פתק", "תרשום ש", "תרשמי ש", "תרשום", "תרשמי", "רשום ש", "רשום", "לזכור ש", "שים לב ש", "לידיעה"};
+    static final String[] NOTE_PREFIX = {"תרשום הערה", "תרשמי הערה", "רשום הערה", "תרשום פתק", "תרשמי פתק", "תכתוב הערה", "הערה חדשה", "הערה", "פתק", "תרשום ש", "תרשמי ש", "תרשום", "תרשמי", "רשום ש", "רשום", "לזכור ש", "שים לב ש", "לידיעה"};
 
     // Words with leading ל that are NOT infinitive verbs.
     static final Set<String> NOT_VERBS = new HashSet<>(Arrays.asList(
@@ -61,7 +61,7 @@ public final class Classifier {
         if (STARTS_MEETING.matcher(t).find()) return new Result(Kind.MEETING, t);
         String first = t.isEmpty() ? "" : t.split(" ")[0];
         boolean meetingVerb = MEETING_VERBS.contains(first);
-        boolean action = !meetingVerb && (isInfinitive(first) || IMPERATIVES.contains(first));
+        boolean action = !meetingVerb && hasAction(t);
         if (action) return new Result(Kind.TASK, t);
 
         boolean gathering = GATHERING.matcher(t).find() || meetingVerb;
@@ -71,6 +71,27 @@ public final class Classifier {
 
         if (OBLIGATION.matcher(t).find()) return new Result(Kind.TASK, t);
         return new Result(Kind.NOTE, t);
+    }
+
+    /** Words that only say WHEN; skipped before looking for the leading verb ("מחר בבוקר להתקשר לדני"). */
+    static final Set<String> TIME_WORDS = new HashSet<>(Arrays.asList(
+        "מחר", "היום", "מחרתיים", "הערב", "הלילה", "בבוקר", "בערב", "בצהריים", "בלילה", "אחר", "הצהריים", "אחרי", "לפני", "בשעה", "ביום",
+        "ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת", "בשבוע", "הבא", "השבוע", "בעוד", "שעה", "שעתיים", "דקות", "וחצי", "ורבע", "עכשיו", "אז", "גם"));
+    /** Common action infinitives recognised anywhere in the phrase (not the generic ל-heuristic, which would misread "לשער"/"לבית"). */
+    static final Set<String> ACTION_VERBS = new HashSet<>(Arrays.asList(
+        "לקנות", "להתקשר", "לבדוק", "לשלם", "לסדר", "להזמין", "לשלוח", "להחזיר", "להביא", "לאסוף", "לתקן", "לנקות", "להכין", "לקבוע",
+        "לחדש", "להגיש", "למלא", "לאשר", "לברר", "לעדכן", "להוריד", "להעביר", "לטפל", "לכבס", "להוציא", "לקחת", "לתאם", "לבטל",
+        "לכתוב", "לענות", "לסיים", "להתחיל", "ללכת", "לנסוע", "לצלם", "לסרוק", "להדפיס", "לחתום", "להתקין", "לארוז", "לבשל", "לסגור", "לפתוח"));
+    static final Pattern REMIND = Pattern.compile("(^|\\s)(תזכיר|תזכירי|תזכורת)(\\s|$)");
+
+    /** Task = something to do: a leading verb (after any when-words), a known action verb anywhere, "תזכיר לי", or an obligation word. */
+    static boolean hasAction(String t) {
+        String[] w = t.isEmpty() ? new String[0] : t.split(" ");
+        int i = 0;
+        while (i < w.length && (TIME_WORDS.contains(w[i]) || w[i].matches("ב?-?\\d.*") || w[i].matches("ב(?:שעה|עשר|אחת|שתיים|שלוש|ארבע|חמש|שש|שבע|שמונה|תשע|אחת עשרה|שתים עשרה)"))) i++;
+        if (i < w.length && (isInfinitive(w[i]) || IMPERATIVES.contains(w[i]))) return true;
+        for (String x : w) if (ACTION_VERBS.contains(x) || ACTION_VERBS.contains(x.replaceFirst("^ו", ""))) return true;
+        return REMIND.matcher(t).find();
     }
 
     static boolean isInfinitive(String w) {

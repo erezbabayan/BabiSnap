@@ -18,7 +18,22 @@ public class ClassifierTest {
         {"תרשום שהרכב צריך טסט בדצמבר", NOTE, false},
         {"ביום חמישי בשמונה החשמל מנותק בשכונה", NOTE, true},
         {"דני אוהב קפה בלי סוכר", NOTE, false},
+        // v2.9: default is NOTE; information without an action verb stays a note (STT may drop "הערה")
+        {"קוד לשער 1234", NOTE, false},
+        {"הקוד לשער 1234", NOTE, false},
+        {"הערה: הקוד של השער הוא 1234", NOTE, false},
+        {"תרשום הערה הקוד לשער 1234", NOTE, false},
+        {"פתק החניה בקומה מינוס 2", NOTE, false},
+        {"הסיסמה של הווייפיי היא אבגד1234", NOTE, false},
+        {"מספר החשבון של רואה החשבון 123456", NOTE, false},
+        {"מחר יש חוג לנועה בחמש", NOTE, true},
         // tasks (something to do), with and without a date
+        {"לקנות מחר חלב", TASK, false},
+        {"מחר לקנות חלב", TASK, false},
+        {"מחר בבוקר להתקשר לדני", TASK, true},
+        {"בעשר לשלם ארנונה", TASK, true},
+        {"חלב לקנות בדרך", TASK, false},
+        {"אמא ביקשה תזכיר לי את התור", TASK, false},
         {"להתקשר לרואה חשבון ביום ראשון", TASK, false},
         {"לקנות מתנה לדני עד מחר בחמש", TASK, true},
         {"משימה לשלם חשבון חשמל", TASK, false},
@@ -110,5 +125,11 @@ public class ClassifierTest {
         assertEquals(BabiTkJson.Outcome.RATE_LIMITED, BabiTkJson.outcome(429));
         assertEquals(BabiTkJson.Outcome.RETRY, BabiTkJson.outcome(500));
         assertEquals(BabiTkJson.Outcome.RETRY, BabiTkJson.outcome(-1));
+    }
+
+    @Test public void explicitNoteWordIsStrippedAndNumberKept() {
+        assertEquals("הקוד של השער הוא 1234", Classifier.classify("הערה: הקוד של השער הוא 1234", false).stripped);
+        assertEquals("הקוד לשער 1234", Classifier.classify("תרשום הערה הקוד לשער 1234", false).stripped);
+        assertEquals("קוד לשער 1234", Classifier.classify("קוד לשער 1234", false).stripped);
     }
 }

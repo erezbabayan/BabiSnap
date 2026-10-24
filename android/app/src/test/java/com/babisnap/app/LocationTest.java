@@ -105,4 +105,17 @@ public class LocationTest {
         }
         assertTrue(parse("פגישה בשבע בערב בברוכין").contains(" 19:00\""));
     }
+
+    /** v2.8 field report: "בארומה" right after the person is the place, title stays "פגישה עם דני". */
+    @Test public void placeAfterPersonName() throws Exception {
+        for (String s : new String[]{"פגישה מחר בעשר עם דני בארומה", "פגישה עם דני מחר בעשר בארומה", "פגישה מחר ב-10 עם דני בארומה."}) {
+            String j = parse(s);
+            assertTrue(s + " -> " + j, j.contains("\"location\":\"ארומה\""));
+            assertTrue(s + " -> " + j, j.contains("\"title\":\"פגישה עם דני\""));
+            assertTrue(s + " -> " + j, j.contains("\"startStr\":\"2026-10-24 10:00\""));
+            assertEquals(Classifier.Kind.MEETING, Classifier.classify(s, true).kind);
+            String ev = EventJson.build("פגישה עם דני", "2026-10-24 10:00", 60, "ארומה", null);
+            assertTrue(ev, ev.contains("\"location\":\"ארומה\""));
+        }
+    }
 }
