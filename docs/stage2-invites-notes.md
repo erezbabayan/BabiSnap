@@ -11,5 +11,5 @@ Trigger: only an explicit phrase – "תזמין את תמר", "תשלח לה/ל
   - 1 match: auto-selected, card shows "✉️ זימון ל: תמר לוי · tamar@…".
   - 2+: picker listing ALL matches with full name + email each time; nothing is remembered,
     so a new "Tamar" tomorrow simply appears as another row.
-* Send only after the 3s undo window (attendees added in the commit request); Undo = nothing sent.
+* Send only after the 5s undo window (attendees added in the commit request); Undo = nothing sent.
 * Parser: new field `invite: ["תמר"]`; invite words are removed from the title.

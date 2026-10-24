@@ -3,13 +3,13 @@ package com.babisnap.app;
 /**
  * Pure decisions for the undo card (no Android types, unit-tested).
  *
- * 2.4 bug: after the 3s undo window the meeting card waited for Google authorization AND the Calendar insert
+ * 2.4 bug: after the 5s undo window the meeting card waited for Google authorization AND the Calendar insert
  * (up to ~35s per attempt, longer on the 401 re-auth path, forever if the auth task never returned) with the
  * bar drained and no ביטול. Now the card never waits for the network: it closes right after the window
  * (at most CLOSE_GRACE_MS later while authorization resolves) and the insert finishes in the background.
  */
 final class CardFlow {
-    static final long UNDO_MS = 3000;
+    static final long UNDO_MS = 5000;
     /** After the undo window the card stays at most this long (only while Google authorization is still resolving). */
     static final long CLOSE_GRACE_MS = 2000;
 
