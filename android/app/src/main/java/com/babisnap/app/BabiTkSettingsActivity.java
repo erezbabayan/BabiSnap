@@ -16,6 +16,7 @@ public class BabiTkSettingsActivity extends Activity {
 
     @Override protected void onCreate(Bundle b) {
         super.onCreate(b);
+        TagSync.maybeFetch(this, false); // background, throttled to 12 h
         getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE); // no screenshots / recents thumbnail of this screen
         setTitle("חיבור BabiTk");
         LinearLayout l = new LinearLayout(this);

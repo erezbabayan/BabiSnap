@@ -36,11 +36,11 @@ public final class Tags {
     static final String CMD = "(?:ו?(?:תתייג|תתייגי|תתייגו|תייג|תייגי|לתייג|תתיג|תיג|תסמן|תסמני|סמן)(?:\\s+(?:את|לי|גם|תחת|עם|ב|כ))*(?:\\s+(?:ב|ל|כ|עם\\s+)?ה?(?:תגית|תיוג|תווית))?"
         + "|ו?(?:ב|ל|כ|עם\\s+|תחת\\s+|וגם\\s+|גם\\s+)?ה?(?:תגית|תגיות|תיוג|תווית)(?:\\s+(?:של|את))?)";
 
-    /** Merges the embedded list with a cached/fetched list (cleaned, unique, order kept). */
+    /** Merges the user's cached/fetched list (first, BabiTk display order) with the embedded fallback (cleaned, unique). */
     public static List<String> merge(Collection<String> extra) {
         Set<String> s = new LinkedHashSet<>();
-        for (String t : FALLBACK) s.add(t);
         if (extra != null) for (String t : extra) { String n = clean(t); if (!n.isEmpty()) s.add(n); }
+        for (String t : FALLBACK) s.add(t);
         return new ArrayList<>(s);
     }
     static String clean(String t) { return t == null ? "" : t.trim().replaceAll("^#+", "").replaceAll("\\s+", " "); }
@@ -69,7 +69,7 @@ public final class Tags {
         return new Result(t.isEmpty() ? (text == null ? "" : text.trim()) : t, tags);
     }
 
-    // ---- cache of the user's own tag list (filled from BabiTk once it offers a device endpoint for it) ----
+    // ---- cache of the user's own tag list (filled by TagSync from GET voice-ingest) ----
     static final String PREF = "babitk_tag_names";
     public static List<String> names(android.content.Context c) {
         List<String> extra = new ArrayList<>();

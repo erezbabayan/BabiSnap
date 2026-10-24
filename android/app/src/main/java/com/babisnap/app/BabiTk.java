@@ -63,6 +63,7 @@ public final class BabiTk {
                 if (ok) {
                     Core.prefs(c).edit().remove(NEEDS_REPAIR).remove(N429).remove(NEXT_AT).remove("babitk_store_error").remove("babitk_last_error").apply();
                     kick(c); // anything queued while disconnected goes out now
+                    TagSync.maybeFetch(c, true); // fresh pairing: pull this user's tags
                 }
             }
             if (!ok) note(c, "babitk_store_error", "שמירת הטוקן לא נקראה בחזרה");

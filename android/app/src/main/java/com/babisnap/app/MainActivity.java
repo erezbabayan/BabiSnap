@@ -42,6 +42,7 @@ public class MainActivity extends Activity {
 
     @Override protected void onCreate(Bundle b) {
         super.onCreate(b);
+        TagSync.maybeFetch(this, false); // background, throttled to 12 h
         setTitle("הגדרות");
         getWindow().setStatusBarColor(PURPLE_DARK);
         if (getActionBar() != null) {
