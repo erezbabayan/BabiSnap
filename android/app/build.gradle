@@ -47,5 +47,5 @@ dependencies {
     implementation 'androidx.security:security-crypto:1.1.0-alpha06'
     implementation 'androidx.work:work-runtime:2.9.1'
     testImplementation 'junit:junit:4.13.2'
-    testImplementation 'org.json:json:20240303' // real org.json for JVM tests (android.jar ships stubs)
+    testImplementation 'org.json:json:20260814' // real org.json for JVM tests (android.jar ships stubs)
 }
