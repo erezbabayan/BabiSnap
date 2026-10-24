@@ -11,8 +11,8 @@ android {
         applicationId 'com.babisnap.app'
         minSdk 26
         targetSdk 34
-        versionCode 18
-        versionName '2.7'
+        versionCode 19
+        versionName '2.8'
     }
     signingConfigs {
         release {
@@ -23,7 +23,11 @@ android {
         }
     }
     buildTypes {
-        release { minifyEnabled false; signingConfig signingConfigs.release }
+        release {
+            minifyEnabled true; shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.release
+        }
     }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
     sourceSets { main { assets.srcDirs += ["$buildDir/genassets"] } }
