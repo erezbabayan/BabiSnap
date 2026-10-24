@@ -217,6 +217,12 @@ public class MainActivity extends Activity {
             @Override public void onClick(View w) { showPrivacy(); }
             @Override public void updateDrawState(TextPaint tp) { tp.setUnderlineText(true); tp.setColor(MUTED); }
         }, s, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        sb.append(" · ");
+        int t0 = sb.length(); sb.append("תנאי שימוש");
+        sb.setSpan(new ClickableSpan() {
+            @Override public void onClick(View w) { openUrl(TERMS_URL); }
+            @Override public void updateDrawState(TextPaint tp) { tp.setUnderlineText(true); tp.setColor(MUTED); }
+        }, t0, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         f.setText(sb); f.setMovementMethod(LinkMovementMethod.getInstance());
         f.setTextSize(12.5f); f.setTextColor(0xFF8A879A); f.setGravity(Gravity.CENTER); f.setPadding(0, dp(16), 0, dp(6));
         content.addView(f, new LinearLayout.LayoutParams(-1, -2));
@@ -228,6 +234,8 @@ public class MainActivity extends Activity {
 
     static final String PRIVACY_URL =
         "https://github.com/erezbabayan/BabiSnap/blob/main/docs/PRIVACY_HE.md";
+    static final String TERMS_URL =
+        "https://github.com/erezbabayan/BabiSnap/blob/main/docs/TERMS_HE.md";
 
     static final String PRIVACY_HE =
         "• הדיבור מתומלל ע\"י שירות זיהוי הדיבור של הטלפון, והפענוח (פגישה/משימה/הערה, תאריך, שעה, מקום) נעשה בטלפון עצמו.\n\n" +
@@ -237,13 +245,15 @@ public class MainActivity extends Activity {
         "• אין ל-BabiSnap שרת משלו, אין פרסומות ואין מעקב. \"מחק את כל הנתונים מהמכשיר\" מוחק את נתוני האפליקציה מהטלפון.\n\n" +
         "• מדיניות הפרטיות המלאה זמינה בקישור \"מדיניות מלאה\".";
 
+    private void openUrl(String url) {
+        try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url))); }
+        catch (Exception e) { Toast.makeText(this, "לא ניתן לפתוח את הקישור", Toast.LENGTH_SHORT).show(); }
+    }
+
     private void showPrivacy() {
         AlertDialog d = new AlertDialog.Builder(this).setTitle("פרטיות").setMessage(PRIVACY_HE)
             .setPositiveButton("הבנתי", null)
-            .setNeutralButton("מדיניות מלאה", (x, w) -> {
-                try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(PRIVACY_URL))); }
-                catch (Exception e) { Toast.makeText(this, "לא ניתן לפתוח את הקישור", Toast.LENGTH_SHORT).show(); }
-            }).show();
+            .setNeutralButton("מדיניות מלאה", (x, w) -> openUrl(PRIVACY_URL)).show();
         rtl(d);
     }
 
