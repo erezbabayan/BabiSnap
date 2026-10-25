@@ -54,6 +54,17 @@ public class ClassifierTest {
         {"תבדוק מה עם ההחזר ממס הכנסה", TASK, false},
         {"להתקשר לדני מחר בעשר", TASK, true},
         {"הדוח השנתי חייב להיות מוגש עד סוף החודש", TASK, false},
+        // v-yoman: any "יומן" variation -> MEETING (Google Calendar), even if it reads like a task/note
+        {"תכניס ליומן לקנות חלב מחר", MEETING, false},
+        {"ביומן מחר בעשר טכנאי בבניין", MEETING, true},
+        {"יומן להתקשר לדני ביום ראשון", MEETING, false},
+        {"תרשום ביומן שהרכב צריך טסט בדצמבר", MEETING, false},
+        {"שים לי ביומן ארוחה עם אמא", MEETING, false},
+        {"תוסיף ללוח השנה חוג לנועה בחמש", MEETING, true},
+        {"תוסיף לקלנדר תור לרופא", MEETING, false},
+        {"מחר בתשע ליומנים של הצוות סקירה", MEETING, true},
+        {"הערה ביומן של דני יש הרבה פגישות", NOTE, false},
+        {"פתק היומן הישן נמצא במגירה", NOTE, false},
         // meetings (time + people/gathering) -> Google Calendar
         {"פגישה עם דני מחר בשתיים", MEETING, true},
         {"ארוחת ערב עם אמא ביום שישי בשמונה", MEETING, true},
