@@ -58,8 +58,10 @@ public final class Core {
     public static int insertEvent(String token, JSONObject p, String spoken) throws Exception { return insert(token, p, spoken).code; }
 
     static Resp insert(String token, JSONObject p, String spoken) throws Exception {
-        String body = EventJson.build(p.getString("title"), p.getString("startStr"), p.getInt("durationMin"),
-                p.optString("location", ""), "נוצר בהכתבה: " + spoken);
+        String desc = "נוצר בהכתבה: " + spoken;
+        String body = p.optBoolean("allDay", false)
+                ? EventJson.buildAllDay(p.getString("title"), p.getString("startStr"), p.optString("location", ""), desc)
+                : EventJson.build(p.getString("title"), p.getString("startStr"), p.getInt("durationMin"), p.optString("location", ""), desc);
         return http("POST", EVENTS, token, body);
     }
 

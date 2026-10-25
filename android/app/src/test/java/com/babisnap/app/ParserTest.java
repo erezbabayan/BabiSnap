@@ -46,4 +46,39 @@ public class ParserTest {
         assertTrue(j, j.contains("\"startStr\":\"2026-10-22 21:00\"") && j.contains("\"title\":\"פגישה עם רוני – משחק של מכבי\""));
         assertEquals(Classifier.Kind.MEETING, Classifier.classify(txt, true).kind);
     }
+
+    @Test public void allDayPhrasesBecomeAllDayEvents() throws Exception {
+        HebrewParser p = new HebrewParser(r("Code.gs"));
+        String[][] cases = {
+            {"פגישה עם דני מחר יום שלם", "פגישה עם דני", "2026-10-23"},
+            {"כנס ביום ראשון כל היום", "כנס", "2026-10-25"},
+            {"חופש ב-5/11 לכל היום", "חופש", "2026-11-05"},
+            {"יום מלא סדנה מחרתיים", "סדנה", "2026-10-24"},
+            {"מילואים היום כל היום", "מילואים", "2026-10-22"},
+            {"אירוע של יום שלם ב-3 בנובמבר", "אירוע", "2026-11-03"},
+        };
+        for (String[] c : cases) {
+            String j = p.parseJson(c[0], 2026, 10, 22, 4, 60);
+            assertTrue(c[0] + " -> " + j, j.contains("\"allDay\":true") && j.contains("\"timeDefaulted\":false")
+                && j.contains("\"title\":\"" + c[1] + "\"") && j.contains(c[2]) && !j.contains("09:00"));
+            String body = EventJson.buildAllDay(c[1], new org.json.JSONObject(j).getString("startStr"), "", null);
+            assertTrue(body, body.contains("\"start\":{\"date\":\"" + c[2] + "\"}") && !body.contains("dateTime"));
+        }
+        // explicit time wins; no time and no all-day phrase keeps the 09:00 default (flagged timeDefaulted)
+        String j = p.parseJson("פגישה עם דני מחר כל היום ב-10", 2026, 10, 22, 4, 60);
+        assertTrue(j, j.contains("\"allDay\":false") && j.contains("2026-10-23 10:00"));
+        j = p.parseJson("פגישה עם דני מחר", 2026, 10, 22, 4, 60);
+        assertTrue(j, j.contains("\"allDay\":false") && j.contains("2026-10-23 09:00") && j.contains("\"timeDefaulted\":true"));
+    }
+
+    @Test public void allDayEventJsonEndsNextDay() {
+        String j = EventJson.buildAllDay("חופש", "2026-12-31 00:00", "אילת", "x");
+        assertTrue(j, j.contains("\"start\":{\"date\":\"2026-12-31\"}") && j.contains("\"end\":{\"date\":\"2027-01-01\"}"));
+        assertFalse(j.contains("dateTime") || j.contains("timeZone"));
+    }
+
+    @Test public void allDayCardText() {
+        assertTrue(CardText.meeting("כנס", 25, 10, 2026, 0, 0, false, true, "").contains("כל היום"));
+        assertFalse(CardText.meeting("כנס", 25, 10, 2026, 0, 0, false, true, "").contains("00:00"));
+    }
 }

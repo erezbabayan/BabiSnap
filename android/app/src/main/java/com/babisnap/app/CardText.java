@@ -8,9 +8,13 @@ public final class CardText {
     public static final int LOCATION_CARD_MAX = 80;
 
     public static String meeting(String title, int d, int m, int y, int hour, int minute, boolean timeDefaulted, String location) {
+        return meeting(title, d, m, y, hour, minute, timeDefaulted, false, location);
+    }
+
+    public static String meeting(String title, int d, int m, int y, int hour, int minute, boolean timeDefaulted, boolean allDay, String location) {
         StringBuilder sum = new StringBuilder(title == null ? "" : title);
         sum.append("\n📅 ").append(d).append("/").append(m).append("/").append(y)
-            .append(String.format(Locale.US, " · %02d:%02d", hour, minute));
+            .append(allDay ? " · כל היום" : String.format(Locale.US, " · %02d:%02d", hour, minute));
         if (timeDefaulted) sum.append(" (לא נאמרה שעה)");
         return sum.append(locationLine(location)).toString();
     }

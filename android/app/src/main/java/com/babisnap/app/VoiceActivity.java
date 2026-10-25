@@ -151,7 +151,7 @@ public class VoiceActivity extends Activity {
         Tags.Result tr = Tags.extract(text, Tags.names(this)); // "תתייג מילואים" is removed, topic words stay
         spoken = tr.text; spokenTags = tr.tags;
         try { parsed = Core.parse(this, spoken); } catch (Exception e) { done("שגיאת פענוח: " + e.getMessage()); return; }
-        Classifier.Result c = Classifier.classify(spoken, !parsed.optBoolean("timeDefaulted", true));
+        Classifier.Result c = Classifier.classify(spoken, !parsed.optBoolean("timeDefaulted", true) || parsed.optBoolean("allDay", false));
         if (c.kind != Classifier.Kind.MEETING) { showSaved(c); return; }
         showMeeting(); // Google Calendar only, written after the 5s undo window
     }
@@ -259,7 +259,7 @@ public class VoiceActivity extends Activity {
         TextView chip = findViewById(R.id.chip); chip.setText("פגישה");
         chip.setBackgroundResource(R.drawable.chip_meeting); chip.setTextColor(0xFFFFFFFF);
         ((TextView) findViewById(R.id.summary)).setText(CardText.meeting(p.optString("title"), p.optInt("d"), p.optInt("m"), p.optInt("y"),
-            p.optInt("hour"), p.optInt("minute"), p.optBoolean("timeDefaulted"), p.optString("location", "")));
+            p.optInt("hour"), p.optInt("minute"), p.optBoolean("timeDefaulted"), p.optBoolean("allDay"), p.optString("location", "")));
         if (InviteFlow.needsPicker(invitees)) { startPickers(); return; }
         renderInvites();
         android.widget.ProgressBar bar = findViewById(R.id.countdown);
@@ -328,7 +328,7 @@ public class VoiceActivity extends Activity {
         catch (Exception ignored) {}
         boolean noDate = p.optBoolean("dateDefaulted", true) && p.optBoolean("timeDefaulted", true);
         String date = noDate ? null : String.format(java.util.Locale.US, "%04d-%02d-%02d", p.optInt("y"), p.optInt("m"), p.optInt("d"));
-        String time = p.optBoolean("timeDefaulted", true) ? null : String.format(java.util.Locale.US, "%02d:%02d", p.optInt("hour"), p.optInt("minute"));
+        String time = p.optBoolean("timeDefaulted", true) || p.optBoolean("allDay", false) ? null : String.format(java.util.Locale.US, "%02d:%02d", p.optInt("hour"), p.optInt("minute"));
         // Tasks/notes keep the place inside the title ("לקנות חלב בסופר") and also get it in the location field.
         String title = p.optString("titleFull", p.optString("title", "")).trim(); if (title.isEmpty()) title = spoken;
         pendingId = BabiTkJson.newClientId(); // unique per recording, matches the server client_id pattern

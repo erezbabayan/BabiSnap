@@ -1428,6 +1428,31 @@
    {
     "title": "ישיבה"
    }
+  ],
+  [
+   "פגישה עם דני מחר יום שלם",
+   {
+    "title": "פגישה עם דני",
+    "startStr": "2026-10-23 00:00",
+    "allDay": true,
+    "timeDefaulted": false
+   }
+  ],
+  [
+   "כנס ביום ראשון כל היום",
+   {
+    "title": "כנס",
+    "startStr": "2026-10-25 00:00",
+    "allDay": true
+   }
+  ],
+  [
+   "פגישה עם דני מחר",
+   {
+    "startStr": "2026-10-23 09:00",
+    "allDay": false,
+    "timeDefaulted": true
+   }
   ]
  ]
 }

@@ -21,6 +21,18 @@ public final class EventJson {
         return sb.append("}").toString();
     }
 
+    /** All-day event (v2.14): start.date = day, end.date = next day (exclusive), no dateTime. startStr may carry a time; it is ignored. */
+    public static String buildAllDay(String title, String startStr, String location, String description) {
+        java.time.LocalDate day = java.time.LocalDate.parse(startStr.substring(0, 10));
+        StringBuilder sb = new StringBuilder("{");
+        sb.append("\"summary\":").append(q(title));
+        if (location != null && !location.isEmpty()) sb.append(",\"location\":").append(q(location));
+        if (description != null) sb.append(",\"description\":").append(q(description));
+        sb.append(",\"start\":{\"date\":").append(q(day.toString())).append("}");
+        sb.append(",\"end\":{\"date\":").append(q(day.plusDays(1).toString())).append("}");
+        return sb.append("}").toString();
+    }
+
     /** Body of the attendee PATCH: {"attendees":[{"email":"a@b"}, ...]} (stage-2 invites). */
     public static String attendees(java.util.List<String> emails) {
         StringBuilder sb = new StringBuilder("{\"attendees\":[");
