@@ -40,6 +40,9 @@ public final class Classifier {
     static final Pattern STARTS_MEETING = Pattern.compile("^ו?[הל]?(?:פגישה|פגישת|ישיבה|ישיבת|מפגש|זימון|ראיון|כנס|תור|סטנדאפ|ספרינט|זום|שיחת זום|שיחת וידאו|אירוע|קביעה עם)(?:\\s|$)");
     /** "תזמין את תמר לפגישה מחר" is a meeting with an invite (stage 2), not a "תזמין" (order) task. */
     static final Pattern INVITE_TO_MEETING = Pattern.compile("^ו?(?:תזמין|תזמיני|הזמן|הזמיני|לזמן|תזמן|תזמני|זמן)\\s+את\\s.*(?:^|\\s)ל?(?:פגישה|פגישת|ישיבה|ישיבת|מפגש)(?:\\s|$)");
+    /** "יומן" family (any variation, with ו/ב/ל/ה/מ prefixes) = calendar, same idea as פגישה: always MEETING unless the phrase opens with an explicit note word. */
+    static final Pattern CALENDAR = Pattern.compile("(^|\\s)(?:ו?[בלהמ]?(?:יומן|יומנים|יומני|יומנך|יומנו|היומן|לוח שנה|לוח השנה|קלנדר|קלנדאר|גוגל קלנדר|יומן גוגל)|calendar|google calendar)(?=\\s|$)", Pattern.CASE_INSENSITIVE);
+    static final String[] EXPLICIT_NOTE = {"הערה", "פתק", "תרשום הערה", "תרשמי הערה", "רשום הערה", "תרשום פתק", "תרשמי פתק", "תכתוב הערה", "הערה חדשה"};
     static final Pattern WITH_PERSON = Pattern.compile("(^|\\s)(עם|אצל)\\s+\\S+");
 
     /** Leading command words ("תוסיף לי", "תקבע לי", "שים לי", a leftover "לי") carry no meaning for classification. */
@@ -53,6 +56,10 @@ public final class Classifier {
     public static Result classify(String text, boolean explicitTime) {
         String t = COMMAND.matcher(normalize(text)).replaceFirst("");
         String s;
+        if (CALENDAR.matcher(t).find() && strip(t, EXPLICIT_NOTE) == null) {
+            String c = CALENDAR.matcher(t).replaceAll(" ").replaceAll("\\s+", " ").trim();
+            return new Result(Kind.MEETING, c.isEmpty() ? t : c);
+        }
         if ((s = strip(t, MEETING_PREFIX)) != null) return new Result(Kind.MEETING, t);
         if ((s = strip(t, TASK_PREFIX)) != null) return new Result(Kind.TASK, s);
         if ((s = strip(t, NOTE_PREFIX)) != null) return new Result(Kind.NOTE, s);
