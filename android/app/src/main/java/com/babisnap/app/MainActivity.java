@@ -282,7 +282,7 @@ public class MainActivity extends Activity {
         Button test = new Button(this); test.setText("בדוק"); c.addView(test); c.addView(out);
         test.setOnClickListener(v -> {
             try { JSONObject r = Core.parse(this, in.getText().toString());
-                out.setText(r.getString("confirm") + "\nמשך: " + r.getInt("durationMin") + " דקות" + (r.optBoolean("timeDefaulted") ? "\n(לא נאמרה שעה, נקבע 09:00)" : ""));
+                out.setText(r.getString("confirm") + (r.optBoolean("allDay") ? "\nאירוע של יום שלם" : "\nמשך: " + r.getInt("durationMin") + " דקות") + (r.optBoolean("timeDefaulted") ? "\n(לא נאמרה שעה, נקבע 09:00)" : ""));
             } catch (Exception e) { out.setText("שגיאה: " + e); }
         });
     }

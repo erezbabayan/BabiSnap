@@ -369,7 +369,7 @@ function titleOf_(s) {
  */
 function parseHebrewEvent(text, now) {
   var s = ' ' + String(text || '').replace(/[״“”]/g, '"').replace(/[׳‘’]/g, "'").replace(/\s+/g, ' ').trim() + ' ';
-  var r = { durationMin: (now && now.defaultDuration) || 60, timeDefaulted: false, dateDefaulted: false, location: '' };
+  var r = { durationMin: (now && now.defaultDuration) || 60, timeDefaulted: false, dateDefaulted: false, allDay: false, location: '' };
   // ---- synonyms -> canonical forms
   for (var si = 0; si < SYNONYMS.length; si++) s = s.replace(SYNONYMS[si][0], SYNONYMS[si][1]);
   function cut(re) { var m = s.match(re); if (m) s = s.replace(re, ' '); return m; }
@@ -377,6 +377,8 @@ function parseHebrewEvent(text, now) {
   // leading command words
   s = s.replace(new RegExp('^\\s*(?:תקבע לי|תקבעי לי|קבע לי|קבעי לי|תקבע|תקבעי|קבע|תוסיף|תוסיפי|הוסף|תרשום|תרשמי|רשום)' + E), ' ');
   s = s.replace(new RegExp(B + '(?:ביומן|ליומן|בבקשה)' + E, 'g'), ' ');
+  // ---- v2.14 all-day: "יום שלם" / "כל היום" / "יום מלא" / "all day" -> Calendar all-day event (cut before "היום" is read as a date)
+  if (cut(new RegExp(B + '(?:(?:של|ל|ב|ה)\\s?)?(?:(?:ל|ב)?כו?ל(?: ה| ה-|-)?יום(?: כולו)?|(?:ל|ב|ה)?(?:-)?יום (?:שלם|מלא|שלם כולו)|(?:ל|ב)?יממה שלמה|all[- ]day)' + E, 'gi'))) r.allDay = true;
   // ---- stage 2: invitees (only an explicit "תזמין" / "תשלח לה זימון"); removed from the text before anything else
   var inv = MEETING_RE_.test(s) || /(?:^|\s)ל(?:פגישה|ישיבה|מפגש)(?=$|[\s,.!?])/.test(s) ? extractInvites_(s) : { s: s, invite: [], names: [] };
   s = inv.s; r.invite = inv.invite;
@@ -461,6 +463,7 @@ function parseHebrewEvent(text, now) {
     }
   }
   if (h !== null && h <= 24 && min < 60) {
+    r.allDay = false; // an explicit time wins over "כל היום"
     if (!explicit24) {
       if (period === 'בבוקר') { if (h === 12) h = 0; }
       else if (period === 'בלילה') { if (h >= 7 && h <= 11) h += 12; else if (h === 12) h = 0; }
@@ -469,8 +472,10 @@ function parseHebrewEvent(text, now) {
     }
     if (h === 24) h = 0;
   } else if (period) {
+    r.allDay = false;
     h = { 'בבוקר': 9, 'בצהריים': 13, 'בערב': 19, 'בלילה': 21 }[period]; min = 0;
-  } else { h = 9; min = 0; r.timeDefaulted = true; }
+  } else if (r.allDay) { h = 0; min = 0; r.durationMin = 1440; } // all-day: no time of day (not "defaulted")
+  else { h = 9; min = 0; r.timeDefaulted = true; }
 
   // ---- title: r.title without the place (Calendar has a location field), r.titleFull keeps it (BabiTk task/note titles)
   // ---- meeting place by context ("פגישה בברוכין לראות את הבית"): after time/date are gone, so "בשבע"/"במחר" never reach it
@@ -491,8 +496,8 @@ function parseHebrewEvent(text, now) {
   r.titleFull = place ? (titleOf_(s.split(PLACE_MARK_).join(place.raw)) || r.title) : r.title;
   r.y = date.y; r.m = date.m; r.d = date.d; r.dow = date.dow; r.hour = h; r.minute = min;
   r.startStr = date.y + '-' + pad2_(date.m) + '-' + pad2_(date.d) + ' ' + pad2_(h) + ':' + pad2_(min);
-  r.confirm = 'נקבע: ' + r.title + ', יום ' + HE_DAYS[date.dow] + ' ' + date.d + '/' + date.m + ' ' + pad2_(h) + ':' + pad2_(min) +
-    (r.location ? (/^אצל/.test(r.location) ? ' ' : ' ב') + r.location : '') + (r.durationMin !== 60 ? ' (' + r.durationMin + ' דק\')' : '');
+  r.confirm = 'נקבע: ' + r.title + ', יום ' + HE_DAYS[date.dow] + ' ' + date.d + '/' + date.m + ' ' + (r.allDay ? 'כל היום' : pad2_(h) + ':' + pad2_(min)) +
+    (r.location ? (/^אצל/.test(r.location) ? ' ' : ' ב') + r.location : '') + (!r.allDay && r.durationMin !== 60 ? ' (' + r.durationMin + ' דק\')' : '');
   return r;
 }
 
@@ -518,7 +523,8 @@ function doPost(e) {
     var end = new Date(start.getTime() + p.durationMin * 60000);
     var opts = { description: 'נוצר בקול: ' + text };
     if (p.location) opts.location = p.location;
-    var ev = CalendarApp.getDefaultCalendar().createEvent(p.title, start, end, opts);
+    var ev = p.allDay ? CalendarApp.getDefaultCalendar().createAllDayEvent(p.title, start, opts)
+                      : CalendarApp.getDefaultCalendar().createEvent(p.title, start, end, opts);
     return json_({ ok: true, message: p.confirm, eventId: ev.getId(), parsed: p });
   } catch (err) {
     return json_({ ok: false, message: 'שגיאה: ' + err });
