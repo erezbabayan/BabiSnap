@@ -8,11 +8,11 @@ android {
     namespace = 'com.babisnap.app'
     compileSdk = 35
     defaultConfig {
-        applicationId 'com.babisnap.app'
-        minSdk 26
-        targetSdk 34
-        versionCode 25
-        versionName '2.14'
+        applicationId = 'com.babisnap.app'
+        minSdk = 26
+        targetSdk = 34
+        versionCode = 25
+        versionName = '2.14'
     }
     signingConfigs {
         release {
@@ -29,7 +29,7 @@ android {
             signingConfig = signingConfigs.release
         }
     }
-    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+    compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
     sourceSets { main { assets.srcDirs += [layout.buildDirectory.dir("genassets")] } }
     testOptions { unitTests.returnDefaultValues = true }
 }
