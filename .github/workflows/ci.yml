@@ -1,0 +1,49 @@
+name: CI – BabiSnap
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  parser:
+    name: parser tests (node)
+    runs-on: ubuntu-latest
+    steps:
+      - name: משיכת הקוד
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '20'
+      - name: בדיקות המפענח
+        run: node parser.test.js
+
+  android:
+    name: android unit tests + debug build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - name: משיכת הקוד
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+      - name: בדיקות יחידה
+        run: ./gradlew --no-daemon testDebugUnitTest
+      - name: בנייה ללא keystore
+        run: ./gradlew --no-daemon assembleDebug
