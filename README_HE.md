@@ -69,7 +69,7 @@
 - `BabiSnap.apk`: האפליקציה (חתומה, minSdk 26 = אנדרואיד 8 ומעלה).
 - `android/`: קוד המקור (Java). בנייה: `./gradlew assembleRelease`.
 - `Code.gs`: המפענח העברי (מקור יחיד: נארז באפליקציה ומשמש גם לחלופת Apps Script).
-- `test-cases.json`, `run-cases.js`, `parser.test.js`: בדיקות (`node parser.test.js`, `ClassifierTest`/`PairLinkTest` לסיווג ולקישור החיבור, וגם `./gradlew testReleaseUnitTest` שמריץ את אותם מקרים במנוע של הטלפון).
+- `test-cases.json`, `run-cases.js`, `parser.test.js`: בדיקות (`node parser.test.js`, `ClassifierTest`/`PairLinkTest` לסיווג ולקישור החיבור, וגם `./gradlew testDebugUnitTest` שמריץ את אותם מקרים במנוע של הטלפון).
 
 ## אבטחה (גרסה 2.2)
 - טוקן BabiTk נשמר מוצפן במכשיר בלבד, לא מוצג (רק `babi_••••`), לא נרשם בלוג, ונשלח רק כ-Bearer ב-HTTPS לכתובת הקבועה של BabiTk.

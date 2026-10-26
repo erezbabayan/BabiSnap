@@ -5,8 +5,8 @@ def ksFile = file(System.getenv('VOICECAL_KEYSTORE_PROPS') ?: '/workspace/secret
 if (ksFile.exists()) ksFile.withInputStream { ksProps.load(it) }
 
 android {
-    namespace 'com.babisnap.app'
-    compileSdk 34
+    namespace = 'com.babisnap.app'
+    compileSdk = 35
     defaultConfig {
         applicationId 'com.babisnap.app'
         minSdk 26
@@ -24,20 +24,20 @@ android {
     }
     buildTypes {
         release {
-            minifyEnabled true; shrinkResources true
+            minifyEnabled = true; shrinkResources = true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-            signingConfig signingConfigs.release
+            signingConfig = signingConfigs.release
         }
     }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
-    sourceSets { main { assets.srcDirs += ["$buildDir/genassets"] } }
+    sourceSets { main { assets.srcDirs += [layout.buildDirectory.dir("genassets")] } }
     testOptions { unitTests.returnDefaultValues = true }
 }
 
 // Single source of truth: the parser lives in ../../Code.gs (also the Apps Script fallback).
 tasks.register('copyParser', Copy) {
     from("${rootDir}/../Code.gs") { rename { 'parser.js' } }
-    into "$buildDir/genassets"
+    into layout.buildDirectory.dir("genassets")
 }
 preBuild.dependsOn copyParser
 
@@ -45,7 +45,7 @@ dependencies {
     implementation 'com.google.android.gms:play-services-auth:21.2.0'
     implementation 'org.mozilla:rhino:1.7.15.1'
     implementation 'androidx.security:security-crypto:1.1.0'
-    implementation 'androidx.work:work-runtime:2.9.1'
+    implementation 'androidx.work:work-runtime:2.12.0'
     testImplementation 'junit:junit:4.13.2'
     testImplementation 'org.json:json:20260814' // real org.json for JVM tests (android.jar ships stubs)
 }
