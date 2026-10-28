@@ -39,7 +39,7 @@ public final class Classifier {
     /** A phrase that opens with a meeting word (also ו/ה/ל-prefixed) is a calendar event: "זימון מחר עם דני", "תור לרופא", "ישיבת צוות". */
     static final Pattern STARTS_MEETING = Pattern.compile("^ו?[הל]?(?:פגישה|פגישת|ישיבה|ישיבת|מפגש|זימון|ראיון|כנס|תור|סטנדאפ|ספרינט|זום|שיחת זום|שיחת וידאו|אירוע|קביעה עם)(?:\\s|$)");
     /** "תזמין את תמר לפגישה מחר" is a meeting with an invite (stage 2), not a "תזמין" (order) task. */
-    static final Pattern INVITE_TO_MEETING = Pattern.compile("^ו?(?:תזמין|תזמיני|הזמן|הזמיני|לזמן|תזמן|תזמני|זמן)\\s+את\\s.*(?:^|\\s)ל?(?:פגישה|פגישת|ישיבה|ישיבת|מפגש)(?:\\s|$)");
+    static final Pattern INVITE_TO_MEETING = Pattern.compile("^ו?(?:תזמין|תזמיני|תזמינו|הזמן|הזמיני|הזמינו|לזמן|תזמן|תזמני|תזמנו|זמן|זמני)\\s+(?:גם\\s+)?את\\s.*(?:^|\\s)ל?(?:פגישה|פגישת|ישיבה|ישיבת|מפגש)(?:\\s|$)");
     /** "יומן" family (any variation, with ו/ב/ל/ה/מ prefixes) = calendar, same idea as פגישה: always MEETING unless the phrase opens with an explicit note word. */
     static final Pattern CALENDAR = Pattern.compile("(^|\\s)(?:ו?[בלהמ]?(?:יומן|יומנים|יומני|יומנך|יומנו|היומן|לוח שנה|לוח השנה|קלנדר|קלנדאר|גוגל קלנדר|יומן גוגל)|calendar|google calendar)(?=\\s|$)", Pattern.CASE_INSENSITIVE);
     static final String[] EXPLICIT_NOTE = {"הערה", "פתק", "תרשום הערה", "תרשמי הערה", "רשום הערה", "תרשום פתק", "תרשמי פתק", "תכתוב הערה", "הערה חדשה"};

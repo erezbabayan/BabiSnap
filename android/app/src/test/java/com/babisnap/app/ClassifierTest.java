@@ -45,6 +45,7 @@ public class ClassifierTest {
         {"להזמין שולחן במסעדה ליום שישי", TASK, false},
         // stage-2 invites: "תזמין את X לפגישה" is a meeting; "תזמין" alone is still an order
         {"תזמין את תמר לפגישה מחר בעשר", MEETING, true},
+        {"תזמין גם את דני לפגישה מחר בעשר", MEETING, true},
         {"תזמיני את דני כהן לישיבת צוות ביום שני", MEETING, false},
         {"להיפגש עם תמר במסעדת כפית במודיעין מחר בשבע בערב ותזמין אותה", MEETING, true},
         {"פגישה עם יוסי מחר בעשר ותשלח לו זימון", MEETING, true},
