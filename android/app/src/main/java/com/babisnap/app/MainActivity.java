@@ -43,6 +43,7 @@ public class MainActivity extends Activity {
     @Override protected void onCreate(Bundle b) {
         super.onCreate(b);
         TagSync.maybeFetch(this, false); // background, throttled to 12 h
+        UpdateCheck.maybeCheck(this); // GitHub latest release, throttled to 6 h; dialog only if newer
         setTitle("הגדרות");
         getWindow().setStatusBarColor(PURPLE_DARK);
         if (getActionBar() != null) {
