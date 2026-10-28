@@ -249,11 +249,14 @@ function extractMeetingPlace_(s) {
 var INV_VERB_RE_ = /^ו?(?:תזמין|תזמיני|תזמינו|להזמין|הזמן|הזמיני|הזמינו|לזמן|תזמן|תזמני|תזמנו|זמן|זמני|זמנו)$/;
 // "לזמן תמר" (schedule-family verbs) may skip "את"; "להזמין שולחן" may not
 var INV_NOAT_RE_ = /^ו?(?:לזמן|תזמן|תזמני|תזמנו|זמני|זמנו)$/;
-var SEND_VERB_RE_ = /^ו?(?:תשלח|תשלחי|תשלחו|שלח|שלחי|לשלוח)$/;
-var INV_NOUN_RE_ = /^(?:זימון|הזמנה|זימונים|הזמנות)$/;
+var SEND_VERB_RE_ = /^ו?(?:תשלח|תשלחי|תשלחו|שלח|שלחי|לשלוח|שליחת)$/;
+var INV_NOUN_RE_ = /^ה?(?:זימון|הזמנה|זימונים|הזמנות)$/;
+// "ותוסיף את דני לזימון": add-verbs count only when the phrase ends in "לזימון"/"להזמנה"
+var INV_ADD_RE_ = /^ו?(?:תוסיף|תוסיפי|תוסיפו|הוסף|הוסיפי|להוסיף)$/;
+var INV_TO_NOUN_RE_ = /^ל(?:זימון|הזמנה)$/;
 var INV_PRON_RE_ = /^(?:לה|לו|להם|להן)$/;
 var INV_OBJ_RE_ = /^(?:אותה|אותו|אותם|אותן)$/;
-var NAME_STOP_RE_ = /^ו?(?:מחר|מחרתיים|היום|הערב|הבוקר|הלילה|השבוע|יום|שעה|על|לגבי|בנושא|כדי|כי|ש|אצל|עם|של|את|גם|בבקשה|ליד|דרך|אחרי|לפני|עד|מ|מ-|ב|ל|ב-|ל-|זימון|הזמנה|לפגישה|לישיבה|למפגש|אותה|אותו|אותם|אותן|לה|לו|להם|להן|לי|לנו|הזמנה|זימון)$/;
+var NAME_STOP_RE_ = /^ו?(?:מחר|מחרתיים|היום|הערב|הבוקר|הלילה|השבוע|יום|שעה|על|לגבי|בנושא|כדי|כי|ש|אצל|עם|של|את|גם|בבקשה|ליד|דרך|אחרי|לפני|עד|מ|מ-|ב|ל|ב-|ל-|זימון|הזמנה|לפגישה|לישיבה|למפגש|אותה|אותו|אותם|אותן|לה|לו|להם|להן|לי|לנו|הזימון|ההזמנה|לזימון|להזמנה|זימונים|הזמנות)$/;
 function nameStop_(w) {
   if (!w || NAME_STOP_RE_.test(w) || /^[בלמ]?-?\d/.test(w) || w.indexOf(PLACE_MARK_) >= 0) return true;
   if (!/^[א-תA-Za-z][א-תA-Za-z'"\-]*$/.test(w)) return true;
@@ -296,8 +299,26 @@ function extractInvites_(s) {
       }
       if (/^(?:לפגישה|לישיבה|למפגש)$/.test(at(k)) && k + 1 >= toks.length) k++;   // trailing "...ותזמין אותה לפגישה"
       cut.push([i, k]); i = k - 1;
+    } else if (INV_ADD_RE_.test(w) && at(i + 1) === 'את') {   // "ותוסיף את דני לזימון"
+      rp = readPeople_(toks, i + 2);
+      if (!rp.people.length || !INV_TO_NOUN_RE_.test(at(rp.end))) continue;
+      explicit = explicit.concat(rp.people); cut.push([i, rp.end + 1]); i = rp.end;
     } else if (SEND_VERB_RE_.test(w) || (w === 'עם' && INV_NOUN_RE_.test(at(i + 1)))) {
       k = i + 1;
+      var also = false;
+      if (at(k) === 'גם') { also = true; k++; }                          // "תשלח גם זימון ל..." / "תשלח גם לתמר"
+      if (at(k) === 'את' && INV_NOUN_RE_.test(at(k + 1))) k++;          // "תשלח את הזימון לתמר"
+      if (INV_NOUN_RE_.test(at(k)) && at(k + 1) === 'גם') { toks.splice(k + 1, 1); }   // "זימון גם לתמר"
+      if (!INV_NOUN_RE_.test(at(k)) && !INV_PRON_RE_.test(at(k)) && /^ל-?[א-תA-Za-z]/.test(at(k)) && w !== 'עם' && !/^ו?שליחת$/.test(w)) {
+        var t3 = toks.slice(); t3[k] = toks[k].replace(/^ל-?/, '');
+        rp = readPeople_(t3, k);
+        // "תשלח לתמר זימון" (noun after the name), or "תשלח גם לתמר" (bare "תשלח לתמר" may be a message, so "גם" is required)
+        if (rp.people.length && (INV_NOUN_RE_.test(at(rp.end)) || (also && !at(rp.end) && !nameStop_(at(k).replace(/^ל-?/, ''))))) {
+          explicit = explicit.concat(rp.people); k = rp.end + (INV_NOUN_RE_.test(at(rp.end)) ? 1 : 0);
+          cut.push([i, k]); i = k - 1; continue;
+        }
+        continue;
+      }
       if (INV_PRON_RE_.test(at(k)) && INV_NOUN_RE_.test(at(k + 1))) { backRef = true; k += 2; }
       else if (INV_NOUN_RE_.test(at(k)) && INV_PRON_RE_.test(at(k + 1))) { backRef = true; k += 2; }
       else if (INV_NOUN_RE_.test(at(k)) && /^ל-?[א-תA-Za-z]/.test(at(k + 1))) {
