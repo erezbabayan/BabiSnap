@@ -47,9 +47,10 @@ public final class Core {
     }
 
     public static JSONObject parse(Context c, String text) throws Exception {
-        LocalDate t = LocalDate.now(ZoneId.of(EventJson.TZ));
+        java.time.LocalDateTime t = java.time.LocalDateTime.now(ZoneId.of(EventJson.TZ));
         int dow = t.getDayOfWeek().getValue() % 7; // Sunday=0
-        return new JSONObject(parser(c).parseJson(text, t.getYear(), t.getMonthValue(), t.getDayOfMonth(), dow, defaultDuration(c)));
+        return new JSONObject(parser(c).parseJson(text, t.getYear(), t.getMonthValue(), t.getDayOfMonth(), dow, defaultDuration(c),
+                t.getHour(), t.getMinute()));
     }
 
     static final String EVENTS = "https://www.googleapis.com/calendar/v3/calendars/primary/events";

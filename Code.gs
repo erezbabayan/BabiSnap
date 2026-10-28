@@ -412,6 +412,11 @@ function parseHebrewEvent(text, now) {
   var place = r.location ? null : extractPlace_(s, meeting);
   if (place) { s = place.s; r.location = place.location; }
 
+  // ---- v2.16 relative time: "בעוד שעתיים" / "בעוד 3 שעות" / "בעוד 20 דקות" / "בעוד חצי שעה" => now + N (Asia/Jerusalem)
+  var rel = null;
+  m = cut(new RegExp(B + '(?:בעוד|עוד) (?:(שעתיים|שעה וחצי|חצי שעה|רבע שעה|שעה)|' + NUMW + ' (שעות|דקות|דק\'))' + E));
+  if (m) rel = m[1] ? { 'שעתיים': 120, 'שעה וחצי': 90, 'חצי שעה': 30, 'רבע שעה': 15, 'שעה': 60 }[m[1]] : toNum_(m[2]) * (m[3] === 'שעות' ? 60 : 1);
+
   // ---- duration
   var dur = [
     [B + 'ל(?:-)?שעה וחצי' + E, 90], [B + 'ל(?:-)?שעתיים וחצי' + E, 150], [B + 'ל(?:-)?שעתיים' + E, 120],
@@ -461,12 +466,13 @@ function parseHebrewEvent(text, now) {
   if (!date) { date = addDays_(now.y, now.m, now.d, 0); r.dateDefaulted = true; }
 
   // ---- time
-  var period = null;
-  var pm = cut(new RegExp(B + '(בבוקר|בצהריים|בערב|בלילה)' + E));
-  if (pm) period = pm[1];
-  var h = null, min = 0, explicit24 = false;
+  var period = null, h = null, min = 0, explicit24 = false;
+  // a bare number is the hour only right before the period word ("4 בערב", "5 וחצי בערב"), never from elsewhere ("4 היום בערב")
+  var pm = cut(new RegExp(B + NUMW + '( וחצי| ורבע)? (בבוקר|בצהריים|בערב|בלילה)' + E));
+  if (pm) { period = pm[3]; h = toNum_(pm[1]); min = { ' וחצי': 30, ' ורבע': 15 }[pm[2]] || 0; explicit24 = h >= 13; }
+  else if ((pm = cut(new RegExp(B + '(בבוקר|בצהריים|בערב|בלילה)' + E)))) period = pm[1];
   var P = '(?:בשעה|ב-|ב|ל-|ל|עד)?\\s?';
-  m = cut(new RegExp(B + P + 'רבע ל(?:-)?' + NUMW + E));
+  m = h === null ? cut(new RegExp(B + P + 'רבע ל(?:-)?' + NUMW + E)) : null;
   if (m) { h = toNum_(m[1]) - 1; min = 45; if (h === 0) h = 12; }
   if (h === null) {
     m = cut(new RegExp(B + P + '(\\d{1,2}):(\\d{2})' + E));
@@ -475,15 +481,18 @@ function parseHebrewEvent(text, now) {
   if (h === null) {
     // "בשעה 3", "ב-8", "ב8 בערב", "15 וחצי", "בשעה שלוש ורבע"
     m = cut(new RegExp(B + '(?:בשעה|ב-|ב|ל-|ל)\\s?' + NUMW + '( וחצי| ורבע| ועשרים| ועשר)?' + E)) ||
-        cut(new RegExp(B + NUMW + '( וחצי| ורבע)' + E)) ||
-        (period ? cut(new RegExp(B + NUMW + E)) : null);
+        cut(new RegExp(B + NUMW + '( וחצי| ורבע)' + E));
     if (m) {
       h = toNum_(m[1]);
       min = { ' וחצי': 30, ' ורבע': 15, ' ועשרים': 20, ' ועשר': 10 }[m[2]] || 0;
       explicit24 = h >= 13;
     }
   }
-  if (h !== null && h <= 24 && min < 60) {
+  if (rel !== null && h === null && !period) {
+    var tot = ((now.hour || 0) * 60 + (now.minute || 0)) + rel;
+    date = addDays_(date.y, date.m, date.d, Math.floor(tot / 1440)); tot %= 1440;
+    h = Math.floor(tot / 60); min = tot % 60; r.allDay = false; r.dateDefaulted = false;
+  } else if (h !== null && h <= 24 && min < 60) {
     r.allDay = false; // an explicit time wins over "כל היום"
     if (!explicit24) {
       if (period === 'בבוקר') { if (h === 12) h = 0; }
@@ -526,8 +535,8 @@ function parseHebrewEvent(text, now) {
 function json_(o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }
 
 function nowParts_() {
-  var p = Utilities.formatDate(new Date(), TZ, 'yyyy-M-d-u').split('-').map(Number);
-  return { y: p[0], m: p[1], d: p[2], dow: p[3] % 7 };
+  var p = Utilities.formatDate(new Date(), TZ, 'yyyy-M-d-u-H-m').split('-').map(Number);
+  return { y: p[0], m: p[1], d: p[2], dow: p[3] % 7, hour: p[4], minute: p[5] };
 }
 
 function doPost(e) {
