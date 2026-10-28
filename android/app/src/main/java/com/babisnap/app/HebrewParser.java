@@ -38,8 +38,13 @@ public class HebrewParser {
 
     /** @return JSON string of the parsed event (title, startStr, durationMin, location, confirm, ...). */
     public String parseJson(String text, int y, int m, int d, int dowSunday0, int defaultDuration) {
+        return parseJson(text, y, m, d, dowSunday0, defaultDuration, 0, 0);
+    }
+
+    /** hour/minute = current local time (Asia/Jerusalem), used for "בעוד שעתיים" / "בעוד 20 דקות". */
+    public String parseJson(String text, int y, int m, int d, int dowSunday0, int defaultDuration, int hour, int minute) {
         String now = "{\"y\":" + y + ",\"m\":" + m + ",\"d\":" + d + ",\"dow\":" + dowSunday0
-                + ",\"defaultDuration\":" + defaultDuration + "}";
+                + ",\"defaultDuration\":" + defaultDuration + ",\"hour\":" + hour + ",\"minute\":" + minute + "}";
         return call("__parseJson", text, now);
     }
 
