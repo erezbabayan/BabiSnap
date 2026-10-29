@@ -42,7 +42,7 @@ tasks.register('copyParser', Copy) {
 preBuild.dependsOn copyParser
 
 dependencies {
-    implementation 'com.google.android.gms:play-services-auth:21.2.0'
+    implementation 'com.google.android.gms:play-services-auth:22.0.0'
     implementation 'org.mozilla:rhino:1.7.15.1'
     implementation 'androidx.security:security-crypto:1.1.0'
     implementation 'androidx.work:work-runtime:2.12.0'
