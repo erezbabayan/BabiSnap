@@ -65,8 +65,8 @@ public class VoiceActivity extends Activity {
             .putExtra(RecognizerIntent.EXTRA_LANGUAGE, "he-IL")
             .putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "he-IL")
             .putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-            .putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 1500L)
-            .putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 1500L)
+            .putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 4000L)
+            .putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 4000L)
             .putExtra(RecognizerIntent.EXTRA_PROMPT, "פגישה, משימה או הערה?");
     }
 

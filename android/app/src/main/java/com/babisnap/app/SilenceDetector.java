@@ -2,7 +2,7 @@ package com.babisnap.app;
 
 /** Decides when to end a recording ourselves (some Samsung/Google recognizers never send onResults). Pure Java, testable. */
 public final class SilenceDetector {
-    public static final long SILENCE_MS = 2000, HARD_CAP_MS = 30000;
+    public static final long SILENCE_MS = 5000, HARD_CAP_MS = 60000;
     public enum Action { WAIT, FINISH_SILENCE, FINISH_CAP }
     private final long start; private String last = ""; private long lastChange;
 
