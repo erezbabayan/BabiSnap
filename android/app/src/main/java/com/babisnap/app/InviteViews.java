@@ -69,7 +69,8 @@ final class InviteViews {
         root.addView(list);
 
         TextView no = new TextView(c); no.setText("בלי זימון"); no.setTextColor(0xFF6A5FA8); no.setTextSize(13.5f);
-        no.setPadding(dp(c, 7), dp(c, 7), dp(c, 7), dp(c, 7));
+        no.setPadding(dp(c, 12), dp(c, 7), dp(c, 12), dp(c, 7)); no.setGravity(Gravity.CENTER);
+        no.setMinHeight(dp(c, 48)); no.setMinimumHeight(dp(c, 48)); no.setMinWidth(dp(c, 48)); no.setMinimumWidth(dp(c, 48));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         lp.topMargin = dp(c, 8); lp.gravity = Gravity.CENTER_HORIZONTAL;
         no.setOnClickListener(v -> onPick.picked(null));

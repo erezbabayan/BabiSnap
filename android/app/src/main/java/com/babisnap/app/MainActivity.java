@@ -212,24 +212,19 @@ public class MainActivity extends Activity {
         String ver = "";
         try { ver = getPackageManager().getPackageInfo(getPackageName(), 0).versionName; } catch (Exception ignored) {}
         TextView f = new TextView(this);
-        SpannableStringBuilder sb = new SpannableStringBuilder(SettingsLogic.footer(ver));
-        int s = sb.length(); sb.append("פרטיות");
-        sb.setSpan(new ClickableSpan() {
-            @Override public void onClick(View w) { showPrivacy(); }
-            @Override public void updateDrawState(TextPaint tp) { tp.setUnderlineText(true); tp.setColor(MUTED); }
-        }, s, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-        sb.append(" · ");
-        int t0 = sb.length(); sb.append("תנאי שימוש");
-        sb.setSpan(new ClickableSpan() {
-            @Override public void onClick(View w) { openUrl(TERMS_URL); }
-            @Override public void updateDrawState(TextPaint tp) { tp.setUnderlineText(true); tp.setColor(MUTED); }
-        }, t0, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-        f.setText(sb); f.setMovementMethod(LinkMovementMethod.getInstance());
-        f.setTextSize(12.5f); f.setTextColor(0xFF8A879A); f.setGravity(Gravity.CENTER); f.setPadding(0, dp(16), 0, dp(6));
+        f.setText(SettingsLogic.footer(ver));
+        f.setTextSize(12.5f); f.setTextColor(0xFF8A879A); f.setGravity(Gravity.CENTER); f.setPadding(0, dp(16), 0, 0);
         content.addView(f, new LinearLayout.LayoutParams(-1, -2));
+        // Privacy / Terms as two separate text buttons, each >= 48dp tall (were ~15dp inline spans).
+        LinearLayout links = new LinearLayout(this); links.setOrientation(LinearLayout.HORIZONTAL); links.setGravity(Gravity.CENTER);
+        links.addView(footerLink("פרטיות", v -> showPrivacy()));
+        TextView dot = new TextView(this); dot.setText(" · "); dot.setTextSize(12.5f); dot.setTextColor(0xFF8A879A); links.addView(dot);
+        links.addView(footerLink("תנאי שימוש", v -> openUrl(TERMS_URL)));
+        content.addView(links, new LinearLayout.LayoutParams(-1, -2));
         TextView del = new TextView(this);
         del.setText("מחק את כל הנתונים מהמכשיר"); del.setTextColor(RED); del.setTextSize(13.5f); del.setGravity(Gravity.CENTER);
-        del.setPadding(dp(8), dp(8), dp(8), dp(8)); del.setOnClickListener(v -> confirmDeleteAll());
+        del.setPadding(dp(8), dp(8), dp(8), dp(8)); del.setMinHeight(dp(48)); del.setMinimumHeight(dp(48));
+        del.setOnClickListener(v -> confirmDeleteAll());
         content.addView(del, new LinearLayout.LayoutParams(-1, -2));
     }
 
@@ -352,6 +347,15 @@ public class MainActivity extends Activity {
         card.addView(r, new LinearLayout.LayoutParams(-1, -2));
     }
 
+    private TextView footerLink(String text, View.OnClickListener l) {
+        TextView b = new TextView(this); b.setText(text); b.setTextSize(12.5f); b.setTextColor(MUTED);
+        b.setPaintFlags(b.getPaintFlags() | android.graphics.Paint.UNDERLINE_TEXT_FLAG);
+        b.setGravity(Gravity.CENTER); b.setPadding(dp(12), 0, dp(12), 0);
+        b.setMinHeight(dp(48)); b.setMinimumHeight(dp(48)); b.setMinWidth(dp(48)); b.setMinimumWidth(dp(48));
+        b.setOnClickListener(l);
+        return b;
+    }
+
     private CharSequence ok(String check, String rest) {
         SpannableString s = new SpannableString(check + rest);
         s.setSpan(new ForegroundColorSpan(GREEN), 0, check.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
@@ -361,13 +365,16 @@ public class MainActivity extends Activity {
 
     private TextView pill(String text, View.OnClickListener l) {
         TextView b = new TextView(this); b.setText(text); b.setTextColor(0xFFFFFFFF); b.setTextSize(14); b.setTypeface(Typeface.DEFAULT_BOLD);
-        b.setGravity(Gravity.CENTER); b.setMinHeight(dp(34)); b.setPadding(dp(16), 0, dp(16), 0);
-        b.setBackground(round(PURPLE, dp(17))); b.setOnClickListener(l);
+        // 48dp tap target; visual pill stays ~36dp via a transparent 6dp vertical inset.
+        b.setGravity(Gravity.CENTER); b.setMinHeight(dp(48)); b.setMinimumHeight(dp(48)); b.setPadding(dp(16), 0, dp(16), 0);
+        b.setBackground(new android.graphics.drawable.InsetDrawable(round(PURPLE, dp(18)), 0, dp(6), 0, dp(6))); b.setOnClickListener(l);
         return b;
     }
     private TextView link(String text, boolean red, View.OnClickListener l) {
         TextView b = new TextView(this); b.setText(text); b.setTextColor(red ? RED : PURPLE); b.setTextSize(13.5f);
-        b.setPadding(dp(8), dp(8), dp(8), dp(8)); b.setOnClickListener(l);
+        b.setPadding(dp(8), dp(8), dp(8), dp(8)); b.setGravity(Gravity.CENTER);
+        b.setMinHeight(dp(48)); b.setMinimumHeight(dp(48)); b.setMinWidth(dp(48)); b.setMinimumWidth(dp(48)); // 48dp tap target
+        b.setOnClickListener(l);
         return b;
     }
     private static void rtl(AlertDialog d) {
