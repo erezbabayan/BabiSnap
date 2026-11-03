@@ -366,8 +366,12 @@ public class MainActivity extends Activity {
     private TextView pill(String text, View.OnClickListener l) {
         TextView b = new TextView(this); b.setText(text); b.setTextColor(0xFFFFFFFF); b.setTextSize(14); b.setTypeface(Typeface.DEFAULT_BOLD);
         // 48dp tap target; visual pill stays ~36dp via a transparent 6dp vertical inset.
-        b.setGravity(Gravity.CENTER); b.setMinHeight(dp(48)); b.setMinimumHeight(dp(48)); b.setPadding(dp(16), 0, dp(16), 0);
-        b.setBackground(new android.graphics.drawable.InsetDrawable(round(PURPLE, dp(18)), 0, dp(6), 0, dp(6))); b.setOnClickListener(l);
+        // Background must be set BEFORE padding: setBackground() replaces padding with the
+        // InsetDrawable's (0,6,0,6), which removed all horizontal padding and clipped Hebrew text.
+        b.setBackground(new android.graphics.drawable.InsetDrawable(round(PURPLE, dp(18)), 0, dp(6), 0, dp(6)));
+        b.setGravity(Gravity.CENTER); b.setSingleLine(true); b.setIncludeFontPadding(false);
+        b.setMinHeight(dp(48)); b.setMinimumHeight(dp(48)); b.setMinWidth(dp(72)); b.setMinimumWidth(dp(72));
+        b.setPadding(dp(18), dp(6), dp(18), dp(6)); b.setOnClickListener(l);
         return b;
     }
     private TextView link(String text, boolean red, View.OnClickListener l) {
