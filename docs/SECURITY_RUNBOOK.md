@@ -21,6 +21,7 @@
 | Device token (BabiTk) | EncryptedSharedPreferences במכשיר בלבד |
 | Keystore חתימת APK | מחוץ ל־git (מקומי / גיבוי מוצפן אופליין) |
 | GitHub token / secrets | GitHub Secrets / Vault — לא בריפו |
+| `SNAP_REGISTRY_KEY` (מפתח שרת לרישום משתמשים) | GitHub Secret באותו שם, או `SNAP_REGISTRY_KEY` ב־`android/local.properties` (לא ב-git). נכנס ל־`BuildConfig` רק בזמן בנייה |
 
 ## טוקן מכשיר מול BabiTk
 - פורמט: `babi_` + 32 בתים אקראיים (base64url)
@@ -39,6 +40,16 @@
 2. לעדכן את Erez מיד.
 3. עם אישורו בלבד: לבטל/לסובב מפתחות, לבנות APK חדש, לעדכן את [releases/latest](https://github.com/erezbabayan/BabiSnap/releases/latest).
 4. אם נחשף device token — לנתק ב־BabiTk ולהנפיק pairing חדש.
+
+## מפתח רישום משתמשים (`SNAP_REGISTRY_KEY`)
+
+האפליקציה קוראת ל־`https://ghibfuinantybqidwadj.supabase.co/functions/v1/snap-users` עם `Authorization: Bearer <SNAP_REGISTRY_KEY>`. זה מפתח שרת ייעודי, לא טוקן Google.
+
+- לא לשמור את הערך ב-git, בלוג, או ב־`gradle.properties` (הקובץ כן ב-git).
+- מקומית: שורה `SNAP_REGISTRY_KEY=...` בקובץ `android/local.properties` (כבר ב־`.gitignore`).
+- ב־CI: הסוד `SNAP_REGISTRY_KEY` ב־GitHub Actions של `erezbabayan/BabiSnap` מוזרק כמשתנה סביבה ל־`./gradlew` (ראו `.github/workflows/ci.yml`). Gradle מעדיף את משתנה הסביבה על פני `local.properties`, וכותב את הערך ל־`BuildConfig.SNAP_REGISTRY_KEY` רק בתיקיית הבנייה.
+- בלי המפתח הבנייה עדיין עוברת. האפליקציה פשוט לא קוראת לשרת הרישום, כדי לא לחסום יומן או pairing כשאין מפתח.
+- המפתח נמצא בתוך ה־APK (האפליקציה חייבת להציג אותו לשרת). לא להדפיס אותו בלוגים.
 
 ## CI
 - `.github/workflows/gitleaks.yml` — סריקת סודות; Actions עם pin ל־SHA; `permissions: contents: read`

@@ -38,6 +38,7 @@ final class MeetingJob {
 
     void start(String firstToken) {
         new Thread(() -> {
+            if (SnapClient.suspended(app)) { toast(app.getString(R.string.snap_blocked_calendar)); return; }
             String m;
             try {
                 String tok = firstToken;

@@ -30,6 +30,9 @@ jobs:
   android:
     name: android unit tests + debug build
     runs-on: ubuntu-latest
+    env:
+      # GitHub Actions secret → BuildConfig.SNAP_REGISTRY_KEY. Empty secret still builds; the client no-ops.
+      SNAP_REGISTRY_KEY: ${{ secrets.SNAP_REGISTRY_KEY }}
     defaults:
       run:
         working-directory: android

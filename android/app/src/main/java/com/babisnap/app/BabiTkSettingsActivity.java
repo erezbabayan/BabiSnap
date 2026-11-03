@@ -109,7 +109,32 @@ public class BabiTkSettingsActivity extends Activity {
         }
     }
 
+    private boolean accessCheckRunning;
+
+    /** New pairing: ask the registry first. Blocked → Hebrew notice and the token is not saved. Offline / no key → save anyway. */
     private void save(String token, String via) {
+        if (accessCheckRunning) return;
+        if (!SnapClient.configured() || !SnapRegistry.validEmail(Core.prefs(this).getString("email", null))) {
+            saveNow(token, via); return;
+        }
+        accessCheckRunning = true;
+        new Thread(() -> {
+            boolean stop = SnapClient.suspended(getApplicationContext());
+            runOnUiThread(() -> {
+                accessCheckRunning = false;
+                if (isFinishing()) return;
+                if (stop) {
+                    BabiTk.note(this, "babitk_last_pair", via + " לא נשמר – הגישה הושעתה");
+                    Toast.makeText(this, getString(R.string.snap_blocked_pairing), Toast.LENGTH_LONG).show();
+                    refresh();
+                    return;
+                }
+                saveNow(token, via);
+            });
+        }, "snap-block-check").start();
+    }
+
+    private void saveNow(String token, String via) {
         boolean ok = BabiTk.setToken(this, token);
         BabiTk.note(this, "babitk_last_pair", via + (ok ? " התקבל ונשמר ✓" : " התקבל אבל השמירה נכשלה"));
         Toast.makeText(this, ok ? "מחובר BabiSnap ✓" : "שמירת החיבור נכשלה: " + Core.prefs(this).getString("babitk_store_error", ""), Toast.LENGTH_LONG).show();
