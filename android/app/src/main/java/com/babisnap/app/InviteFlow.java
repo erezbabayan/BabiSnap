@@ -44,6 +44,17 @@ final class InviteFlow {
     static final String SETTING_OFF_STRIP = "שליחת הזמנות כבויה בהגדרות";
     static boolean settingOffHint(List<String> invite, boolean settingOn) { return !settingOn && invite != null && !invite.isEmpty(); }
 
+    /**
+     * Device-calendar inserts do not email guests (that stays on Google Calendar sendUpdates).
+     * Null when this recording is not going to the device calendar, or nobody was invited.
+     */
+    static final String DEVICE_NO_EMAIL =
+        "זימון במייל נשלח רק מיומן Google. האירוע נשמר ביומן המכשיר בלי מוזמנים.";
+    static String deviceInviteNote(boolean deviceDestination, List<String> invite) {
+        if (!deviceDestination || invite == null || invite.isEmpty()) return null;
+        return DEVICE_NO_EMAIL;
+    }
+
     /** Several matches for any name -> countdown stops, meeting is saved now, pickers are shown one after another. */
     static boolean needsPicker(List<Invitee> all) {
         for (Invitee i : all) if (i.kind == Kind.MANY) return true;

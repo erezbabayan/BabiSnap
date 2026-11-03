@@ -24,7 +24,8 @@ import org.json.JSONObject;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Widget/launcher target: speech (he-IL) -> parse on device -> (optional confirm) -> Google Calendar. */
+/** Widget/launcher target: speech (he-IL) -> parse on device -> (optional confirm) -> the selected calendar.
+ *  Google Calendar unless the user picked יומן המכשיר in Settings. */
 public class VoiceActivity extends Activity {
     static final int REQ_SPEECH = 1, REQ_AUTH = 2;
     private JSONObject parsed; private String spoken; private java.util.List<String> spokenTags = new java.util.ArrayList<>();
@@ -154,7 +155,7 @@ public class VoiceActivity extends Activity {
         try { parsed = Core.parse(this, spoken); } catch (Exception e) { done("שגיאת פענוח: " + e.getMessage()); return; }
         Classifier.Result c = Classifier.classify(spoken, !parsed.optBoolean("timeDefaulted", true) || parsed.optBoolean("allDay", false));
         if (c.kind != Classifier.Kind.MEETING) { showSaved(c); return; }
-        showMeeting(); // Google Calendar only, written after the 5s undo window
+        showMeeting(); // Google, or the device calendar when that destination was chosen
     }
 
     @Override protected void onActivityResult(int req, int res, Intent data) {
@@ -174,12 +175,24 @@ public class VoiceActivity extends Activity {
     private boolean cardClosed, awaitingConsent;
     private final Runnable closeCard = () -> { if (!cardClosed) done(null); }; // auth still resolving: close anyway
     private MeetingJob job;
+    /** Captured when the card opens, so the insert uses the same destination the card named. */
+    private DeviceCalendarLogic.Route meetingRoute = DeviceCalendarLogic.Route.GOOGLE;
 
     /** pickerMode: the card stays open for the contact choice; otherwise it closes within CLOSE_GRACE_MS. */
     private void commitMeeting() {
         if (!pickerMode) ui.postDelayed(closeCard, CardFlow.CLOSE_GRACE_MS);
         final Context app = getApplicationContext();
         final MeetingJob j = job = new MeetingJob(app, parsed, spoken);
+        if (meetingRoute == DeviceCalendarLogic.Route.DEVICE) {
+            j.startDevice(); // local Calendar Provider; no Google token, no emailed attendees
+            if (!cardClosed && !pickerMode) done(null);
+            return;
+        }
+        if (meetingRoute == DeviceCalendarLogic.Route.DEVICE_UNAVAILABLE) {
+            toast(app, DeviceCalendar.ERR_UNAVAILABLE);
+            if (!cardClosed) done(null);
+            return;
+        }
         if (!pickerMode) j.setAttendees(InviteFlow.attendees(invitees)); // undo window over: single matches are final
         Identity.getAuthorizationClient(app).authorize(Core.authRequest())
             .addOnSuccessListener(res -> {
@@ -213,10 +226,18 @@ public class VoiceActivity extends Activity {
     private boolean pickerMode;
 
     private void showMeeting() {
+        meetingRoute = DeviceCalendar.route(this);
+        if (meetingRoute == DeviceCalendarLogic.Route.DEVICE_UNAVAILABLE) {
+            done(DeviceCalendar.ERR_UNAVAILABLE);
+            return;
+        }
         inviteQueries = new ArrayList<>();
         JSONArray a = parsed.optJSONArray("invite");
         for (int i = 0; a != null && i < a.length(); i++) inviteQueries.add(a.optString(i));
-        if (!InviteFlow.wanted(inviteQueries, Core.sendInvites(this), true)) { showMeetingCard(); return; }
+        // Device calendar stores the event only. Looking up contacts would promise an email invite we do not send.
+        if (meetingRoute == DeviceCalendarLogic.Route.DEVICE || !InviteFlow.wanted(inviteQueries, Core.sendInvites(this), true)) {
+            showMeetingCard(); return;
+        }
         if (checkSelfPermission(Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED) { resolveInvites(); return; }
         if (!Core.prefs(this).getBoolean("contacts_jit_shown", false)) { showContactsSheet(); return; }
         noPermission();
@@ -256,7 +277,8 @@ public class VoiceActivity extends Activity {
         setContentView(R.layout.card_saved);
         getWindow().setBackgroundDrawableResource(android.R.color.transparent);
         ((TextView) findViewById(R.id.check)).setText("📅");
-        ((TextView) findViewById(R.id.headline)).setText("נרשם ביומן גוגל · פגישה");
+        ((TextView) findViewById(R.id.headline)).setText(meetingRoute == DeviceCalendarLogic.Route.DEVICE
+            ? "נרשם ביומן המכשיר · פגישה" : "נרשם ביומן גוגל · פגישה");
         TextView chip = findViewById(R.id.chip); chip.setText("פגישה");
         chip.setBackgroundResource(R.drawable.chip_meeting); chip.setTextColor(0xFFFFFFFF);
         ((TextView) findViewById(R.id.summary)).setText(CardText.meeting(p.optString("title"), p.optInt("d"), p.optInt("m"), p.optInt("y"),
@@ -316,7 +338,9 @@ public class VoiceActivity extends Activity {
                     break;
             }
         }
-        if (InviteFlow.settingOffHint(inviteQueries, Core.sendInvites(this)))
+        String deviceNote = InviteFlow.deviceInviteNote(meetingRoute == DeviceCalendarLogic.Route.DEVICE, inviteQueries);
+        if (deviceNote != null) box.addView(InviteViews.strip(this, false, deviceNote, null));
+        else if (InviteFlow.settingOffHint(inviteQueries, Core.sendInvites(this)))
             box.addView(InviteViews.strip(this, false, InviteFlow.SETTING_OFF_STRIP, null));
         box.setVisibility(box.getChildCount() > 0 ? View.VISIBLE : View.GONE);
     }
