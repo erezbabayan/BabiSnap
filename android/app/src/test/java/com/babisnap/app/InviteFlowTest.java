@@ -83,4 +83,17 @@ public class InviteFlowTest {
         assertFalse(InviteFlow.wanted(q, false, true));
         assertEquals("שליחת הזמנות כבויה בהגדרות", InviteFlow.SETTING_OFF_STRIP);
     }
+
+    @Test public void deviceCalendarDoesNotPromiseEmailInvites() {
+        java.util.List<String> q = java.util.Collections.singletonList("תמר");
+        assertNull(InviteFlow.deviceInviteNote(false, q));
+        assertNull(InviteFlow.deviceInviteNote(true, java.util.Collections.<String>emptyList()));
+        assertNull(InviteFlow.deviceInviteNote(true, null));
+        String note = InviteFlow.deviceInviteNote(true, q);
+        assertEquals(InviteFlow.DEVICE_NO_EMAIL, note);
+        assertTrue(note.contains("יומן המכשיר"));
+        assertTrue(note.contains("Google"));
+        assertFalse(note.contains("עבודה"));
+        assertFalse(note.contains("אישי"));
+    }
 }

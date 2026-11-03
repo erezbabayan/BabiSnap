@@ -4,6 +4,9 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <!-- 2.4: requested only from Settings ▸ הרשאות for now; stage 2 uses it to find invitees' emails, on-device only. -->
     <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <!-- Requested only when the user connects יומן המכשיר. Local Calendar Provider read/write; no Microsoft Graph. -->
+    <uses-permission android:name="android.permission.READ_CALENDAR" />
+    <uses-permission android:name="android.permission.WRITE_CALENDAR" />
     <queries><intent><action android:name="android.speech.RecognitionService" /></intent></queries>
     <queries>
         <intent><action android:name="android.speech.action.RECOGNIZE_SPEECH" /></intent>

@@ -17,23 +17,36 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 /**
- * One meeting on its way to Google Calendar, in the background (the card never waits for the network).
- * Insert first; once the attendee list is final (after the undo window, or after the picker), PATCH the attendees
- * with sendUpdates=all so Google emails the invite. Uses only the application context. Emails are never logged.
+ * One meeting on its way to a calendar, in the background (the card never waits for the network).
+ * Google: insert first; once the attendee list is final (after the undo window, or after the picker), PATCH the
+ * attendees with sendUpdates=all so Google emails the invite. Device calendar: insert only — no attendees and
+ * no mail. Uses only the application context. Emails are never logged.
  */
 final class MeetingJob {
     private final Context app; private final JSONObject p; private final String spoken;
     private String token, eventId;
-    private boolean inserted, attendeesFinal, patchStarted;
+    private boolean inserted, attendeesFinal, patchStarted, deviceWrite;
     private final List<String> emails = new ArrayList<>();
 
     MeetingJob(Context app, JSONObject p, String spoken) { this.app = app; this.p = p; this.spoken = spoken; }
 
-    /** Final list of invitees (may be empty). Call once. */
+    /** Final list of invitees (may be empty). Call once. Ignored for a device-calendar write. */
     synchronized void setAttendees(List<String> e) {
         if (attendeesFinal) return;
-        attendeesFinal = true; emails.addAll(e);
+        attendeesFinal = true;
+        if (deviceWrite) return;
+        emails.addAll(e);
         maybePatch();
+    }
+
+    /** Calendar Provider insert. No Google token and no attendee patch. */
+    void startDevice() {
+        synchronized (this) { deviceWrite = true; }
+        new Thread(() -> {
+            if (SnapClient.suspended(app)) { toast(app.getString(R.string.snap_blocked_calendar)); return; }
+            String err = DeviceCalendar.insert(app, p, spoken);
+            if (err != null) toast(err);
+        }, "babisnap-device-calendar").start();
     }
 
     void start(String firstToken) {

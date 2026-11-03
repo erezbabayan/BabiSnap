@@ -35,7 +35,7 @@ import org.json.JSONObject;
 /** 2.4 Settings (הגדרות), Hebrew RTL: connections, permissions, preferences, privacy, delete-all.
  *  A green ✓ is shown only when something is really connected / granted; otherwise one action button. */
 public class MainActivity extends Activity {
-    static final int REQ_AUTH = 10, REQ_MIC = 11, REQ_CONTACTS = 12;
+    static final int REQ_AUTH = 10, REQ_MIC = 11, REQ_CONTACTS = 12, REQ_CALENDAR = 13;
     private static final int PURPLE = 0xFF2A1B7A, PURPLE_DARK = 0xFF1E1458, BG = 0xFFF6F5FA, GREEN = 0xFF1A8A4A,
         MUTED = 0xFF7A7888, SECTION = 0xFF6A5FA8, RED = 0xFFB3261E, DIVIDER = 0xFFEEECF5, ICON_BG = 0xFFEFEDF8, ICON_BG_Y = 0xFFFFF1C4;
     private LinearLayout content;
@@ -72,6 +72,7 @@ public class MainActivity extends Activity {
         String email = Core.prefs(this).getString("email", null);
         if (email != null) row(conn, "📅", false, "Google יומן", ok("מחובר ✓", " · \u2066" + email + "\u2069"), link("התנתק", false, v -> signOut()));
         else row(conn, "📅", false, "Google יומן", plain("לשמירת פגישות"), pill("התחבר", v -> signIn()));
+        renderDeviceCalendar(conn);
         boolean btk = BabiTk.hasToken(this);
         if (btk) row(conn, "📓", true, "BabiTk · מחברת", ok("מחובר ✓", " · משימות והערות"), link("נתק", false, v -> { BabiTk.disconnect(this);
             Toast.makeText(this, "נותק – הטוקן נמחק מהמכשיר", Toast.LENGTH_SHORT).show(); render(); }));
@@ -116,6 +117,116 @@ public class MainActivity extends Activity {
     // ================= actions =================
 
     private void openBabiTk() { startActivity(new Intent(this, BabiTkSettingsActivity.class)); }
+
+    /** Same connections card as Google: connect, pick a writable phone calendar, then optionally make it the destination. */
+    private void renderDeviceCalendar(LinearLayout conn) {
+        boolean perm = DeviceCalendar.hasPermission(this);
+        if (perm) Core.prefs(this).edit()
+            .remove(blockedKey(Manifest.permission.READ_CALENDAR))
+            .remove(blockedKey(Manifest.permission.WRITE_CALENDAR)).apply();
+        boolean blocked = !perm && (isBlocked(this, Manifest.permission.READ_CALENDAR) || isBlocked(this, Manifest.permission.WRITE_CALENDAR));
+        long savedId = Core.prefs(this).getLong(DeviceCalendar.PREF_ID, -1L);
+        boolean saved = perm && Core.prefs(this).getBoolean(DeviceCalendar.PREF_ON, false) && savedId > 0;
+        boolean alive = true;
+        if (saved) {
+            try { alive = DeviceCalendar.stillWritable(this, savedId); }
+            catch (SecurityException e) { alive = false; }
+            catch (Exception ignored) { alive = true; }
+        }
+        boolean on = saved && alive;
+        boolean destDevice = DeviceCalendarLogic.DEVICE.equals(Core.prefs(this).getString(DeviceCalendar.PREF_DEST, DeviceCalendarLogic.GOOGLE));
+        if (on) {
+            String name = DeviceCalendar.savedName(this);
+            row(conn, "📱", false, "יומן המכשיר", ok("מחובר ✓", " · " + name), link("נתק", false, v -> disconnectDeviceCalendar()));
+            row(conn, "🗓️", false, "יומן", null, link(name + " ▾", false, v -> pickDeviceCalendar()));
+        } else if (saved) {
+            row(conn, "📱", false, "יומן המכשיר", plain("היומן שנבחר לא זמין"), link("נתק", false, v -> disconnectDeviceCalendar()));
+            row(conn, "🗓️", false, "יומן", null, link("בחרו ▾", false, v -> pickDeviceCalendar()));
+        } else if (blocked) {
+            row(conn, "📱", false, "יומן המכשיר", plain("נחסם – אפשר לאשר בהגדרות המערכת"), pill("אשר", v -> {
+                Toast.makeText(this, "הרשאות ← יומן ← אפשר", Toast.LENGTH_LONG).show(); openAppInfo();
+            }));
+        } else {
+            row(conn, "📱", false, "יומן המכשיר", plain("לשמירה ביומן שבטלפון"), pill("חבר", v -> connectDeviceCalendar()));
+        }
+        if (on || destDevice) {
+            String cur = destDevice ? "יומן המכשיר" : "Google יומן";
+            String sub = destDevice
+                ? (on ? "פגישות נשמרות ביומן המכשיר" : "אין יומן זמין – בחרו יומן או חזרו ל-Google")
+                : "פגישות נשמרות ב-Google";
+            row(conn, "📌", false, "יעד לפגישות", plain(sub), link(cur + " ▾", false, v -> pickDestination(on)));
+        }
+    }
+
+    private void connectDeviceCalendar() {
+        if (DeviceCalendar.hasPermission(this)) { pickDeviceCalendar(); return; }
+        if (isBlocked(this, Manifest.permission.READ_CALENDAR) || isBlocked(this, Manifest.permission.WRITE_CALENDAR)) {
+            Toast.makeText(this, "הרשאות ← יומן ← אפשר", Toast.LENGTH_LONG).show();
+            openAppInfo();
+            return;
+        }
+        rtl(new AlertDialog.Builder(this).setTitle("יומן המכשיר")
+            .setMessage("BabiSnap יבקש גישה ליומנים בטלפון כדי לשמור פגישות ביומן שתבחרו, כולל יומן שמסונכרן לטלפון. הגישה מקומית: לא נשלחות הקלטות, תמלילים או תוכן יומן לשרת.")
+            .setPositiveButton("המשך", (x, w) -> requestPermissions(new String[]{
+                Manifest.permission.READ_CALENDAR, Manifest.permission.WRITE_CALENDAR}, REQ_CALENDAR))
+            .setNegativeButton("ביטול", null).show());
+    }
+
+    private void pickDeviceCalendar() {
+        java.util.List<DeviceCalendar.Cal> cals;
+        try { cals = DeviceCalendar.listWritable(this); }
+        catch (SecurityException e) {
+            Toast.makeText(this, DeviceCalendar.ERR_PERMISSION, Toast.LENGTH_LONG).show(); return;
+        } catch (Exception e) {
+            Toast.makeText(this, "לא ניתן לקרוא את יומני הטלפון", Toast.LENGTH_LONG).show(); return;
+        }
+        if (cals.isEmpty()) {
+            Toast.makeText(this, "לא נמצא יומן שאפשר לכתוב אליו בטלפון.", Toast.LENGTH_LONG).show();
+            render(); return;
+        }
+        String[] labels = new String[cals.size()];
+        long current = Core.prefs(this).getLong(DeviceCalendar.PREF_ID, -1L);
+        int sel = -1;
+        for (int i = 0; i < cals.size(); i++) {
+            labels[i] = cals.get(i).label;
+            if (cals.get(i).id == current) sel = i;
+        }
+        final java.util.List<DeviceCalendar.Cal> choices = cals;
+        boolean first = !Core.prefs(this).getBoolean(DeviceCalendar.PREF_ON, false);
+        rtl(new AlertDialog.Builder(this).setTitle("בחרו יומן")
+            .setSingleChoiceItems(labels, sel, (d, i) -> {
+                DeviceCalendar.Cal cal = choices.get(i);
+                Core.prefs(this).edit()
+                    .putLong(DeviceCalendar.PREF_ID, cal.id)
+                    .putString(DeviceCalendar.PREF_NAME, cal.label)
+                    .putBoolean(DeviceCalendar.PREF_ON, true).apply();
+                Toast.makeText(this, first
+                    ? "חוברו ליומן המכשיר. פגישות יישמרו ב-Google עד שתשנו את יעד הפגישות."
+                    : "היומן עודכן", Toast.LENGTH_LONG).show();
+                d.dismiss(); render();
+            }).setNegativeButton("ביטול", null).show());
+    }
+
+    private void pickDestination(boolean deviceReady) {
+        String[] items = deviceReady ? new String[]{"Google יומן", "יומן המכשיר"} : new String[]{"Google יומן"};
+        String dest = Core.prefs(this).getString(DeviceCalendar.PREF_DEST, DeviceCalendarLogic.GOOGLE);
+        int cur = deviceReady && DeviceCalendarLogic.DEVICE.equals(dest) ? 1 : 0;
+        rtl(new AlertDialog.Builder(this).setTitle("יעד לפגישות")
+            .setSingleChoiceItems(items, cur, (d, i) -> {
+                Core.prefs(this).edit().putString(DeviceCalendar.PREF_DEST,
+                    i == 1 ? DeviceCalendarLogic.DEVICE : DeviceCalendarLogic.GOOGLE).apply();
+                d.dismiss(); render();
+            }).setNegativeButton("ביטול", null).show());
+    }
+
+    private void disconnectDeviceCalendar() {
+        Core.prefs(this).edit()
+            .remove(DeviceCalendar.PREF_ID).remove(DeviceCalendar.PREF_NAME)
+            .putBoolean(DeviceCalendar.PREF_ON, false)
+            .putString(DeviceCalendar.PREF_DEST, DeviceCalendarLogic.destinationAfterDisconnect()).apply();
+        Toast.makeText(this, "נותקתם מיומן המכשיר. פגישות יישמרו ב-Google יומן.", Toast.LENGTH_LONG).show();
+        render();
+    }
 
     private void signIn() {
         Core.requestAuth(this, REQ_AUTH, this::gotToken, e -> Toast.makeText(this, "שגיאת התחברות: " + e, Toast.LENGTH_LONG).show());
@@ -204,6 +315,13 @@ public class MainActivity extends Activity {
     }
 
     @Override public void onRequestPermissionsResult(int req, String[] p, int[] g) {
+        if (req == REQ_CALENDAR) {
+            for (int i = 0; i < p.length; i++)
+                noteResult(this, p[i], i < g.length && g[i] == PackageManager.PERMISSION_GRANTED);
+            if (DeviceCalendar.hasPermission(this)) pickDeviceCalendar();
+            else render();
+            return;
+        }
         if ((req == REQ_MIC || req == REQ_CONTACTS) && p.length > 0) {
             noteResult(this, p[0], g.length > 0 && g[0] == PackageManager.PERMISSION_GRANTED);
             render();
@@ -267,6 +385,7 @@ public class MainActivity extends Activity {
     static final String PRIVACY_HE =
         "• הדיבור מתומלל ע\"י שירות זיהוי הדיבור של הטלפון, והפענוח (פגישה/משימה/הערה, תאריך, שעה, מקום) נעשה בטלפון עצמו.\n\n" +
         "• פגישות נשמרות ישירות ביומן Google שלך, דרך החשבון שחיברת. BabiSnap לא שומר סיסמה או טוקן של Google.\n\n" +
+        "• אם בחרתם יעד \"יומן המכשיר\", הפגישה נכתבת ליומן שבטלפון בלבד. BabiSnap לא שולח את האירוע לשרת. אם היומן מסונכרן באפליקציה אחרת, הסנכרון הוא שלה. זימון במייל נשלח רק מיומן Google.\n\n" +
         "• משימות והערות נשלחות רק ללוח \"מחברת\" ב-BabiTk שלך. מפתח החיבור נשמר מוצפן בטלפון.\n\n" +
         "• אנשי קשר נקראים בטלפון בלבד ולא נשלחים לשום מקום (אימייל מוזמן עובר ל-Google רק אם ביקשת לשלוח הזמנה).\n\n" +
         "• האימייל של חשבון Google שחיברתם, יחד עם מזהה התקנה אקראי (לא IMEI), גרסה ושם דגם, נשמרים לניהול הגישה בלבד. לא נשלחים הקלטות, תמלילים, תוכן יומן או טוקן Google.\n\n" +
@@ -287,7 +406,7 @@ public class MainActivity extends Activity {
 
     private void confirmDeleteAll() {
         AlertDialog d = new AlertDialog.Builder(this).setTitle("למחוק את כל הנתונים מהמכשיר?")
-            .setMessage("ינותקו Google יומן (כולל ביטול הגישה) ו-BabiTk, יימחקו פריטים שעוד לא נשלחו וכל ההעדפות, והאימייל ברישום הגישה יסומן כמנותק.\nהפגישות ביומן וההערות ב-BabiTk לא נמחקות.")
+            .setMessage("ינותקו Google יומן (כולל ביטול הגישה) ו-BabiTk, יישכח יומן המכשיר שנבחר, יימחקו פריטים שעוד לא נשלחו וכל ההעדפות, והאימייל ברישום הגישה יסומן כמנותק.\nהפגישות ביומן (Google או יומן המכשיר) וההערות ב-BabiTk לא נמחקות.")
             .setPositiveButton("מחק", (x, w) -> deleteAll()).setNegativeButton("ביטול", null).show();
         rtl(d);
         d.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(RED);
