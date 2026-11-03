@@ -7,7 +7,6 @@ import pathlib
 import re
 import struct
 import sys
-import zipfile
 
 # Public certificate from the published v2.19 BabiSnap.apk (CN=Erez Babayan). Not a secret.
 EXPECTED_SHA256 = bytes.fromhex(
@@ -91,7 +90,7 @@ def main():
         return 1
     info = json.loads(meta.read_text())
     element = info["elements"][0]
-    version_code = element["versionCode"]
+    version_code = int(element["versionCode"])
     version_name = element["versionName"]
     print("versionCode=%s versionName=%s" % (version_code, version_name))
     if version_code != 31 or version_name != "2.20":
@@ -126,8 +125,9 @@ def main():
         return 1
     # Escaped literal length only — do not print the key.
     literal = match.group(1)
-    print("client_key_baked_in=%s" % ("yes" if literal else "no"))
-    print("client_key_length=%d" % len(literal))
+    key_len = len(literal)
+    print("client_key_baked_in=%s" % ("yes" if key_len else "no"))
+    print("client_key_length=%d" % key_len)
     if key_len <= 0:
         print("ERROR: client key was not baked into BuildConfig", file=sys.stderr)
         return 1

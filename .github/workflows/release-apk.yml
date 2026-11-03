@@ -1,6 +1,7 @@
-# Temporary one-shot: build a signed release APK and publish GitHub Release v2.20.
+# One-shot: build a signed release APK and publish GitHub Release v2.20.
 # Uses SNAP_REGISTRY_CLIENT_KEY plus ANDROID_KEYSTORE_* repo secrets. Never reads
-# SNAP_REGISTRY_ADMIN_KEY. Delete this workflow after the release asset is uploaded.
+# SNAP_REGISTRY_ADMIN_KEY. After BabiSnap.apk is on the release, this workflow
+# deletes itself from cursor/release-v2-20-a7e2 so it is not left on main.
 name: Release – BabiSnap APK
 
 on:
@@ -100,3 +101,37 @@ jobs:
               --latest
           fi
           gh release view v2.20 --json url,assets --jq '{url:.url, assets:[.assets[].name]}'
+
+      - name: Remove one-shot workflow after the APK is published
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          case "$GITHUB_REF_NAME" in
+            cursor/release-v2-20-a7e2) ;;
+            *) echo "ERROR: refusing to delete the release workflow from ${GITHUB_REF_NAME}"; exit 1 ;;
+          esac
+          gh release view v2.20 --json assets --jq '.assets[].name' | grep -qx 'BabiSnap.apk'
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm -f \
+            .github/workflows/release-apk.yml \
+            .github/workflows/prepare_release_signing.py \
+            .github/workflows/verify_release_apk.py
+          git commit -m "Remove one-shot v2.20 release workflow after BabiSnap.apk was published."
+          askpass="${RUNNER_TEMP}/git-askpass.sh"
+          python3 - "$askpass" << 'PY'
+          import sys
+          open(sys.argv[1], "w").write(r"""#!/bin/sh
+          case "$1" in
+            *Username*) printf '%s\n' "x-access-token" ;;
+            *) printf '%s\n' "$GH_TOKEN" ;;
+          esac
+          """)
+          PY
+          chmod 700 "$askpass"
+          head -1 "$askpass" | grep -qx '#!/bin/sh'
+          GIT_ASKPASS="$askpass" GIT_TERMINAL_PROMPT=0 \
+            git -c credential.helper= \
+            push "https://github.com/${GITHUB_REPOSITORY}.git" "HEAD:${GITHUB_REF_NAME}"
