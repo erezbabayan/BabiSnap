@@ -21,6 +21,8 @@
 | Device token (BabiTk) | EncryptedSharedPreferences במכשיר בלבד |
 | Keystore חתימת APK | מחוץ ל־git (מקומי / גיבוי מוצפן אופליין) |
 | GitHub token / secrets | GitHub Secrets / Vault — לא בריפו |
+| `SNAP_REGISTRY_CLIENT_KEY` (מפתח לקוח לרישום) | GitHub Secret באותו שם, או `SNAP_REGISTRY_CLIENT_KEY` ב־`android/local.properties` (לא ב-git). נכנס ל־`BuildConfig.SNAP_REGISTRY_CLIENT_KEY` רק בזמן בנייה, ולכן כן נמצא ב־APK |
+| `SNAP_REGISTRY_ADMIN_KEY` (מפתח מנהל) | שרת בלבד (BabiTk / Supabase). לא ב־APK, לא ב־`local.properties`, לא ב־CI של BabiSnap |
 
 ## טוקן מכשיר מול BabiTk
 - פורמט: `babi_` + 32 בתים אקראיים (base64url)
@@ -39,6 +41,23 @@
 2. לעדכן את Erez מיד.
 3. עם אישורו בלבד: לבטל/לסובב מפתחות, לבנות APK חדש, לעדכן את [releases/latest](https://github.com/erezbabayan/BabiSnap/releases/latest).
 4. אם נחשף device token — לנתק ב־BabiTk ולהנפיק pairing חדש.
+
+## מפתחות רישום משתמשים (לקוח מול מנהל)
+
+האפליקציה קוראת ל־`https://ghibfuinantybqidwadj.supabase.co/functions/v1/snap-users` עם `Authorization: Bearer <SNAP_REGISTRY_CLIENT_KEY>`. זה לא טוקן Google.
+
+שני מפתחות נפרדים. השרת אמור לקבל את מפתח הלקוח ל־signin / heartbeat / disconnect ולקריאת הסטטוס של אותו אימייל והתקנה, ולדחות אותו לפעולות מנהל.
+
+| מפתח | איפה | מה מותר איתו |
+|------|------|----------------|
+| `SNAP_REGISTRY_CLIENT_KEY` | בתוך ה־APK (BuildConfig) | דיווח לקוח: `signin`, `heartbeat`, `disconnect`, ו־GET של הסטטוס של ההתקנה הזו (`active` / `blocked` / `disconnected`) |
+| `SNAP_REGISTRY_ADMIN_KEY` | שרת בלבד | רשימה, חסימה, ביטול חסימה ושאר פעולות מנהל. לא נשלח מהאפליקציה ולא נכנס לבנייה |
+
+- לא לשמור אף ערך ב-git, בלוג, או ב־`gradle.properties` (הקובץ כן ב-git).
+- מקומית, רק מפתח הלקוח: שורה `SNAP_REGISTRY_CLIENT_KEY=...` בקובץ `android/local.properties` (כבר ב־`.gitignore`). אין לשים שם את מפתח המנהל.
+- ב־CI: הסוד `SNAP_REGISTRY_CLIENT_KEY` ב־GitHub Actions של `erezbabayan/BabiSnap` מוזרק כמשתנה סביבה ל־`./gradlew` (ראו `.github/workflows/ci.yml`). Gradle מעדיף את משתנה הסביבה על פני `local.properties`, וכותב אותו ל־`BuildConfig.SNAP_REGISTRY_CLIENT_KEY` רק בתיקיית הבנייה. ה־workflow לא מזריק את `SNAP_REGISTRY_ADMIN_KEY`.
+- בלי מפתח הלקוח (או בלי כתובת) הבנייה עדיין עוברת. האפליקציה לא קוראת לשרת הרישום, כדי לא לחסום יומן או pairing.
+- מפתח הלקוח כן נמצא ב־APK, כי המכשיר חייב להציג אותו. לא להדפיס אותו בלוגים. אם הוא נחשף — לסובב אותו בשרת; מפתח המנהל נשאר במקומו.
 
 ## CI
 - `.github/workflows/gitleaks.yml` — סריקת סודות; Actions עם pin ל־SHA; `permissions: contents: read`

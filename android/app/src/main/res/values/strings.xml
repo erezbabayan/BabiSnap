@@ -4,4 +4,8 @@
     <string name="widget_desc">BabiSnap – הקלטת פגישה ביומן בהקשה אחת</string>
     <string name="widget_button_label">BabiSnap – כפתור</string>
     <string name="widget_button_desc">כפתור BabiSnap – הקשה אחת להקלטת פגישה</string>
+    <string name="snap_registry_notice">האימייל המחובר נרשם לניהול הגישה של המערכת (למנהל בלבד).</string>
+    <string name="snap_blocked">הגישה הושעתה. פנו למנהל המערכת.</string>
+    <string name="snap_blocked_calendar">הגישה הושעתה. הפגישה לא נשמרה ביומן.</string>
+    <string name="snap_blocked_pairing">הגישה הושעתה. החיבור החדש לא נשמר.</string>
 </resources>

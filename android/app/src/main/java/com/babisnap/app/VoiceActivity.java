@@ -34,6 +34,7 @@ public class VoiceActivity extends Activity {
 
     @Override protected void onCreate(Bundle b) {
         super.onCreate(b);
+        SnapHeartbeat.onAppOpen(this); // at most once a day, or when the version changed
         if (b != null) return;
         if (!SpeechRecognizer.isRecognitionAvailable(this)) { systemDialog(); return; }
         requestWindowFeature(Window.FEATURE_NO_TITLE);

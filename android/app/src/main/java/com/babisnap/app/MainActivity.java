@@ -42,6 +42,7 @@ public class MainActivity extends Activity {
 
     @Override protected void onCreate(Bundle b) {
         super.onCreate(b);
+        SnapHeartbeat.onAppOpen(this); // registry: at most once a day, or when the version changed
         TagSync.maybeFetch(this, false); // background, throttled to 12 h
         UpdateCheck.maybeCheck(this); // GitHub latest release, throttled to 6 h; dialog only if newer
         setTitle("הגדרות");
@@ -80,6 +81,14 @@ public class MainActivity extends Activity {
             String t = pending > 0 ? pending + " ממתינים לשליחה" : failed > 0 ? failed + " פריטים נדחו" : "בעיה בשליחה";
             String err = Core.prefs(this).getString("babitk_last_error", null);
             row(conn, "⚠️", true, t, plain(err == null || "אין".equals(err) ? "בדיקה ושליחה חוזרת" : err), link("פרטים", false, v -> openBabiTk()));
+        }
+        if (SnapClient.configured() && SnapRegistry.validEmail(email)) {
+            TextView notice = new TextView(this);
+            notice.setText(R.string.snap_registry_notice);
+            notice.setTextSize(12.5f); notice.setTextColor(MUTED);
+            notice.setTextAlignment(View.TEXT_ALIGNMENT_VIEW_START);
+            notice.setPadding(dp(14), dp(4), dp(14), dp(12));
+            conn.addView(notice);
         }
 
         // ---- הרשאות ----
@@ -121,18 +130,40 @@ public class MainActivity extends Activity {
     private void gotToken(String token) {
         new Thread(() -> {
             String email; try { email = Core.fetchEmail(token); } catch (Exception e) { email = null; }
-            String fe = email == null ? "(חשבון Google)" : email;
-            Core.prefs(this).edit().putString("email", fe).apply(); // the Google access token itself is never stored by us
-            runOnUiThread(this::render);
-        }).start();
+            String shown = email == null ? "(חשבון Google)" : email;
+            Core.prefs(this).edit().putString("email", shown).apply(); // the Google access token itself is never stored by us
+            boolean tell = SnapRegistry.validEmail(email) && SnapClient.configured();
+            runOnUiThread(() -> {
+                if (isFinishing()) return;
+                render();
+                if (tell) Toast.makeText(this, getString(R.string.snap_registry_notice), Toast.LENGTH_LONG).show();
+            });
+            if (!tell) return;
+            SnapRegistry.PostResult r = SnapClient.post(SnapRegistry.normalizeEmail(email), SnapInstall.id(this),
+                SnapRegistry.EVENT_SIGNIN, SnapRegistry.sources(true, BabiTk.hasToken(this)),
+                SnapInstall.appVersion(this), SnapInstall.deviceLabel());
+            if (r != null && r.blocked()) runOnUiThread(() -> {
+                if (!isFinishing()) Toast.makeText(this, getString(R.string.snap_blocked), Toast.LENGTH_LONG).show();
+            });
+        }, "snap-signin").start();
     }
 
-    /** Sign out = forget the account locally AND revoke BabiSnap's Calendar grant at Google. */
+    /** Sign out = forget the account locally, tell the registry, AND revoke BabiSnap's Calendar grant at Google. */
     private void signOut() {
+        reportGoogleDisconnect(BabiTk.hasToken(this));
         Core.prefs(this).edit().remove("email").remove("tok").apply();
         revokeGoogle();
         render();
         Toast.makeText(this, "התנתקת מ-Google – הגישה ליומן מבוטלת", Toast.LENGTH_SHORT).show();
+    }
+
+    /** event=disconnect for the Google account. Captures ids before prefs are cleared. */
+    private void reportGoogleDisconnect(boolean babiTkStillConnected) {
+        String email = SnapRegistry.normalizeEmail(Core.prefs(this).getString("email", null));
+        if (!SnapRegistry.validEmail(email)) return;
+        Context app = getApplicationContext();
+        SnapClient.reportAsync(app, email, SnapInstall.id(app), SnapRegistry.EVENT_DISCONNECT,
+            SnapRegistry.sources(false, babiTkStillConnected), SnapInstall.appVersion(app), SnapInstall.deviceLabel());
     }
 
     /** We never keep Google tokens, so a fresh one is fetched silently from Play services just to revoke it. */
@@ -238,7 +269,8 @@ public class MainActivity extends Activity {
         "• פגישות נשמרות ישירות ביומן Google שלך, דרך החשבון שחיברת. BabiSnap לא שומר סיסמה או טוקן של Google.\n\n" +
         "• משימות והערות נשלחות רק ללוח \"מחברת\" ב-BabiTk שלך. מפתח החיבור נשמר מוצפן בטלפון.\n\n" +
         "• אנשי קשר נקראים בטלפון בלבד ולא נשלחים לשום מקום (אימייל מוזמן עובר ל-Google רק אם ביקשת לשלוח הזמנה).\n\n" +
-        "• אין ל-BabiSnap שרת משלו, אין פרסומות ואין מעקב. \"מחק את כל הנתונים מהמכשיר\" מוחק את נתוני האפליקציה מהטלפון.\n\n" +
+        "• האימייל של חשבון Google שחיברתם, יחד עם מזהה התקנה אקראי (לא IMEI), גרסה ושם דגם, נשמרים לניהול הגישה בלבד. לא נשלחים הקלטות, תמלילים, תוכן יומן או טוקן Google.\n\n" +
+        "• אין פרסומות ואין מעקב תוכן. \"מחק את כל הנתונים מהמכשיר\" מוחק את נתוני האפליקציה מהטלפון ומסמן את ההתקנה כמנותקת.\n\n" +
         "• מדיניות הפרטיות המלאה זמינה בקישור \"מדיניות מלאה\".";
 
     private void openUrl(String url) {
@@ -255,16 +287,20 @@ public class MainActivity extends Activity {
 
     private void confirmDeleteAll() {
         AlertDialog d = new AlertDialog.Builder(this).setTitle("למחוק את כל הנתונים מהמכשיר?")
-            .setMessage("ינותקו Google יומן (כולל ביטול הגישה) ו-BabiTk, יימחקו פריטים שעוד לא נשלחו וכל ההעדפות.\nהפגישות ביומן וההערות ב-BabiTk לא נמחקות.")
+            .setMessage("ינותקו Google יומן (כולל ביטול הגישה) ו-BabiTk, יימחקו פריטים שעוד לא נשלחו וכל ההעדפות, והאימייל ברישום הגישה יסומן כמנותק.\nהפגישות ביומן וההערות ב-BabiTk לא נמחקות.")
             .setPositiveButton("מחק", (x, w) -> deleteAll()).setNegativeButton("ביטול", null).show();
         rtl(d);
         d.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(RED);
     }
 
     private void deleteAll() {
-        if (Core.prefs(this).getString("email", null) != null) revokeGoogle();
+        String email = Core.prefs(this).getString("email", null);
+        String installId = SnapInstall.id(this);
+        if (email != null) revokeGoogle();
+        reportGoogleDisconnect(false);
         BabiTk.wipeAll(getApplicationContext());
         Core.prefs(this).edit().clear().commit();
+        Core.prefs(this).edit().putString(SnapInstall.PREF, installId).commit(); // same install, data gone
         render();
         Toast.makeText(this, "כל הנתונים נמחקו מהמכשיר", Toast.LENGTH_LONG).show();
     }
