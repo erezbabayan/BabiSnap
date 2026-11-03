@@ -8,14 +8,17 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 /**
- * snap_users HTTP. Authorization is the dedicated registry key from BuildConfig — never a Google token.
- * Missing key or any network/HTTP failure returns null so calendar and pairing keep working.
+ * snap_users HTTP for this install only.
+ * Authorization is BuildConfig.SNAP_REGISTRY_CLIENT_KEY — never a Google token and never the admin key.
+ * Calls: POST signin / heartbeat / disconnect, and GET this email+install_id status.
+ * No list, block, or other admin calls. Missing key or any network/HTTP failure returns null
+ * so calendar and pairing keep working.
  */
 final class SnapClient {
     private SnapClient() {}
 
     static boolean configured() {
-        String key = BuildConfig.SNAP_REGISTRY_KEY;
+        String key = BuildConfig.SNAP_REGISTRY_CLIENT_KEY;
         return key != null && !key.trim().isEmpty() && allowed(BuildConfig.SNAP_REGISTRY_URL);
     }
 
@@ -60,10 +63,11 @@ final class SnapClient {
         return url != null && url.startsWith("https://ghibfuinantybqidwadj.supabase.co/functions/v1/snap-users");
     }
 
-    /** HTTPS only, no redirects (a redirect must not carry the registry key). */
+    /** HTTPS only, no redirects (a redirect must not carry the client key). */
     private static String exchange(String method, String url, String jsonBody, int connectMs, int readMs) throws Exception {
         if (!allowed(url)) throw new SecurityException("registry host only");
-        String key = BuildConfig.SNAP_REGISTRY_KEY;
+        if (!"GET".equals(method) && !"POST".equals(method)) throw new SecurityException("client methods only");
+        String key = BuildConfig.SNAP_REGISTRY_CLIENT_KEY;
         HttpURLConnection h = (HttpURLConnection) new URL(url).openConnection();
         h.setInstanceFollowRedirects(false);
         h.setUseCaches(false);

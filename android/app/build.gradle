@@ -4,13 +4,14 @@ def ksProps = new Properties()
 def ksFile = file(System.getenv('VOICECAL_KEYSTORE_PROPS') ?: '/workspace/secrets/voicecal-keystore.properties')
 if (ksFile.exists()) ksFile.withInputStream { ksProps.load(it) }
 
-// SNAP_REGISTRY_KEY: env (CI secret) wins, else android/local.properties (gitignored). Never commit the value.
-// Empty is allowed — the client then skips the registry so calendar / pairing still work.
+// SNAP_REGISTRY_CLIENT_KEY only. Env (CI secret) wins, else android/local.properties (gitignored).
+// Never read SNAP_REGISTRY_ADMIN_KEY — that secret stays on the server and must not enter the APK.
+// Empty client key is allowed — the client then skips the registry so calendar / pairing still work.
 def snapProps = new Properties()
 def snapLocal = rootProject.file('local.properties')
 if (snapLocal.exists()) snapLocal.withInputStream { snapProps.load(it) }
-def snapKey = System.getenv('SNAP_REGISTRY_KEY')
-if (snapKey == null || snapKey.trim().isEmpty()) snapKey = snapProps.getProperty('SNAP_REGISTRY_KEY', '')
+def snapKey = System.getenv('SNAP_REGISTRY_CLIENT_KEY')
+if (snapKey == null || snapKey.trim().isEmpty()) snapKey = snapProps.getProperty('SNAP_REGISTRY_CLIENT_KEY', '')
 if (snapKey == null) snapKey = ''
 snapKey = snapKey.trim()
 
@@ -38,9 +39,9 @@ android {
         targetSdk = 34
         versionCode = 30
         versionName = '2.19'
-        // Live snap_users endpoint for this Supabase project. The bearer key is injected above.
+        // Live snap_users endpoint. Bearer value is the client key injected above — never the admin key.
         buildConfigField "String", "SNAP_REGISTRY_URL", '"https://ghibfuinantybqidwadj.supabase.co/functions/v1/snap-users"'
-        buildConfigField "String", "SNAP_REGISTRY_KEY", quoteJavaString(snapKey)
+        buildConfigField "String", "SNAP_REGISTRY_CLIENT_KEY", quoteJavaString(snapKey)
     }
     buildFeatures { buildConfig = true }
     signingConfigs {

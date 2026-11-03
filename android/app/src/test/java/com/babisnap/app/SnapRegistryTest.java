@@ -18,6 +18,24 @@ public class SnapRegistryTest {
         assertEquals("https://ghibfuinantybqidwadj.supabase.co/functions/v1/snap-users", SnapRegistry.DEFAULT_URL);
         assertEquals(SnapRegistry.DEFAULT_URL, BuildConfig.SNAP_REGISTRY_URL);
         assertTrue(BuildConfig.SNAP_REGISTRY_URL.startsWith("https://"));
+        assertNotNull(BuildConfig.SNAP_REGISTRY_CLIENT_KEY); // empty is allowed; the client then no-ops
+        assertFalse(hasBuildField("SNAP_REGISTRY_KEY"));
+        assertFalse(hasBuildField("SNAP_REGISTRY_ADMIN_KEY"));
+    }
+
+    @Test public void clientEventsExcludeAdminActions() {
+        assertTrue(SnapRegistry.knownEvent("signin"));
+        assertTrue(SnapRegistry.knownEvent("heartbeat"));
+        assertTrue(SnapRegistry.knownEvent("disconnect"));
+        assertFalse(SnapRegistry.knownEvent("block"));
+        assertFalse(SnapRegistry.knownEvent("unblock"));
+        assertFalse(SnapRegistry.knownEvent("list"));
+        assertFalse(SnapRegistry.knownEvent("admin"));
+    }
+
+    private static boolean hasBuildField(String name) {
+        try { BuildConfig.class.getField(name); return true; }
+        catch (NoSuchFieldException e) { return false; }
     }
 
     @Test public void postBodyIsMinimumFields() throws Exception {

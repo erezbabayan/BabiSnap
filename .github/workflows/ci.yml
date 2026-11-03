@@ -31,8 +31,9 @@ jobs:
     name: android unit tests + debug build
     runs-on: ubuntu-latest
     env:
-      # GitHub Actions secret → BuildConfig.SNAP_REGISTRY_KEY. Empty secret still builds; the client no-ops.
-      SNAP_REGISTRY_KEY: ${{ secrets.SNAP_REGISTRY_KEY }}
+      # Client key only → BuildConfig.SNAP_REGISTRY_CLIENT_KEY. Empty secret still builds; the client no-ops.
+      # Do not inject SNAP_REGISTRY_ADMIN_KEY. That secret is server-only and must not ship in the APK.
+      SNAP_REGISTRY_CLIENT_KEY: ${{ secrets.SNAP_REGISTRY_CLIENT_KEY }}
     defaults:
       run:
         working-directory: android
