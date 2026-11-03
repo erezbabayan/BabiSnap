@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Build voicecal-keystore.properties from GitHub Actions secrets.
 
-Reads only SNAP_REGISTRY_CLIENT_KEY and ANDROID_KEYSTORE_* names. Never reads
-SNAP_REGISTRY_ADMIN_KEY. Prints set/empty for each name and never prints values.
+Reads SNAP_REGISTRY_CLIENT_KEY, ANDROID_KEYSTORE_*, ANDROID_KEY_ALIAS, and
+ANDROID_KEY_PASSWORD. Never reads SNAP_REGISTRY_ADMIN_KEY. Prints set/empty
+for each name and never prints values. The keystore alias is voicecal when
+no alias secret is set.
 """
 import base64
 import os
@@ -21,8 +23,10 @@ NAMES = [
     "ANDROID_KEYSTORE_PASSWORD",
     "ANDROID_KEYSTORE_STORE_PASSWORD",
     "ANDROID_KEYSTORE_KEY_PASSWORD",
+    "ANDROID_KEY_PASSWORD",
     "ANDROID_KEYSTORE_ALIAS",
     "ANDROID_KEYSTORE_KEY_ALIAS",
+    "ANDROID_KEY_ALIAS",
     "ANDROID_KEYSTORE_PROPERTIES",
     "ANDROID_KEYSTORE_PROPS",
     "ANDROID_KEYSTORE_PROPS_BASE64",
@@ -193,8 +197,19 @@ def main():
             break
 
     store_pass = val("ANDROID_KEYSTORE_STORE_PASSWORD").strip() or val("ANDROID_KEYSTORE_PASSWORD").strip() or props.get("storePassword", "")
-    key_pass = val("ANDROID_KEYSTORE_KEY_PASSWORD").strip() or props.get("keyPassword", "") or store_pass
-    alias = val("ANDROID_KEYSTORE_KEY_ALIAS").strip() or val("ANDROID_KEYSTORE_ALIAS").strip() or props.get("keyAlias", "")
+    key_pass = (
+        val("ANDROID_KEY_PASSWORD").strip()
+        or val("ANDROID_KEYSTORE_KEY_PASSWORD").strip()
+        or props.get("keyPassword", "")
+        or store_pass
+    )
+    alias = (
+        val("ANDROID_KEY_ALIAS").strip()
+        or val("ANDROID_KEYSTORE_KEY_ALIAS").strip()
+        or val("ANDROID_KEYSTORE_ALIAS").strip()
+        or props.get("keyAlias", "")
+        or "voicecal"
+    )
 
     if not store_pass:
         print("ERROR: keystore store password secret is empty.", file=sys.stderr)
