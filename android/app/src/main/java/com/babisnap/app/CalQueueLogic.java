@@ -41,6 +41,7 @@ public final class CalQueueLogic {
     public static Outcome googleInsertOutcome(int code) {
         if (code / 100 == 2 || code == 409) return Outcome.DONE;
         if (code == 401 || code == 403) return Outcome.NEEDS_AUTH;
+        if (code == 429) return Outcome.RETRY;
         if (code >= 400 && code < 500) return Outcome.FAILED;
         return Outcome.RETRY;
     }
@@ -48,6 +49,7 @@ public final class CalQueueLogic {
     public static Outcome googlePatchOutcome(int code) {
         if (code / 100 == 2) return Outcome.DONE;
         if (code == 401 || code == 403) return Outcome.NEEDS_AUTH;
+        if (code == 429) return Outcome.RETRY;
         if (code >= 400 && code < 500) return Outcome.FAILED;
         return Outcome.RETRY;
     }
