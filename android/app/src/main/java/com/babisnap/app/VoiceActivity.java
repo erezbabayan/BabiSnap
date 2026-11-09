@@ -16,37 +16,64 @@ import android.view.Window;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
-import com.google.android.gms.auth.api.identity.Identity;
-
 import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.util.ArrayList;
 import java.util.List;
 
-/** Widget/launcher target: speech (he-IL) -> parse on device -> (optional confirm) -> the selected calendar.
- *  Google Calendar unless the user picked יומן המכשיר in Settings. */
+/** Widget/launcher target: speech (he-IL) -> parse on device -> (optional confirm) -> durable calendar / BabiTk queue. */
 public class VoiceActivity extends Activity {
-    static final int REQ_SPEECH = 1, REQ_AUTH = 2;
+    static final int REQ_SPEECH = 1, REQ_AUTH = 2, REQ_MIC = 3, REQ_CONTACTS = 4;
     private JSONObject parsed; private String spoken; private java.util.List<String> spokenTags = new java.util.ArrayList<>();
 
-    static final int REQ_MIC = 3;
     private SpeechRecognizer rec; private View logo, halo; private TextView status, partial;
+    private int listenRetries;
 
     @Override protected void onCreate(Bundle b) {
         super.onCreate(b);
-        SnapHeartbeat.onAppOpen(this); // at most once a day, or when the version changed
-        if (b != null) return;
+        SnapHeartbeat.onAppOpen(this);
+        // Recreate after process death: never leave a blank dialog — start a fresh listen session.
+        if (b != null) {
+            beginListenUi();
+            return;
+        }
+        beginListenUi();
+    }
+
+    @Override protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        // Back-to-back from MainActivity/widget while Undo (or listen) is open: commit then re-listen.
+        if ((pendingBody != null || pendingMeeting) && !committed) commitPending();
+        else if (pickerMode && !cardClosed && !awaitingConsent) finishInvites();
+        restartListening();
+    }
+
+    private void beginListenUi() {
         if (!SpeechRecognizer.isRecognitionAvailable(this)) { systemDialog(); return; }
-        requestWindowFeature(Window.FEATURE_NO_TITLE);
+        try { requestWindowFeature(Window.FEATURE_NO_TITLE); } catch (Exception ignored) {}
         setContentView(R.layout.activity_listen);
         getWindow().setBackgroundDrawableResource(android.R.color.transparent);
         logo = findViewById(R.id.logo); halo = findViewById(R.id.halo);
         status = findViewById(R.id.status); partial = findViewById(R.id.partial);
-        findViewById(R.id.cancel).setOnClickListener(v -> { ended = true; tick.removeCallbacks(ticker); stopRec(); done(null); });
+        findViewById(R.id.cancel).setOnClickListener(v -> { ended = true; tick.removeCallbacks(ticker); stopRec(); dropDraft(); done(null); });
         logo.setOnClickListener(v -> tapToFinish()); halo.setOnClickListener(v -> tapToFinish());
-        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) listen();
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) listen(false);
         else requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, REQ_MIC);
+    }
+
+    /** Reset session state and open the mic again (after onNewIntent commit). */
+    private void restartListening() {
+        ui.removeCallbacks(commit); ui.removeCallbacks(closeCard); ui.removeCallbacks(pickerTimeout);
+        ended = true; tick.removeCallbacks(ticker); stopRec();
+        pendingBody = null; pendingId = null; pendingMeeting = false; committed = false;
+        cardClosed = false; awaitingConsent = false; pickerMode = false;
+        invitees.clear(); inviteQueries = new ArrayList<>();
+        draftId = null; parsed = null; spoken = null; spokenTags = new ArrayList<>();
+        jobClientId = null;
+        listenRetries = 0;
+        beginListenUi();
     }
 
     @Override public void onRequestPermissionsResult(int req, String[] p, int[] g) {
@@ -58,7 +85,7 @@ public class VoiceActivity extends Activity {
         }
         if (req != REQ_MIC) return;
         MainActivity.noteResult(this, Manifest.permission.RECORD_AUDIO, g.length > 0 && g[0] == PackageManager.PERMISSION_GRANTED);
-        if (g.length > 0 && g[0] == PackageManager.PERMISSION_GRANTED) listen(); else systemDialog();
+        if (g.length > 0 && g[0] == PackageManager.PERMISSION_GRANTED) listen(false); else systemDialog();
     }
 
     private Intent speechIntent() {
@@ -72,7 +99,6 @@ public class VoiceActivity extends Activity {
             .putExtra(RecognizerIntent.EXTRA_PROMPT, "פגישה, משימה או הערה?");
     }
 
-    /** Fallback: Google's own speech dialog (no permission needed). */
     private void systemDialog() {
         try { startActivityForResult(speechIntent(), REQ_SPEECH); }
         catch (ActivityNotFoundException e) { done("אין שירות זיהוי דיבור בטלפון (התקינו את אפליקציית Google)"); }
@@ -84,7 +110,6 @@ public class VoiceActivity extends Activity {
         logo.animate().scaleX(1f + (s - 1f) * 0.25f).scaleY(1f + (s - 1f) * 0.25f).setDuration(90).start();
     }
 
-    // ---- our own end-of-speech: silence timer, hard cap, tap-to-finish ----
     private SilenceDetector silence; private boolean ended;
     private final android.os.Handler tick = new android.os.Handler(android.os.Looper.getMainLooper());
     private final Runnable ticker = new Runnable() { public void run() {
@@ -99,10 +124,9 @@ public class VoiceActivity extends Activity {
         if (ended) return;
         String t = silence == null ? "" : silence.lastText();
         if (!t.isEmpty()) endRecording(t);
-        else if (rec != null) { rec.stopListening(); status.setText("מעבד…"); } // nothing heard yet: let the recognizer finish (cap still applies)
+        else if (rec != null) { rec.stopListening(); status.setText("מעבד…"); }
     }
 
-    /** Ends the session exactly once; text != null continues the normal flow (classify, then save). */
     private void endRecording(String text) {
         if (ended) return;
         ended = true; tick.removeCallbacks(ticker);
@@ -111,9 +135,11 @@ public class VoiceActivity extends Activity {
         if (text != null && !text.isEmpty()) { partial.setText(text); handleSpoken(text); }
     }
 
-    private void listen() {
+    private void listen(boolean isRetry) {
+        if (!isRetry) listenRetries = 0;
         silence = new SilenceDetector(android.os.SystemClock.elapsedRealtime()); ended = false;
-        tick.postDelayed(ticker, 250);
+        tick.removeCallbacks(ticker); tick.postDelayed(ticker, 250);
+        stopRec();
         rec = SpeechRecognizer.createSpeechRecognizer(this);
         rec.setRecognitionListener(new RecognitionListener() {
             public void onReadyForSpeech(Bundle p) { status.setText("מקשיב… (הקש לסיום)"); }
@@ -124,7 +150,19 @@ public class VoiceActivity extends Activity {
             public void onError(int err) {
                 if (ended) return;
                 String t = silence.lastText();
-                if (!t.isEmpty()) { endRecording(t); return; } // keep what was heard
+                if (!t.isEmpty()) { endRecording(t); return; }
+                if ((err == SpeechRecognizer.ERROR_RECOGNIZER_BUSY || err == SpeechRecognizer.ERROR_CLIENT)
+                        && listenRetries < 2) {
+                    listenRetries++;
+                    ended = true; tick.removeCallbacks(ticker); stopRec();
+                    final int attempt = listenRetries;
+                    tick.postDelayed(() -> {
+                        if (isFinishing() || cardClosed) return;
+                        status.setText("מנסה שוב…");
+                        listen(true);
+                    }, 350L * attempt);
+                    return;
+                }
                 ended = true; tick.removeCallbacks(ticker);
                 stopRec();
                 if (err == SpeechRecognizer.ERROR_NO_MATCH || err == SpeechRecognizer.ERROR_SPEECH_TIMEOUT) done("לא נשמע דיבור");
@@ -146,16 +184,32 @@ public class VoiceActivity extends Activity {
         rec.startListening(speechIntent());
     }
 
-    private void stopRec() { if (rec != null) { rec.destroy(); rec = null; } }
+    private void stopRec() { if (rec != null) { try { rec.destroy(); } catch (Exception ignored) {} rec = null; } }
     @Override protected void onDestroy() { ended = true; tick.removeCallbacks(ticker); stopRec(); super.onDestroy(); }
 
     private void handleSpoken(String text) {
-        Tags.Result tr = Tags.extract(text, Tags.names(this)); // "תתייג מילואים" is removed, topic words stay
+        Tags.Result tr = Tags.extract(text, Tags.names(this));
         spoken = tr.text; spokenTags = tr.tags;
         try { parsed = Core.parse(this, spoken); } catch (Exception e) { done("שגיאת פענוח: " + e.getMessage()); return; }
         Classifier.Result c = Classifier.classify(spoken, !parsed.optBoolean("timeDefaulted", true) || parsed.optBoolean("allDay", false));
         if (c.kind != Classifier.Kind.MEETING) { showSaved(c); return; }
-        showMeeting(); // Google, or the device calendar when that destination was chosen
+        armMeetingDraft();
+        if (meetingRoute == DeviceCalendarLogic.Route.DEVICE_UNAVAILABLE) {
+            dropDraft(); done(DeviceCalendar.ERR_UNAVAILABLE); return;
+        }
+        showMeeting();
+    }
+
+    /** Capture a durable draft as soon as we know it is a meeting — survives leave-before-card. */
+    private String draftId;
+    private void armMeetingDraft() {
+        meetingRoute = DeviceCalendar.route(this);
+        draftId = BabiTkJson.newClientId();
+        pendingMeeting = true;
+        committed = false;
+    }
+    private void dropDraft() {
+        pendingMeeting = false; draftId = null; jobClientId = null;
     }
 
     @Override protected void onActivityResult(int req, int res, Intent data) {
@@ -164,77 +218,41 @@ public class VoiceActivity extends Activity {
             if (res != RESULT_OK || r == null || r.isEmpty()) { done(null); return; }
             handleSpoken(r.get(0));
         } else if (req == REQ_AUTH) {
+            // Legacy consent path no longer inserts directly — CalQueue waits for Settings sign-in.
             awaitingConsent = false;
-            if (res != RESULT_OK) { done("לא אושרה גישה ליומן – לא נרשם"); return; }
-            try { job.start(Core.tokenFromResult(this, data)); if (!pickerMode) done(null); else armPickerTimeout(); }
-            catch (Exception e) { done("שגיאת התחברות: " + e.getMessage()); }
+            if (res == RESULT_OK) {
+                CalQueue.onGoogleAuthorized(getApplicationContext());
+                if (!cardClosed) done(CalQueueLogic.ENQUEUED_TOAST);
+            } else if (!cardClosed) done("לא אושרה גישה ליומן – הפגישה ממתינה במכשיר");
         }
     }
 
-    // ---- meeting commit: authorize, then insert in the BACKGROUND; the card never waits for the network ----
     private boolean cardClosed, awaitingConsent;
-    private final Runnable closeCard = () -> { if (!cardClosed) done(null); }; // auth still resolving: close anyway
-    private MeetingJob job;
-    /** Captured when the card opens, so the insert uses the same destination the card named. */
+    private final Runnable closeCard = () -> { if (!cardClosed) done(null); };
+    private String jobClientId;
     private DeviceCalendarLogic.Route meetingRoute = DeviceCalendarLogic.Route.GOOGLE;
 
-    /** pickerMode: the card stays open for the contact choice; otherwise it closes within CLOSE_GRACE_MS. */
-    private void commitMeeting() {
-        if (!pickerMode) ui.postDelayed(closeCard, CardFlow.CLOSE_GRACE_MS);
-        final Context app = getApplicationContext();
-        final MeetingJob j = job = new MeetingJob(app, parsed, spoken);
-        if (meetingRoute == DeviceCalendarLogic.Route.DEVICE) {
-            j.startDevice(); // local Calendar Provider; no Google token, no emailed attendees
-            if (!cardClosed && !pickerMode) done(null);
-            return;
-        }
-        if (meetingRoute == DeviceCalendarLogic.Route.DEVICE_UNAVAILABLE) {
-            toast(app, DeviceCalendar.ERR_UNAVAILABLE);
-            if (!cardClosed) done(null);
-            return;
-        }
-        if (!pickerMode) j.setAttendees(InviteFlow.attendees(invitees)); // undo window over: single matches are final
-        Identity.getAuthorizationClient(app).authorize(Core.authRequest())
-            .addOnSuccessListener(res -> {
-                switch (CardFlow.afterAuth(res.hasResolution(), !cardClosed)) {
-                    case SEND_IN_BACKGROUND_AND_CLOSE:
-                        j.start(res.getAccessToken());
-                        if (!cardClosed && !pickerMode) done(null);
-                        break;
-                    case ASK_CONSENT: // Google's consent screen; the card waits for the user, not for the network
-                        ui.removeCallbacks(closeCard); ui.removeCallbacks(pickerTimeout); awaitingConsent = true;
-                        try { startIntentSenderForResult(res.getPendingIntent().getIntentSender(), REQ_AUTH, null, 0, 0, 0, null); }
-                        catch (Exception e) { done("שגיאת התחברות: " + e.getMessage()); }
-                        break;
-                    default: toast(app, CardFlow.CONSENT_NEEDED);
-                }
-            })
-            .addOnFailureListener(e -> { if (!cardClosed) done("שגיאת התחברות: " + e); else toast(app, "לא נרשם ביומן – שגיאת התחברות: " + e); });
+    private void enqueueMeeting(boolean attendeesReady) {
+        if (draftId == null || parsed == null) return;
+        String route = meetingRoute == DeviceCalendarLogic.Route.DEVICE
+            ? CalQueueLogic.ROUTE_DEVICE : CalQueueLogic.ROUTE_GOOGLE;
+        List<String> emails = attendeesReady ? InviteFlow.attendees(invitees) : new ArrayList<>();
+        jobClientId = draftId;
+        CalQueue.enqueue(getApplicationContext(), draftId, route, parsed, spoken, emails, attendeesReady);
     }
 
-    private static void toast(Context app, String msg) { Toast.makeText(app, msg, Toast.LENGTH_LONG).show(); }
-
-    // ---- Tasks & notes -> BabiTk "notebook" board, sent after a 5s undo window ----
-    private static final long UNDO_MS = CardFlow.UNDO_MS;
     private final android.os.Handler ui = new android.os.Handler(android.os.Looper.getMainLooper());
+    private static final long UNDO_MS = CardFlow.UNDO_MS;
     private String pendingId, pendingBody; private boolean committed, pendingMeeting;
 
-    // ---- Stage 2: meeting invites ("ותזמין את תמר"), only with the 'שליחת הזמנות' setting on ----
-    static final int REQ_CONTACTS = 4;
     private final List<InviteFlow.Invitee> invitees = new ArrayList<>();
     private List<String> inviteQueries = new ArrayList<>();
     private boolean pickerMode;
 
     private void showMeeting() {
-        meetingRoute = DeviceCalendar.route(this);
-        if (meetingRoute == DeviceCalendarLogic.Route.DEVICE_UNAVAILABLE) {
-            done(DeviceCalendar.ERR_UNAVAILABLE);
-            return;
-        }
         inviteQueries = new ArrayList<>();
         JSONArray a = parsed.optJSONArray("invite");
         for (int i = 0; a != null && i < a.length(); i++) inviteQueries.add(a.optString(i));
-        // Device calendar stores the event only. Looking up contacts would promise an email invite we do not send.
         if (meetingRoute == DeviceCalendarLogic.Route.DEVICE || !InviteFlow.wanted(inviteQueries, Core.sendInvites(this), true)) {
             showMeetingCard(); return;
         }
@@ -245,7 +263,6 @@ public class VoiceActivity extends Activity {
 
     private void noPermission() { for (String q : inviteQueries) invitees.add(InviteFlow.Invitee.noPermission(q)); showMeetingCard(); }
 
-    /** Contacts are read on a background thread, matched on the device, and dropped with the card. */
     private void resolveInvites() {
         final Context app = getApplicationContext();
         new Thread(() -> {
@@ -257,7 +274,6 @@ public class VoiceActivity extends Activity {
         }, "babisnap-contacts").start();
     }
 
-    /** Just-in-time permission card, shown once (settings design, screen 2). */
     private void showContactsSheet() {
         Core.prefs(this).edit().putBoolean("contacts_jit_shown", true).apply();
         setContentView(R.layout.card_contacts);
@@ -265,7 +281,7 @@ public class VoiceActivity extends Activity {
         ((TextView) findViewById(R.id.body)).setText(InviteFlow.jitBody(inviteQueries));
         findViewById(R.id.later).setOnClickListener(v -> noPermission());
         findViewById(R.id.allow).setOnClickListener(v -> {
-            if (MainActivity.isBlocked(this, Manifest.permission.READ_CONTACTS)) { // denied twice: Android won't ask again
+            if (MainActivity.isBlocked(this, Manifest.permission.READ_CONTACTS)) {
                 MainActivity.openAppInfo(this); noPermission(); return;
             }
             requestPermissions(new String[]{Manifest.permission.READ_CONTACTS}, REQ_CONTACTS);
@@ -277,8 +293,8 @@ public class VoiceActivity extends Activity {
         setContentView(R.layout.card_saved);
         getWindow().setBackgroundDrawableResource(android.R.color.transparent);
         ((TextView) findViewById(R.id.check)).setText("📅");
-        ((TextView) findViewById(R.id.headline)).setText(meetingRoute == DeviceCalendarLogic.Route.DEVICE
-            ? "נרשם ביומן המכשיר · פגישה" : "נרשם ביומן גוגל · פגישה");
+        ((TextView) findViewById(R.id.headline)).setText(
+            CalQueueLogic.cardHeadline(meetingRoute == DeviceCalendarLogic.Route.DEVICE));
         TextView chip = findViewById(R.id.chip); chip.setText("פגישה");
         chip.setBackgroundResource(R.drawable.chip_meeting); chip.setTextColor(0xFFFFFFFF);
         ((TextView) findViewById(R.id.summary)).setText(CardText.meeting(p.optString("title"), p.optInt("d"), p.optInt("m"), p.optInt("y"),
@@ -288,18 +304,19 @@ public class VoiceActivity extends Activity {
         android.widget.ProgressBar bar = findViewById(R.id.countdown);
         android.animation.ObjectAnimator.ofInt(bar, "progress", (int) UNDO_MS, 0).setDuration(UNDO_MS).start();
         pendingMeeting = true;
-        // Undo cancels the meeting AND its invites: nothing reaches Google before the window closes.
-        findViewById(R.id.undo).setOnClickListener(v -> { ui.removeCallbacks(commit); pendingMeeting = false; done("בוטל – לא נרשם ביומן"); });
+        findViewById(R.id.undo).setOnClickListener(v -> {
+            ui.removeCallbacks(commit); dropDraft(); done("בוטל – לא נרשם ביומן");
+        });
         ui.postDelayed(commit, UNDO_MS);
     }
 
-    /** Several contacts match: countdown stops, the meeting is saved now, a tap adds the attendee. */
     private void startPickers() {
         pickerMode = true; committed = true;
         findViewById(R.id.countdown).setVisibility(View.GONE);
         findViewById(R.id.undo).setVisibility(View.GONE);
         renderInvites();
-        commitMeeting();
+        // Persist immediately (attendees filled in when picker ends).
+        enqueueMeeting(false);
         armPickerTimeout();
     }
 
@@ -312,13 +329,12 @@ public class VoiceActivity extends Activity {
         renderInvites();
         if (InviteFlow.nextPicker(invitees) != null) { armPickerTimeout(); return; }
         ui.removeCallbacks(pickerTimeout);
-        ui.postDelayed(pickerTimeout, 1200); // let the blue strip be seen
+        ui.postDelayed(pickerTimeout, 1200);
     }
 
-    /** Picker done, timed out or left: whatever was chosen gets the invite; an untouched picker gets none. */
     private void finishInvites() {
-        if (job != null) job.setAttendees(InviteFlow.attendees(invitees));
-        if (!awaitingConsent) done(null);
+        if (jobClientId != null) CalQueue.setAttendees(getApplicationContext(), jobClientId, InviteFlow.attendees(invitees));
+        if (!awaitingConsent) done(CalQueueLogic.ENQUEUED_TOAST);
     }
 
     private void renderInvites() {
@@ -354,11 +370,8 @@ public class VoiceActivity extends Activity {
         boolean noDate = p.optBoolean("dateDefaulted", true) && p.optBoolean("timeDefaulted", true);
         String date = noDate ? null : String.format(java.util.Locale.US, "%04d-%02d-%02d", p.optInt("y"), p.optInt("m"), p.optInt("d"));
         String time = p.optBoolean("timeDefaulted", true) || p.optBoolean("allDay", false) ? null : String.format(java.util.Locale.US, "%02d:%02d", p.optInt("hour"), p.optInt("minute"));
-        // Tasks/notes keep the place inside the title ("לקנות חלב בסופר") and also get it in the location field.
         String title = p.optString("titleFull", p.optString("title", "")).trim(); if (title.isEmpty()) title = spoken;
-        pendingId = BabiTkJson.newClientId(); // unique per recording, matches the server client_id pattern
-        // No "נוצר בהכתבה: …" notes: BabiTk rebuilds task titles from the longest text it has (title vs content), so the
-        // provenance line leaked into card titles ("קוד לשער נוצר בהכתבה: קוד"). Provenance is already in metadata.source=voice.
+        pendingId = BabiTkJson.newClientId();
         pendingBody = BabiTkJson.build(title, date, time, "", p.optString("location", ""), c.kind.api(), pendingId, spokenTags);
 
         setContentView(R.layout.card_saved);
@@ -375,10 +388,16 @@ public class VoiceActivity extends Activity {
         ui.postDelayed(commit, UNDO_MS);
     }
 
-    /** Undo window closed (or the card was left): queue locally and let WorkManager send with the same client_id. */
     private void commitPending() {
         if (committed) return;
-        if (pendingMeeting) { committed = true; ui.removeCallbacks(commit); findViewById(R.id.undo).setVisibility(View.INVISIBLE); commitMeeting(); return; }
+        if (pendingMeeting) {
+            committed = true; ui.removeCallbacks(commit);
+            try { findViewById(R.id.undo).setVisibility(View.INVISIBLE); } catch (Exception ignored) {}
+            enqueueMeeting(true);
+            pendingMeeting = false;
+            done(CalQueueLogic.ENQUEUED_TOAST);
+            return;
+        }
         if (pendingBody == null) return;
         committed = true; ui.removeCallbacks(commit);
         BabiTk.enqueue(getApplicationContext(), pendingId, pendingBody);
@@ -387,13 +406,13 @@ public class VoiceActivity extends Activity {
 
     @Override protected void onStop() {
         if ((pendingBody != null || pendingMeeting) && !committed) commitPending();
-        else if (pickerMode && !cardClosed && !awaitingConsent) finishInvites(); // card left mid-picker
+        else if (pickerMode && !cardClosed && !awaitingConsent) finishInvites();
         super.onStop();
     }
 
     private void done(String msg) {
         cardClosed = true; ui.removeCallbacks(closeCard); ui.removeCallbacks(commit); ui.removeCallbacks(pickerTimeout);
-        if (msg != null) toast(getApplicationContext(), msg);
+        if (msg != null) Toast.makeText(getApplicationContext(), msg, Toast.LENGTH_LONG).show();
         if (!isFinishing()) finish();
     }
 }

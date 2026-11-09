@@ -10,9 +10,14 @@ public final class EventJson {
     private static final DateTimeFormatter OUT = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
 
     public static String build(String title, String startStr, int durationMin, String location, String description) {
+        return build(title, startStr, durationMin, location, description, null);
+    }
+
+    public static String build(String title, String startStr, int durationMin, String location, String description, String babisnapId) {
         LocalDateTime start = LocalDateTime.parse(startStr, IN);
         LocalDateTime end = start.plusMinutes(durationMin);
         StringBuilder sb = new StringBuilder("{");
+        appendIdAndPrivate(sb, babisnapId);
         sb.append("\"summary\":").append(q(title));
         if (location != null && !location.isEmpty()) sb.append(",\"location\":").append(q(location));
         if (description != null) sb.append(",\"description\":").append(q(description));
@@ -23,8 +28,13 @@ public final class EventJson {
 
     /** All-day event (v2.14): start.date = day, end.date = next day (exclusive), no dateTime. startStr may carry a time; it is ignored. */
     public static String buildAllDay(String title, String startStr, String location, String description) {
+        return buildAllDay(title, startStr, location, description, null);
+    }
+
+    public static String buildAllDay(String title, String startStr, String location, String description, String babisnapId) {
         java.time.LocalDate day = java.time.LocalDate.parse(startStr.substring(0, 10));
         StringBuilder sb = new StringBuilder("{");
+        appendIdAndPrivate(sb, babisnapId);
         sb.append("\"summary\":").append(q(title));
         if (location != null && !location.isEmpty()) sb.append(",\"location\":").append(q(location));
         if (description != null) sb.append(",\"description\":").append(q(description));
@@ -38,6 +48,14 @@ public final class EventJson {
         StringBuilder sb = new StringBuilder("{\"attendees\":[");
         for (int i = 0; i < emails.size(); i++) sb.append(i == 0 ? "" : ",").append("{\"email\":").append(q(emails.get(i))).append("}");
         return sb.append("]}").toString();
+    }
+
+    /** Prepends custom id + private extendedProperty when babisnapId is set (leading fields, trailing comma). */
+    private static void appendIdAndPrivate(StringBuilder sb, String babisnapId) {
+        if (babisnapId == null || babisnapId.isEmpty()) return;
+        String gid = CalQueueLogic.googleEventId(babisnapId);
+        if (gid != null) sb.append("\"id\":").append(q(gid)).append(",");
+        sb.append("\"extendedProperties\":{\"private\":{\"babisnapId\":").append(q(babisnapId)).append("}},");
     }
 
     static String q(String s) {

@@ -19,3 +19,7 @@
 -dontwarn javax.annotation.**
 -dontwarn com.google.api.client.**
 -dontwarn org.joda.time.**
+
+# WorkManager workers (calendar + BabiTk)
+-keep class com.babisnap.app.CalQueue$CalWorker { *; }
+-keep class com.babisnap.app.BabiTk$SendWorker { *; }

@@ -56,13 +56,15 @@ public final class Core {
     static final String EVENTS = "https://www.googleapis.com/calendar/v3/calendars/primary/events";
 
     /** Inserts into primary calendar. Returns HTTP code; throws on network error. */
-    public static int insertEvent(String token, JSONObject p, String spoken) throws Exception { return insert(token, p, spoken).code; }
+    public static int insertEvent(String token, JSONObject p, String spoken) throws Exception { return insert(token, p, spoken, null).code; }
 
-    static Resp insert(String token, JSONObject p, String spoken) throws Exception {
+    static Resp insert(String token, JSONObject p, String spoken) throws Exception { return insert(token, p, spoken, null); }
+
+    static Resp insert(String token, JSONObject p, String spoken, String babisnapId) throws Exception {
         String desc = "נוצר בהכתבה: " + spoken;
         String body = p.optBoolean("allDay", false)
-                ? EventJson.buildAllDay(p.getString("title"), p.getString("startStr"), p.optString("location", ""), desc)
-                : EventJson.build(p.getString("title"), p.getString("startStr"), p.getInt("durationMin"), p.optString("location", ""), desc);
+                ? EventJson.buildAllDay(p.getString("title"), p.getString("startStr"), p.optString("location", ""), desc, babisnapId)
+                : EventJson.build(p.getString("title"), p.getString("startStr"), p.getInt("durationMin"), p.optString("location", ""), desc, babisnapId);
         return http("POST", EVENTS, token, body);
     }
 
