@@ -122,10 +122,13 @@ final class DeviceCalendar {
      * are passed through as Java strings; Calendar Provider stores them as UTF-8. No attendee rows and
      * no mail: a synced calendar may upload the event, but BabiSnap does not email guests from here.
      */
-    static String insert(Context c, JSONObject p, String spoken) {
+    static String insert(Context c, JSONObject p, String spoken) { return insert(c, p, spoken, null); }
+
+    static String insert(Context c, JSONObject p, String spoken, String clientId) {
         if (!hasPermission(c)) return ERR_PERMISSION;
         long id = Core.prefs(c).getLong(PREF_ID, -1L);
         if (!Core.prefs(c).getBoolean(PREF_ON, false) || id <= 0) return ERR_UNAVAILABLE;
+        if (clientId != null && CalQueue.alreadySent(c, clientId)) return null; // retry dedup
         try {
             if (!stillWritable(c, id)) return ERR_GONE;
             DeviceCalendarLogic.Event ev = DeviceCalendarLogic.event(
@@ -134,7 +137,7 @@ final class DeviceCalendar {
             ContentValues v = new ContentValues();
             v.put(CalendarContract.Events.CALENDAR_ID, id);
             v.put(CalendarContract.Events.TITLE, ev.title);
-            v.put(CalendarContract.Events.DESCRIPTION, ev.description);
+            v.put(CalendarContract.Events.DESCRIPTION, CalQueueLogic.withDeviceMarker(ev.description, clientId));
             if (!ev.location.isEmpty()) v.put(CalendarContract.Events.EVENT_LOCATION, ev.location);
             v.put(CalendarContract.Events.DTSTART, ev.startMillis);
             v.put(CalendarContract.Events.DTEND, ev.endMillis);

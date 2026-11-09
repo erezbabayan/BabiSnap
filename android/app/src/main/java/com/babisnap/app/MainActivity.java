@@ -35,7 +35,7 @@ import org.json.JSONObject;
 /** 2.4 Settings (הגדרות), Hebrew RTL: connections, permissions, preferences, privacy, delete-all.
  *  A green ✓ is shown only when something is really connected / granted; otherwise one action button. */
 public class MainActivity extends Activity {
-    static final int REQ_AUTH = 10, REQ_MIC = 11, REQ_CONTACTS = 12, REQ_CALENDAR = 13;
+    static final int REQ_AUTH = 10, REQ_MIC = 11, REQ_CONTACTS = 12, REQ_CALENDAR = 13, REQ_NOTIF = 14;
     private static final int PURPLE = 0xFF2A1B7A, PURPLE_DARK = 0xFF1E1458, BG = 0xFFF6F5FA, GREEN = 0xFF1A8A4A,
         MUTED = 0xFF7A7888, SECTION = 0xFF6A5FA8, RED = 0xFFB3261E, DIVIDER = 0xFFEEECF5, ICON_BG = 0xFFEFEDF8, ICON_BG_Y = 0xFFFFF1C4;
     private LinearLayout content;
@@ -83,6 +83,12 @@ public class MainActivity extends Activity {
             String err = Core.prefs(this).getString("babitk_last_error", null);
             row(conn, "⚠️", true, t, plain(err == null || "אין".equals(err) ? "בדיקה ושליחה חוזרת" : err), link("פרטים", false, v -> openBabiTk()));
         }
+        if (CalQueue.showDiagnostics(this)) {
+            String err = CalQueue.lastError(this);
+            row(conn, "📅", true, CalQueue.statusTitle(this),
+                plain(err == null || "אין".equals(err) ? "שמירת פגישות ליומן" : err),
+                link("נסה שוב", false, v -> { CalQueue.kickAll(this); Toast.makeText(this, "שולח שוב ליומן…", Toast.LENGTH_SHORT).show(); render(); }));
+        }
         if (SnapClient.configured() && SnapRegistry.validEmail(email)) {
             TextView notice = new TextView(this);
             notice.setText(R.string.snap_registry_notice);
@@ -97,6 +103,9 @@ public class MainActivity extends Activity {
         LinearLayout perms = card();
         permRow(perms, "🎙", "מיקרופון", null, Manifest.permission.RECORD_AUDIO, REQ_MIC);
         permRow(perms, "👥", "אנשי קשר", "להזמנת משתתפים", Manifest.permission.READ_CONTACTS, REQ_CONTACTS);
+        if (android.os.Build.VERSION.SDK_INT >= 33) {
+            permRow(perms, "🔔", "התראות", "כששמירה ליומן נכשלת", Manifest.permission.POST_NOTIFICATIONS, REQ_NOTIF);
+        }
 
         // ---- העדפות ----
         section("העדפות");
@@ -244,6 +253,7 @@ public class MainActivity extends Activity {
             String shown = email == null ? "(חשבון Google)" : email;
             Core.prefs(this).edit().putString("email", shown).apply(); // the Google access token itself is never stored by us
             boolean tell = SnapRegistry.validEmail(email) && SnapClient.configured();
+            CalQueue.onGoogleAuthorized(getApplicationContext());
             runOnUiThread(() -> {
                 if (isFinishing()) return;
                 render();
@@ -322,7 +332,7 @@ public class MainActivity extends Activity {
             else render();
             return;
         }
-        if ((req == REQ_MIC || req == REQ_CONTACTS) && p.length > 0) {
+        if ((req == REQ_MIC || req == REQ_CONTACTS || req == REQ_NOTIF) && p.length > 0) {
             noteResult(this, p[0], g.length > 0 && g[0] == PackageManager.PERMISSION_GRANTED);
             render();
         }
@@ -418,6 +428,7 @@ public class MainActivity extends Activity {
         if (email != null) revokeGoogle();
         reportGoogleDisconnect(false);
         BabiTk.wipeAll(getApplicationContext());
+        CalQueue.wipeAll(getApplicationContext());
         Core.prefs(this).edit().clear().commit();
         Core.prefs(this).edit().putString(SnapInstall.PREF, installId).commit(); // same install, data gone
         render();
@@ -458,7 +469,7 @@ public class MainActivity extends Activity {
         t.setText("הכתבה עכשיו"); t.setTextSize(18); t.setTextColor(PURPLE); t.setTypeface(Typeface.DEFAULT_BOLD);
         r.addView(t);
         r.setContentDescription("הכתבה עכשיו"); r.setClickable(true);
-        r.setOnClickListener(v -> startActivity(new Intent(this, VoiceActivity.class)));
+        r.setOnClickListener(v -> startActivity(new Intent(this, VoiceActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, dp(52)); lp.bottomMargin = dp(4);
         r.setLayoutParams(lp);
         return r;
