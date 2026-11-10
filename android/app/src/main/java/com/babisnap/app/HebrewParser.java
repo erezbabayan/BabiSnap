@@ -43,8 +43,13 @@ public class HebrewParser {
 
     /** hour/minute = current local time (Asia/Jerusalem), used for "בעוד שעתיים" / "בעוד 20 דקות". */
     public String parseJson(String text, int y, int m, int d, int dowSunday0, int defaultDuration, int hour, int minute) {
+        return parseJson(text, y, m, d, dowSunday0, defaultDuration, hour, minute, false);
+    }
+
+    public String parseJson(String text, int y, int m, int d, int dowSunday0, int defaultDuration, int hour, int minute, boolean skipDestStrip) {
         String now = "{\"y\":" + y + ",\"m\":" + m + ",\"d\":" + d + ",\"dow\":" + dowSunday0
-                + ",\"defaultDuration\":" + defaultDuration + ",\"hour\":" + hour + ",\"minute\":" + minute + "}";
+                + ",\"defaultDuration\":" + defaultDuration + ",\"hour\":" + hour + ",\"minute\":" + minute
+                + (skipDestStrip ? ",\"skipDestStrip\":true" : "") + "}";
         return call("__parseJson", text, now);
     }
 

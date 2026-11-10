@@ -46,11 +46,14 @@ public final class Core {
         return parser;
     }
 
-    public static JSONObject parse(Context c, String text) throws Exception {
+    public static JSONObject parse(Context c, String text) throws Exception { return parse(c, text, false); }
+
+    /** @param skipDestStrip true for BabiTk task/note titles, so a word like "ביומן" that is content (not a destination) is kept. */
+    public static JSONObject parse(Context c, String text, boolean skipDestStrip) throws Exception {
         java.time.LocalDateTime t = java.time.LocalDateTime.now(ZoneId.of(EventJson.TZ));
         int dow = t.getDayOfWeek().getValue() % 7; // Sunday=0
         return new JSONObject(parser(c).parseJson(text, t.getYear(), t.getMonthValue(), t.getDayOfMonth(), dow, defaultDuration(c),
-                t.getHour(), t.getMinute()));
+                t.getHour(), t.getMinute(), skipDestStrip));
     }
 
     static final String EVENTS = "https://www.googleapis.com/calendar/v3/calendars/primary/events";

@@ -193,6 +193,15 @@ public class VoiceActivity extends Activity {
         try { parsed = Core.parse(this, spoken); } catch (Exception e) { done("שגיאת פענוח: " + e.getMessage()); return; }
         Classifier.Result c = Classifier.classify(spoken, !parsed.optBoolean("timeDefaulted", true) || parsed.optBoolean("allDay", false));
         if (c.kind != Classifier.Kind.MEETING) { showSaved(c); return; }
+        // Re-parse the text after destination/command words were stripped, so "יומן" / "לקלנדר" never stay in the title.
+        try {
+            if (c.stripped.isEmpty()) {
+                parsed.put("title", "אירוע");
+                parsed.put("titleFull", "אירוע");
+            } else if (!c.stripped.equals(Classifier.normalize(spoken))) {
+                parsed = Core.parse(this, c.stripped);
+            }
+        } catch (Exception ignored) {}
         armMeetingDraft();
         if (meetingRoute == DeviceCalendarLogic.Route.DEVICE_UNAVAILABLE) {
             dropDraft(); done(DeviceCalendar.ERR_UNAVAILABLE); return;
@@ -365,7 +374,7 @@ public class VoiceActivity extends Activity {
 
     private void showSaved(Classifier.Result c) {
         JSONObject p = parsed;
-        try { if (!c.stripped.isEmpty() && !c.stripped.equals(Classifier.normalize(spoken))) p = Core.parse(this, c.stripped); }
+        try { if (!c.stripped.isEmpty() && !c.stripped.equals(Classifier.normalize(spoken))) p = Core.parse(this, c.stripped, true); }
         catch (Exception ignored) {}
         boolean noDate = p.optBoolean("dateDefaulted", true) && p.optBoolean("timeDefaulted", true);
         String date = noDate ? null : String.format(java.util.Locale.US, "%04d-%02d-%02d", p.optInt("y"), p.optInt("m"), p.optInt("d"));

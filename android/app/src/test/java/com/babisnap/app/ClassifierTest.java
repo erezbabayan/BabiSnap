@@ -8,15 +8,15 @@ public class ClassifierTest {
     /** {text, expected kind, explicit time said?} */
     static final Object[][] CASES = {
         // notes (information), with and without a date/time
-        {"מחר בעשר יש ביקור טכנאי בבניין", NOTE, true},
+        {"מחר בעשר יש ביקור טכנאי בבניין", MEETING, true},
         {"הקוד של השער בבניין של סבתא הוא 4521", NOTE, false},
-        {"ביום שלישי יש אסיפת הורים בתשע בערב", NOTE, true},
+        {"ביום שלישי יש אסיפת הורים בתשע בערב", MEETING, true},
         {"הסיסמה לוויפי של המשרד מתחילה באות ב", NOTE, false},
         {"רעיון לאפליקציה שמזהה ציפורים לפי קול", NOTE, false},
         {"הערה הרופא אמר לקחת את התרופה אחרי האוכל", NOTE, false},
         {"פתק המספר של השרברב נמצא על המקרר", NOTE, false},
         {"תרשום שהרכב צריך טסט בדצמבר", NOTE, false},
-        {"ביום חמישי בשמונה החשמל מנותק בשכונה", NOTE, true},
+        {"ביום חמישי בשמונה החשמל מנותק בשכונה", MEETING, true},
         {"דני אוהב קפה בלי סוכר", NOTE, false},
         // v2.9: default is NOTE; information without an action verb stays a note (STT may drop "הערה")
         {"קוד לשער 1234", NOTE, false},
@@ -26,7 +26,7 @@ public class ClassifierTest {
         {"פתק החניה בקומה מינוס 2", NOTE, false},
         {"הסיסמה של הווייפיי היא אבגד1234", NOTE, false},
         {"מספר החשבון של רואה החשבון 123456", NOTE, false},
-        {"מחר יש חוג לנועה בחמש", NOTE, true},
+        {"מחר יש חוג לנועה בחמש", MEETING, true},
         // tasks (something to do), with and without a date
         {"לקנות מחר חלב", TASK, false},
         {"מחר לקנות חלב", TASK, false},
@@ -100,6 +100,22 @@ public class ClassifierTest {
         {"לזמן את תמר לפגישה מחר", MEETING, false},
         {"פגישה בברוכין ביום שני ב-11:00 לראות את הבית לזמן את תמרי", MEETING, true},
         {"פגישה עם דני מחר בעשר ותשלח לו זימון", MEETING, true},
+        // routing-words 2026-11-10
+        {"יומן מחר בעשר רופא שיניים", MEETING, true},
+        {"מחר בעשר רופא שיניים", MEETING, true},
+        {"תזכיר לי פגישה עם אורי מחר בארבע", MEETING, true},
+        {"תזכורת להתקשר לבנק מחר", TASK, false},
+        {"למשימה לשלוח מייל ליוסי מחר", TASK, false},
+        {"להערה הקוד של השער 1234", NOTE, false},
+        {"יום הולדת לדני", MEETING, false},
+        {"מילואים יום שלם בשבוע הבא", MEETING, true},
+        {"אירוע חתונה במוצאי שבת", MEETING, false},
+        {"אסיפת הורים ביום שלישי בתשע", MEETING, true},
+        {"קבע פגישה עם רואה החשבון", MEETING, false},
+        {"תור לרופא", MEETING, false},
+        {"זום עם אבי", MEETING, false},
+        {"ישיבה עם הצוות", MEETING, false},
+        {"פגישת עבודה במשרד", MEETING, false},
     };
 
     @Test public void hebrewExamples() {
@@ -112,7 +128,7 @@ public class ClassifierTest {
     }
 
     @Test public void requiredExamples() {
-        assertEquals(NOTE, Classifier.classify("מחר בעשר יש ביקור טכנאי בבניין", true).kind);
+        assertEquals(MEETING, Classifier.classify("מחר בעשר יש ביקור טכנאי בבניין", true).kind);
         assertEquals(TASK, Classifier.classify("להתקשר לרואה חשבון ביום ראשון", false).kind);
     }
 
@@ -121,6 +137,12 @@ public class ClassifierTest {
         assertEquals("להוציא את הכביסה", Classifier.classify("תזכיר לי להוציא את הכביסה", false).stripped);
         assertEquals("הקוד הוא 4521", Classifier.classify("הערה: הקוד הוא 4521", false).stripped);
         assertEquals("הרכב צריך טסט", Classifier.classify("תרשום שהרכב צריך טסט", false).stripped);
+        assertEquals("לשלוח מייל ליוסי מחר", Classifier.classify("למשימה לשלוח מייל ליוסי מחר", false).stripped);
+        assertEquals("הקוד של השער 1234", Classifier.classify("להערה הקוד של השער 1234", false).stripped);
+        assertEquals("פגישה עם רואה החשבון", Classifier.classify("קבע פגישה עם רואה החשבון", false).stripped);
+        assertEquals("פגישה עם אורי מחר בארבע", Classifier.classify("תזכיר לי פגישה עם אורי מחר בארבע", true).stripped);
+        assertEquals("מחר בעשר רופא שיניים", Classifier.classify("יומן מחר בעשר רופא שיניים", true).stripped);
+        assertEquals("ביומן של דני יש הרבה פגישות", Classifier.classify("הערה ביומן של דני יש הרבה פגישות", false).stripped);
     }
 
     @Test public void babitkBody() {

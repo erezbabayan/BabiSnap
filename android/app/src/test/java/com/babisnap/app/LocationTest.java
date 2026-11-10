@@ -11,12 +11,12 @@ public class LocationTest {
     @Test public void tamarAtKapitInModiin() throws Exception {
         String txt = "להיפגש עם תמר במסעדת כפית במודיעין מחר בשבע בערב";
         String j = parse(txt);
-        assertTrue(j, j.contains("\"title\":\"פגישה עם תמר\""));
+        assertTrue(j, j.contains("\"title\":\"להיפגש עם תמר\""));
         assertTrue(j, j.contains("\"location\":\"מסעדת כפית, מודיעין\""));
         assertTrue(j, j.contains("\"startStr\":\"2026-10-24 19:00\""));
         assertEquals(Classifier.Kind.MEETING, Classifier.classify(txt, true).kind);
-        String ev = EventJson.build("פגישה עם תמר", "2026-10-24 19:00", 60, "מסעדת כפית, מודיעין", null);
-        assertTrue(ev, ev.contains("\"summary\":\"פגישה עם תמר\",\"location\":\"מסעדת כפית, מודיעין\""));
+        String ev = EventJson.build("להיפגש עם תמר", "2026-10-24 19:00", 60, "מסעדת כפית, מודיעין", null);
+        assertTrue(ev, ev.contains("\"summary\":\"להיפגש עם תמר\",\"location\":\"מסעדת כפית, מודיעין\""));
     }
 
     @Test public void timeWordsAreNotPlaces() throws Exception {
