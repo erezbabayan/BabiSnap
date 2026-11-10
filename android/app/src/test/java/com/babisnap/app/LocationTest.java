@@ -87,7 +87,11 @@ public class LocationTest {
 
     @Test public void atTheDentistKeepsPersonInTitle() throws Exception {
         String j = parse("פגישה אצל רופא השיניים מחר בעשר");
-        assertEquals("אצל רופא השיניים", loc(j)); assertEquals("פגישה אצל רופא השיניים", title(j));
+        assertEquals("", loc(j)); assertEquals("פגישה אצל רופא השיניים", title(j));
+        j = parse("טיפול אצל דוקטור גולדמן אוסטאופת במודיעין מחר בעשר");
+        assertEquals("מודיעין", loc(j)); assertEquals("טיפול אצל דוקטור גולדמן אוסטאופת", title(j));
+        j = parse("טיפול אצל דוקטור גולדמן אוסטאופת מודיעין מחר בעשר");
+        assertEquals("מודיעין", loc(j)); assertEquals("טיפול אצל דוקטור גולדמן אוסטאופת", title(j));
     }
 
     @Test public void localitiesFromCbsList() throws Exception {

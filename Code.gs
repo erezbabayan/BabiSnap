@@ -24,6 +24,34 @@ var B = '(?:^|\\s)';            // start boundary (JS \b does not work with Hebr
 var E = '(?=$|[\\s,.!?])';       // end boundary
 var NUMW = '(\\d{1,2}|עשרים ושלושה|עשרים ושלוש|עשרים ושתיים|עשרים ושתים|עשרים ושנים|עשרים ואחת|עשרים ואחד|עשרים|תשע עשרה|תשעה עשר|תשע עשר|שמונה עשרה|שמונה עשר|שבע עשרה|שבעה עשר|שבע עשר|שש עשרה|שישה עשר|שש עשר|חמש עשרה|חמישה עשר|חמש עשר|ארבע עשרה|ארבעה עשר|ארבע עשר|שלוש עשרה|שלושה עשר|שלוש עשר|שתים עשרה|שתיים עשרה|שנים עשר|שני עשר|שתים עשר|שתיים עשר|אחת עשרה|אחד עשרה|אחד עשר|אחת עשר|אחת|אחד|שתיים|שתים|שלוש|ארבע|חמש|שש|שבע|שמונה|תשע|עשר)';
 
+// Day-of-month words 1–31 (fem+masc). Separate from NUMW so "שלושים" is never an hour.
+var HE_DATE_DAYS = {
+  'שלושים ואחת': 31, 'שלושים ואחד': 31, 'שלושים': 30,
+  'עשרים ותשעה': 29, 'עשרים ותשע': 29,
+  'עשרים ושמונה': 28,
+  'עשרים ושבעה': 27, 'עשרים ושבע': 27,
+  'עשרים ושישה': 26, 'עשרים ושש': 26,
+  'עשרים וחמישה': 25, 'עשרים וחמש': 25,
+  'עשרים וארבעה': 24, 'עשרים וארבע': 24,
+  'עשרים ושניים': 22, 'שניים': 2, 'שנים': 2,
+  'שלושה': 3, 'ארבעה': 4, 'חמישה': 5, 'שישה': 6, 'שבעה': 7, 'תשעה': 9, 'עשרה': 10
+};
+function dateDayNum_(w) {
+  if (/^\d+$/.test(w)) return parseInt(w, 10);
+  if (Object.prototype.hasOwnProperty.call(HE_DATE_DAYS, w)) return HE_DATE_DAYS[w];
+  return HE_NUMS[w];
+}
+var DATE_DAYW = (function () {
+  var seen = {}, keys = [], k, i, src = [HE_DATE_DAYS, HE_NUMS];
+  for (i = 0; i < src.length; i++) {
+    for (k in src[i]) if (Object.prototype.hasOwnProperty.call(src[i], k) && !seen[k]) { seen[k] = 1; keys.push(k); }
+  }
+  keys.sort(function (a, b) { return b.length - a.length; });
+  return '(\\d{1,2}|' + keys.join('|') + ')';
+})();
+var MONTHS_ALT_ = Object.keys(HE_MONTHS).join('|');
+var MONTH_AHEAD_ = '(?!\\s+(?:(?:ב|ל)\\s*)?(?:' + MONTHS_ALT_ + ')(?=$|[\\s,.!?]))';
+
 var DAY_LETTERS = { "א'": 'ראשון', "ב'": 'שני', "ג'": 'שלישי', "ד'": 'רביעי', "ה'": 'חמישי', "ו'": 'שישי', "ש'": 'שבת' };
 var SYNONYMS = [
   [/(\s)(?:ב|ל)?(?:-)?יום ([אבגדהוש]')(?=$|[\s,.!?])/g, function (_, sp, l) { return sp + 'ביום ' + DAY_LETTERS[l]; }],
@@ -87,7 +115,7 @@ var PLACE_MAX_NAME_ = 4, PLACE_MAX_CITY_ = 3;
 var PLACE_STOP_ = {};
 ('עם את ו מחר מחרתיים היום הערב הבוקר הלילה בצהריים ביום יום בעוד עוד בשעה שעה שעות דקות בבוקר בערב בלילה בחצות למשך לשעה ' +
  'לשעתיים לחצי לרבע וחצי ורבע ועשרים ועשר הבא הקרוב בשבוע השבוע שבוע בסוף בתחילת במחר ברבע רבע כדי בשביל לגבי על בנושא בקשר ' +
- 'בעניין אחרי לפני עד ליום ל-יום ב-יום מיום ביחד יחד ואז הוא היא הם זה זו יש אין צריך בבקשה ליומן ביומן לדבר בזום בטלפון').split(' ')
+ 'בעניין אחרי לפני עד ליום ל-יום ב-יום מיום ביחד יחד ואז הוא היא הם זה זו יש אין צריך בבקשה ליומן ביומן לדבר בזום בטלפון בתאריך תאריך').split(' ')
   .forEach(function (w) { PLACE_STOP_[w] = 1; });
 var PERIOD_WORDS_ = { 'בבוקר': 1, 'בערב': 1, 'בצהריים': 1, 'בלילה': 1, 'וחצי': 1, 'ורבע': 1, 'ועשרים': 1, 'ועשר': 1 };
 var NUMWORD_RE_ = new RegExp('^(?:ב|ל|ב-|ל-|ה)?' + NUMW + '$');
@@ -141,14 +169,14 @@ function matchCity_(toks, i, generic) {
  */
 var PLACE_MARK_ = '@@PLACE@@';
 /** Reads a place name after a venue / אצל (max PLACE_MAX_NAME_ words), stopping at time/date/people words, a city or another venue. */
-function readName_(toks, end, street, venue) {
+function readName_(toks, end, street, venue, bareCity) {
   var name = [], closed = bare_(toks[end - 1]) !== toks[end - 1];
   while (!closed && end < toks.length && name.length < PLACE_MAX_NAME_) {
     var t = toks[end], tw = bare_(t);
     // a bare number is a house/room number ("רחוב הרצל 5", "חדר ישיבות 3") unless a time word follows ("8 בערב", "5 וחצי")
     var houseNo = venue && (street ? name.length > 0 : true) && /^\d{1,4}[א-ת]?$/.test(tw) && !(end + 1 < toks.length && PERIOD_WORDS_[bare_(toks[end + 1])]);
     if (!houseNo) {
-      if (isPlaceStop_(t) || matchPhrase_(toks, end, CITIES_SORTED_, true) || matchPhrase_(toks, end, VENUES_SORTED_, true)) break;
+      if (isPlaceStop_(t) || matchPhrase_(toks, end, CITIES_SORTED_, true) || (bareCity && matchPhrase_(toks, end, CITIES_SORTED_, false)) || matchPhrase_(toks, end, VENUES_SORTED_, true)) break;
       if (name.length > 0 && tw.charAt(0) === 'ב' && matchCity_(toks, end, true)) break; // "כפית בגבעת עדה": the ב-word is a town
     }
     name.push(tw); end++;
@@ -183,7 +211,7 @@ function extractPlace_(s, meeting) {
     var w = bare_(toks[i]), end = i + 1, parts = [], city = null, closed = false, m, n;
     if (w === 'אצלי' || w === 'אצלנו') parts.push(w);
     else if (w === 'אצל' && i + 1 < toks.length && !isPlaceStop_(toks[i + 1])) {
-      n = readName_(toks, end, false, false);
+      n = readName_(toks, end, false, false, true);
       if (!n.name.length) continue;
       parts.push('אצל ' + n.name.join(' ')); end = n.end; closed = n.closed;
     }
@@ -203,15 +231,20 @@ function extractPlace_(s, meeting) {
     if (!parts.length && !city) continue;
     if (parts.length && !closed && end < toks.length) {
       var c = matchCity_(toks, end, /\s/.test(parts[parts.length - 1]));
+      if (!c && /^אצל/.test(parts[0])) {
+        var bc = matchPhrase_(toks, end, CITIES_SORTED_, false);
+        if (bc) c = { text: bc.phrase, len: bc.len };
+      }
       if (c) { city = c.text; end += c.len; }
     }
     if (city) parts.push(city);
     var raw = toks.slice(i, end).join(' ').replace(/[,.!?:;]+$/, '');
     var trail = toks[end - 1].match(/[,.!?:;]+$/);
     toks.splice(i, end - i, PLACE_MARK_ + (trail ? trail[0] : ''));
-    // "פגישה אצל רופא השיניים": who you meet stays in the title, the city does not
+    // Option B: "אצל X" stays in the title only; location is a city/address, not the אצל phrase.
     var keep = /^אצל/.test(parts[0]) ? parts[0] : '';
-    return { s: ' ' + toks.join(' ') + ' ', location: parts.join(', '), raw: raw, keep: keep, cityOnly: parts.length === 1 && !!city };
+    var loc = keep ? parts.slice(1).join(', ') : parts.join(', ');
+    return { s: ' ' + toks.join(' ') + ' ', location: loc, raw: raw, keep: keep, cityOnly: !keep && parts.length === 1 && !!city };
   }
   return null;
 }
@@ -225,7 +258,7 @@ var NON_PLACE_B_ = {};
  'בסקייפ במיט באונליין בטלפוניה בשיחה בהודעה במייל בצ\'אט במשך בחצי ברבע בשביל בשבילי בשבילך בשבילו בשבילה בשבילנו בעצם באמת ' +
  'בטוח בערב בבוקר בצהריים בצהרים בלילה במחר בעוד בו בה בי בך בנו בכם בהם בהן בעצמי בעצמו בחג בחגים בפסח בחנוכה בפורים בסוכות ' +
  'בשבועות בחופש בחופשה בשבת בשבתות בראש בכיף בשמחה בנחת בשקט בכוונה בלבד בנפרד בפרטיות בפרטי בנוכחות בהשתתפות בעקבות בהתאם ' +
- 'בשניים בשניהם בשנינו בשלושה בארבעה בחמישה בשלושתנו בנוסף באופן בצורה במסגרת בהקשר בעקבות בתאריך בחודשים בשבועיים בימים בשעות בדקות בסביבה בהפסקה בהפסקת בארוחה בארוחת').split(' ')
+ 'בשניים בשניהם בשנינו בשלושה בארבעה בחמישה בשלושתנו בנוסף באופן בצורה במסגרת בהקשר בעקבות בתאריך בחודשים בשבועיים בימים בשעות בדקות בסביבה בהפסקה בהפסקת בארוחה בארוחת בתאריך').split(' ')
   .forEach(function (w) { NON_PLACE_B_[w] = 1; });
 // first names that start with ב ("פגישה עם דני ברק" must not become a place "רק")
 var B_NAMES_ = { 'בני': 1, 'ברק': 1, 'בועז': 1, 'ברוך': 1, 'בתיה': 1, 'בלה': 1, 'בר': 1, 'בן': 1, 'בת': 1, 'בתאל': 1, 'בכור': 1, 'בצלאל': 1, 'בנימין': 1, 'ביבי': 1, 'בוריס': 1, 'בילי': 1, 'בתשבע': 1 };
@@ -474,60 +507,65 @@ function parseHebrewEvent(text, now) {
   if (m) r.durationMin = toNum_(m[1]) * (m[2] === 'שעות' ? 60 : 1);
 
   // ---- date
-  var date = null;
-  if (cut(new RegExp(B + '(?:ה|ל|ב)?מחרתיים' + E))) date = addDays_(now.y, now.m, now.d, 2);
-  else if (cut(new RegExp(B + '(?:ה|ל|ב)?מחר' + E))) date = addDays_(now.y, now.m, now.d, 1);
-  else if (cut(new RegExp(B + '(?:ה|ל)?היום' + E))) date = addDays_(now.y, now.m, now.d, 0);
-  if (!date) {
+  var dateRel = null, dateCal = null, dateWd = null, date = null;
+  if (cut(new RegExp(B + '(?:ה|ל|ב)?מחרתיים' + E))) dateRel = addDays_(now.y, now.m, now.d, 2);
+  else if (cut(new RegExp(B + '(?:ה|ל|ב)?מחר' + E))) dateRel = addDays_(now.y, now.m, now.d, 1);
+  else if (cut(new RegExp(B + '(?:ה|ל)?היום' + E))) dateRel = addDays_(now.y, now.m, now.d, 0);
+  if (!dateRel) {
     m = cut(new RegExp(B + '(?:בעוד|עוד) ' + NUMW + ' ימים' + E));
-    if (m) date = addDays_(now.y, now.m, now.d, toNum_(m[1]));
-    else if (cut(new RegExp(B + '(?:בעוד|עוד) שבוע' + E))) date = addDays_(now.y, now.m, now.d, 7);
+    if (m) dateRel = addDays_(now.y, now.m, now.d, toNum_(m[1]));
+    else if (cut(new RegExp(B + '(?:בעוד|עוד) שבוע' + E))) dateRel = addDays_(now.y, now.m, now.d, 7);
     else if (cut(new RegExp(B + '(?:ב|ל|ה)?שבוע הבא' + E))) {
       var wk = (0 - now.dow + 7) % 7;
       if (wk === 0) wk = 7; // on Sunday, "next week" is the following Sunday
-      date = addDays_(now.y, now.m, now.d, wk);
+      dateRel = addDays_(now.y, now.m, now.d, wk);
     }
   }
-  if (!date) {
-    m = cut(new RegExp(B + '(?:ב|ל)?(?:-)?יום (' + HE_DAYS.join('|') + ')( הבא| הקרוב)?' + E));
-    if (!m) m = cut(new RegExp(B + '(?:ב|ל)(' + HE_DAYS.join('|') + ')( הבא| הקרוב)?' + E));
-    if (m) {
-      var target = HE_DAYS.indexOf(m[1]);
-      var k = (target - now.dow + 7) % 7;
-      if (k === 0) k = 7; // same weekday => next week
-      date = addDays_(now.y, now.m, now.d, k);
-    }
+  // Calendar dates are always matched and stripped, even if a weekday/relative was also said.
+  // Dotted HH.MM is a clock (left for the time parser) when there is no year, the hour is 0-23,
+  // and minutes are 00/15/30/45 or >12 — unless a month word follows (then it is a date leftover after the clock, or 15.11).
+  var clockish = s.match(/(?:^|\s)(?:ב|ל)?(?:-)?(?:ה-?)?(\d{1,2})\.(\d{2})(?=$|[\s,!?])/);
+  var dottedClock = clockish && +clockish[1] <= 23 && (+clockish[2] === 0 || +clockish[2] === 15 || +clockish[2] === 30 || +clockish[2] === 45 || +clockish[2] > 12);
+  if (dottedClock && new RegExp('(?:^|\\s)(?:ב|ל)?(?:-)?(?:ה-?)?\\d{1,2}\\.\\d{2}\\s+(?:(?:ב|ל)\\s*)?(?:' + MONTHS_ALT_ + ')(?=$|[\\s,.!?])').test(s)) dottedClock = false;
+  var dd, mm, yy;
+  m = dottedClock ? null : cut(/(?:^|\s)(?:בתאריך\s+)?(?:ב|ל)?(?:-)?(?:ה-?)?(\d{1,2})[\/.](\d{1,2})(?:[\/.](\d{2,4}))?(?=$|[\s,!?])/);
+  if (m) { dd = +m[1]; mm = +m[2]; yy = m[3] ? +m[3] : null; }
+  else {
+    m = cut(new RegExp(B + '(?:בתאריך\s+)?(?:(?:ב|ל|ה)\'?)?(?:-)?(?:ה-?)?' + DATE_DAYW + ' (?:(?:ב|ל)\\s*)?(' + MONTHS_ALT_ + ')(?: (\\d{4}))?' + E));
+    if (m) { dd = dateDayNum_(m[1]); mm = HE_MONTHS[m[2]]; yy = m[3] ? +m[3] : null; }
   }
-  if (!date) {
-    // Dotted HH.MM is a clock (left for the time parser), not a date, when there is no year,
-    // the hour is 0-23, and minutes are 00/15/30/45 or >12 (cannot be a month). Slash dates
-    // (25/10) and dotted dates (17.11, 25.10, 17.11.26, 23.12) stay dates.
-    var clockish = s.match(/(?:^|\s)(?:ב|ל)?(?:-)?(?:ה-?)?(\d{1,2})\.(\d{2})(?=$|[\s,!?])/);
-    var dottedClock = clockish && +clockish[1] <= 23 && (+clockish[2] === 0 || +clockish[2] === 15 || +clockish[2] === 30 || +clockish[2] === 45 || +clockish[2] > 12);
-    m = dottedClock ? null : cut(/(?:^|\s)(?:ב|ל)?(?:-)?(?:ה-?)?(\d{1,2})[\/.](\d{1,2})(?:[\/.](\d{2,4}))?(?=$|[\s,!?])/);
-    var dd, mm, yy;
-    if (m) { dd = +m[1]; mm = +m[2]; yy = m[3] ? +m[3] : null; }
-    else {
-      m = cut(new RegExp(B + '(?:ב|ל)?(?:-)?(?:ה-?)?(\\d{1,2}) (?:ב|ל)(' + Object.keys(HE_MONTHS).join('|') + ')(?: (\\d{4}))?' + E));
-      if (m) { dd = +m[1]; mm = HE_MONTHS[m[2]]; yy = m[3] ? +m[3] : null; }
+  if (m && mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31) {
+    if (yy !== null && yy < 100) yy += 2000;
+    if (yy === null) {
+      yy = now.y;
+      if (mm < now.m || (mm === now.m && dd < now.d)) yy++; // past date => next year
     }
-    if (m && mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31) {
-      if (yy !== null && yy < 100) yy += 2000;
-      if (yy === null) {
-        yy = now.y;
-        if (mm < now.m || (mm === now.m && dd < now.d)) yy++; // past date => next year
-      }
-      date = { y: yy, m: mm, d: dd, dow: dowOf_(yy, mm, dd) };
-    }
+    dateCal = { y: yy, m: mm, d: dd, dow: dowOf_(yy, mm, dd) };
+    // leftovers: "ב-15.11 לנובמבר", a stray "בתאריך"
+    cut(new RegExp(B + '(?:בתאריך)' + E));
+    cut(new RegExp(B + "(?:ב|ל)'?" + E));
+    cut(new RegExp(B + '(?:ב|ל)?(?:' + MONTHS_ALT_ + ')' + E));
+  }
+  // Weekday is always stripped from the title; it only sets the date when no calendar date was said.
+  m = cut(new RegExp(B + '(?:ב|ל)?(?:-)?יום (' + HE_DAYS.join('|') + ')( הבא| הקרוב)?' + E));
+  if (!m) m = cut(new RegExp(B + '(?:ב|ל)(' + HE_DAYS.join('|') + ')( הבא| הקרוב)?' + E));
+  if (m) {
+    var target = HE_DAYS.indexOf(m[1]);
+    var k = (target - now.dow + 7) % 7;
+    if (k === 0) k = 7; // same weekday => next week
+    dateWd = addDays_(now.y, now.m, now.d, k);
   }
   var motzaei = false;
-  if (!date) {
+  if (!dateCal && !dateRel && !dateWd) {
     if (cut(new RegExp(B + '(?:ב)?מוצאי[- ]?שבת' + E)) || cut(new RegExp(B + 'מוצ["״]ש' + E))) {
       motzaei = true;
       var sk = (6 - now.dow + 7) % 7; // coming Saturday; if today is Saturday, tonight
-      date = addDays_(now.y, now.m, now.d, sk);
+      dateWd = addDays_(now.y, now.m, now.d, sk);
     }
+  } else if (cut(new RegExp(B + '(?:ב)?מוצאי[- ]?שבת' + E)) || cut(new RegExp(B + 'מוצ["״]ש' + E))) {
+    motzaei = true;
   }
+  date = dateCal || dateRel || dateWd;
   if (!date) { date = addDays_(now.y, now.m, now.d, 0); r.dateDefaulted = true; }
 
   // ---- time
@@ -537,7 +575,7 @@ function parseHebrewEvent(text, now) {
   if (pm) { period = pm[3]; h = toNum_(pm[1]); min = { ' וחצי': 30, ' ורבע': 15 }[pm[2]] || 0; explicit24 = h >= 13; }
   else if ((pm = cut(new RegExp(B + '(בבוקר|בצהריים|בערב|בלילה)' + E)))) period = pm[1];
   var P = '(?:בשעה|ב-|ב|ל-|ל|עד)?\\s?';
-  m = h === null ? cut(new RegExp(B + P + 'רבע ל(?:-)?' + NUMW + E)) : null;
+  m = h === null ? cut(new RegExp(B + P + 'רבע ל(?:-)?' + NUMW + MONTH_AHEAD_ + E)) : null;
   if (m) { h = toNum_(m[1]) - 1; min = 45; if (h === 0) h = 12; }
   if (h === null) {
     m = cut(new RegExp(B + P + '(\\d{1,2})\\s*[:.]\\s*(\\d{2})' + E));
@@ -555,8 +593,8 @@ function parseHebrewEvent(text, now) {
   }
   if (h === null) {
     // "בשעה 3", "ב-8", "ב8 בערב", "15 וחצי", "בשעה שלוש ורבע"
-    m = cut(new RegExp(B + '(?:בשעה|ב-|ב|ל-|ל)\\s?' + NUMW + '( וחצי| ורבע| ועשרים| ועשר)?' + E)) ||
-        cut(new RegExp(B + NUMW + '( וחצי| ורבע)' + E));
+    m = cut(new RegExp(B + '(?:בשעה|ב-|ב|ל-|ל)\\s?' + NUMW + '( וחצי| ורבע| ועשרים| ועשר)?' + MONTH_AHEAD_ + E)) ||
+        cut(new RegExp(B + NUMW + '( וחצי| ורבע)' + MONTH_AHEAD_ + E));
     if (m) {
       h = toNum_(m[1]);
       min = { ' וחצי': 30, ' ורבע': 15, ' ועשרים': 20, ' ועשר': 10 }[m[2]] || 0;

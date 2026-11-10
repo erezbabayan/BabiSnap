@@ -18,6 +18,10 @@ public class RoutingTest {
         return new JSONObject(p.parseJson(text, Y, M, D, DOW, DUR, HOUR, MIN, skipDestStrip));
     }
 
+    static JSONObject parseAt(HebrewParser p, String text, int y, int m, int d, int dow, int hour, int min) throws Exception {
+        return new JSONObject(p.parseJson(text, y, m, d, dow, DUR, hour, min, false));
+    }
+
     static final class Out {
         final Classifier.Kind kind;
         final String title;
@@ -219,5 +223,40 @@ public class RoutingTest {
         o = run(p, "ארוחת ערב ב-08:00");
         assertEquals("ארוחת ערב", o.title);
         assertEquals("2026-10-22 08:00", o.parsed.optString("startStr"));
+    }
+
+    @Test public void calendarDateStrippedEvenAfterWeekdayAndAtzelStaysInTitleOnly() throws Exception {
+        HebrewParser p = parser();
+        String base = "טיפול אצל דוקטור גולדמן אוסטאופת מודיעין";
+        String title = "טיפול אצל דוקטור גולדמן אוסטאופת";
+        String[] phrases = {
+            base + " ב-15 לנובמבר בארבע וחצי",
+            base + " ב-15 בנובמבר בארבע וחצי",
+            base + " בחמש עשרה לנובמבר בארבע וחצי",
+            base + " בחמישה עשר בנובמבר בארבע וחצי",
+            base + " ביום ראשון ב-15 לנובמבר ב-16:30",
+            base + " ביום ראשון ב-15 לנובמבר בארבע וחצי",
+            base + " יום רביעי ה-15 לנובמבר בארבע וחצי",
+            base + " ב-15 נובמבר בארבע וחצי",
+            base + " ב-15.11 לנובמבר בארבע וחצי",
+            base + " בתאריך 15 לנובמבר בארבע וחצי",
+            "יומן " + base + " ב-15 לנובמבר בארבע וחצי",
+            "קבע " + base + " בחמש עשרה לנובמבר בארבע וחצי",
+            "יומן " + base + " ב-15.11 בארבע וחצי",
+            "טיפול אצל דוקטור גולדמן אוסטאופת במודיעין ב-15 לנובמבר בארבע וחצי"
+        };
+        for (String spoken : phrases) {
+            // VoiceActivity-style: parse, classify, maybe reparse stripped (with Nov 10 now)
+            org.json.JSONObject parsed = parseAt(p, spoken, 2026, 11, 10, 2, 17, 30);
+            boolean explicitTime = !parsed.optBoolean("timeDefaulted", true) || parsed.optBoolean("allDay", false);
+            Classifier.Result c = Classifier.classify(spoken, explicitTime);
+            assertEquals(spoken + " kind", MEETING, c.kind);
+            if (!c.stripped.isEmpty() && !c.stripped.equals(Classifier.normalize(spoken))) {
+                parsed = parseAt(p, c.stripped, 2026, 11, 10, 2, 17, 30);
+            }
+            assertEquals(spoken + " title=" + parsed.optString("title"), title, parsed.optString("title"));
+            assertEquals(spoken + " loc=" + parsed.optString("location"), "מודיעין", parsed.optString("location"));
+            assertEquals(spoken + " start=" + parsed.optString("startStr"), "2026-11-15 16:30", parsed.optString("startStr"));
+        }
     }
 }
