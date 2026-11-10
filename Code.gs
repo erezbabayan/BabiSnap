@@ -360,12 +360,13 @@ function inCut_(cut, i) { for (var c = 0; c < cut.length; c++) if (i >= cut[c][0
 function withNames_(t, n) { var i = t.indexOf(' – '), w = ' עם ' + joinNames_(n); return i < 0 ? t + w : t.slice(0, i) + w + t.slice(i); }
 function joinNames_(n) { return n.length < 2 ? n.join('') : n.slice(0, -1).join(', ') + ' ו' + n[n.length - 1]; }
 
-// "להיפגש עם תמר" / "לפגוש את תמר" / "נפגש עם תמר" -> "פגישה עם תמר"
+// Keep the speaker's meeting word (פגישה / זימון / להיפגש / זום…). Only drop a leading ו/ה/ל prefix.
 function meetingTitle_(t) {
-  t = t.replace(/^ו?ה?זימון(?=\s|$)/, 'פגישה');                 // "זימון מחר עם דני" -> "פגישה עם דני"
-  t = t.replace(/^ו?[לה]?(?=(?:פגישה|פגישת|ישיבה|ישיבת|מפגש|זימון|ראיון|כנס|סטנדאפ|ספרינט|זום|שיחת|שיחה)(?:\s|$))/, '');   // "תזמין את תמר לפגישה" -> "פגישה עם תמר"
-  return t.replace(/^(?:להיפגש|להפגש|ניפגש|נפגש|נפגשים|ניפגשים)(?:\s+עם)?(?=\s|$)/, 'פגישה עם')
-          .replace(/^(?:לפגוש|נפגוש)(?:\s+את)?(?=\s|$)/, 'פגישה עם').replace(/^פגישה עם$/, 'פגישה');
+  t = t.replace(/^ו?[לה]?(?=(?:פגישה|פגישת|פגישות|ישיבה|ישיבת|מפגש|זימון|ראיון|כנס|סטנדאפ|ספרינט|זום|שיחת|שיחה|תור|אירוע|אסיפה|אסיפת)(?:\s|$))/, '');
+  t = t.replace(/^ו(?=(?:להיפגש|להפגש|ניפגש|נפגש|נפגשים|ניפגשים|לפגוש|נפגוש)(?:\s|$))/, '');
+  // "אירוע חתונה" → "חתונה"; a bare leftover "אירוע" is restored as the empty-title fallback.
+  t = t.replace(/^ו?[הל]?אירוע(?:\s+של)?(?=\s|$)\s*/, '');
+  return t;
 }
 
 function toNum_(w) { return /^\d+$/.test(w) ? parseInt(w, 10) : HE_NUMS[w]; }
@@ -381,7 +382,9 @@ function titleOf_(s) {
   t = t.replace(/\s+/g, ' ').replace(/ ([,.!?])/g, '$1').replace(/([,.!?])(?:[,.!?])+/g, '$1').replace(/^[\s,.\-:]+|[\s,.\-:]+$/g, '').trim();
   // strip dangling prepositions left from removed parts (repeat)
   for (var j = 0; j < 3; j++) t = t.replace(/(?:^|\s)(?:ב|ל|ב-|ל-|ביום|בשעה)$/, '').replace(/[\s,.\-:]+$/, '').trim();
-  return meetingTitle_(cleanTitle_(t));
+  t = meetingTitle_(cleanTitle_(t));
+  t = t.replace(/^יש\s+/, '').trim();
+  return t;
 }
 
 /**
@@ -397,7 +400,10 @@ function parseHebrewEvent(text, now) {
 
   // leading command words
   s = s.replace(new RegExp('^\\s*(?:תקבע לי|תקבעי לי|קבע לי|קבעי לי|תקבע|תקבעי|קבע|תוסיף|תוסיפי|הוסף|תרשום|תרשמי|רשום)' + E), ' ');
-  s = s.replace(new RegExp(B + '(?:ביומן|ליומן|בבקשה)' + E, 'g'), ' ');
+  s = s.replace(new RegExp(B + 'בבקשה' + E, 'g'), ' ');
+  if (!(now && now.skipDestStrip)) {
+    s = s.replace(new RegExp(B + '(?:ו?[בלהמ]?(?:יומן|יומנים|יומני|יומנך|יומנו|היומן)|לוח השנה|לוח שנה|בלוח השנה|ללוח השנה|קלנדר|קלנדאר|לקלנדר|בקלנדר|גוגל קלנדר|יומן גוגל|calendar|google calendar|ביומן|ליומן)' + E, 'gi'), ' ');
+  }
   // ---- v2.14 all-day: "יום שלם" / "כל היום" / "יום מלא" / "all day" -> Calendar all-day event (cut before "היום" is read as a date)
   if (cut(new RegExp(B + '(?:(?:של|ל|ב|ה)\\s?)?(?:(?:ל|ב)?כו?ל(?: ה| ה-|-)?יום(?: כולו)?|(?:ל|ב|ה)?(?:-)?יום (?:שלם|מלא|שלם כולו)|(?:ל|ב)?יממה שלמה|all[- ]day)' + E, 'gi'))) r.allDay = true;
   // ---- stage 2: invitees (only an explicit "תזמין" / "תשלח לה זימון"); removed from the text before anything else
@@ -435,6 +441,11 @@ function parseHebrewEvent(text, now) {
     m = cut(new RegExp(B + '(?:בעוד|עוד) ' + NUMW + ' ימים' + E));
     if (m) date = addDays_(now.y, now.m, now.d, toNum_(m[1]));
     else if (cut(new RegExp(B + '(?:בעוד|עוד) שבוע' + E))) date = addDays_(now.y, now.m, now.d, 7);
+    else if (cut(new RegExp(B + '(?:ב|ל|ה)?שבוע הבא' + E))) {
+      var wk = (0 - now.dow + 7) % 7;
+      if (wk === 0) wk = 7; // on Sunday, "next week" is the following Sunday
+      date = addDays_(now.y, now.m, now.d, wk);
+    }
   }
   if (!date) {
     m = cut(new RegExp(B + '(?:ב|ל)?(?:-)?יום (' + HE_DAYS.join('|') + ')( הבא| הקרוב)?' + E));
@@ -461,6 +472,14 @@ function parseHebrewEvent(text, now) {
         if (mm < now.m || (mm === now.m && dd < now.d)) yy++; // past date => next year
       }
       date = { y: yy, m: mm, d: dd, dow: dowOf_(yy, mm, dd) };
+    }
+  }
+  var motzaei = false;
+  if (!date) {
+    if (cut(new RegExp(B + '(?:ב)?מוצאי[- ]?שבת' + E)) || cut(new RegExp(B + 'מוצ["״]ש' + E))) {
+      motzaei = true;
+      var sk = (6 - now.dow + 7) % 7; // coming Saturday; if today is Saturday, tonight
+      date = addDays_(now.y, now.m, now.d, sk);
     }
   }
   if (!date) { date = addDays_(now.y, now.m, now.d, 0); r.dateDefaulted = true; }
@@ -506,6 +525,14 @@ function parseHebrewEvent(text, now) {
     h = { 'בבוקר': 9, 'בצהריים': 13, 'בערב': 19, 'בלילה': 21 }[period]; min = 0;
   } else if (r.allDay) { h = 0; min = 0; r.durationMin = 1440; } // all-day: no time of day (not "defaulted")
   else { h = 9; min = 0; r.timeDefaulted = true; }
+  if (motzaei) {
+    if (r.timeDefaulted) { h = 20; min = 0; r.timeDefaulted = false; r.allDay = false; }
+    else if (h !== null && h < 12 && !explicit24) { h += 12; r.allDay = false; }
+  }
+  // Event names with no clock time → all-day (פגישה / ישיבה / תור / זום keep the 09:00 default).
+  if (r.timeDefaulted && !r.allDay && /(?:^|\s)(?:ו?[הל]?(?:מילואים|חתונה|חוג|אסיפה|אסיפת|כנס|מסיבה|ראיון)|יום הולדת|ארוחה|ארוחת)(?=$|[\s,.!?])/.test(s)) {
+    r.allDay = true; r.timeDefaulted = false; h = 0; min = 0; r.durationMin = 1440;
+  }
 
   // ---- title: r.title without the place (Calendar has a location field), r.titleFull keeps it (BabiTk task/note titles)
   // ---- meeting place by context ("פגישה בברוכין לראות את הבית"): after time/date are gone, so "בשבע"/"במחר" never reach it
@@ -521,7 +548,7 @@ function parseHebrewEvent(text, now) {
   }
   // a purpose right after the removed place gets a separator: "פגישה – לראות את הבית"
   var ts = s.replace(new RegExp(PLACE_MARK_ + '(?=\\s+(?!(?:לגבי|לכבוד|למען|לקראת|לפני|לאחר|ליד|למשך|לשם|לבד|לבין|לכל|לנו|לי|לו|לה|להם)(?:\\s|$))ל-?[א-ת]{2,})'), ' – ');
-  r.title = titleOf_(ts.split(PLACE_MARK_).join(place && place.keep ? ' ' + place.keep + ' ' : ' ')) || 'פגישה';
+  r.title = titleOf_(ts.split(PLACE_MARK_).join(place && place.keep ? ' ' + place.keep + ' ' : ' ')) || 'אירוע';
   // v2.6: the invite phrase (verb + name + markers) never reaches the title; invitees are in r.invite only
   r.titleFull = place ? (titleOf_(s.split(PLACE_MARK_).join(place.raw)) || r.title) : r.title;
   r.y = date.y; r.m = date.m; r.d = date.d; r.dow = date.dow; r.hour = h; r.minute = min;
