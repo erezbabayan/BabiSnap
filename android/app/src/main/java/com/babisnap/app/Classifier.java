@@ -55,8 +55,12 @@ public final class Classifier {
 
     public static String normalize(String s) {
         if (s == null) return "";
+        // Maqaf (U+05BE) and en/em dash after ב/ל should look like ב- to a later re-parse.
+        String t = s.replaceAll("([א-ת])[\u05BE\u2013\u2014]([א-ת])", "$1 $2")
+                .replace('\u05BE', '-')
+                .replaceAll("([בל])[\u2013\u2014]", "$1-");
         // Keep clock times like 17:00 so a later calendar re-parse still sees the colon.
-        String t = s.replaceAll("(\\d{1,2}):(\\d{2})", "$1\u0000$2");
+        t = t.replaceAll("(\\d{1,2}):(\\d{2})", "$1\u0000$2");
         t = t.replaceAll("[\\u0591-\\u05C7]", "").replaceAll("[.,!?;:\"'״׳]", " ").replaceAll("\\s+", " ").trim();
         return t.replace('\u0000', ':');
     }

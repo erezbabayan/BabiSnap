@@ -175,5 +175,9 @@ public class ClassifierTest {
         assertEquals("הערה הקוד הוא 4521", Classifier.normalize("הערה: הקוד הוא 4521"));
         assertEquals("ללכת לקניות היום ב-17:00", Classifier.classify("קבע ללכת לקניות היום ב-17:00", true).stripped);
         assertEquals("היום ב17:00 ללכת לקניות", Classifier.classify("יומן היום ב17:00 ללכת לקניות", true).stripped);
+        assertEquals("ללכת לקניות היום ב-17:00", Classifier.normalize("ללכת לקניות היום ב־17:00"));
+        assertEquals("ללכת לקניות היום ב-17:00", Classifier.normalize("ללכת לקניות היום ב–17:00"));
+        assertEquals("ללכת לקניות היום ב-17:00", Classifier.normalize("ללכת לקניות היום ב—17:00"));
+        assertEquals("היום ב-17:00 ללכת לקניות", Classifier.classify("יומן היום ב־17:00 ללכת לקניות", true).stripped);
     }
 }

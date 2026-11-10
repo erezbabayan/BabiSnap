@@ -145,5 +145,25 @@ public class RoutingTest {
         assertEquals(MEETING, o.kind);
         assertEquals("ללכת לקניות", o.title);
         assertEquals("2026-10-22 17:00", o.parsed.optString("startStr"));
+
+        o = run(p, "יומן ללכת לקניות היום ב־17:00");
+        assertEquals(MEETING, o.kind);
+        assertEquals("ללכת לקניות", o.title);
+        assertEquals("2026-10-22 17:00", o.parsed.optString("startStr"));
+
+        o = run(p, "יומן ללכת לקניות היום ב–17:00");
+        assertEquals(MEETING, o.kind);
+        assertEquals("ללכת לקניות", o.title);
+        assertEquals("2026-10-22 17:00", o.parsed.optString("startStr"));
+
+        o = run(p, "יומן ללכת לקניות היום בשעה שבע עשרה");
+        assertEquals(MEETING, o.kind);
+        assertEquals("ללכת לקניות", o.title);
+        assertEquals("2026-10-22 17:00", o.parsed.optString("startStr"));
+
+        o = run(p, "יומן ללכת לקניות ב-17.00");
+        assertEquals(MEETING, o.kind);
+        assertEquals("ללכת לקניות", o.title);
+        assertEquals("2026-10-22 17:00", o.parsed.optString("startStr"));
     }
 }
