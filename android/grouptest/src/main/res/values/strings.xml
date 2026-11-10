@@ -25,6 +25,7 @@
     <string name="auto_hint">כבוי כברירת מחדל. כשדלוק: כרטיס עם השם והטקסט המלא, 8 שניות, ו«ביטול» גדול. הלחיצה רק אם הכותרת זהה בדיוק.</string>
     <string name="recipients_help">סמנו למי מותר לשלוח בלי מגע. «יעד» בוחר לאן תלך בדיקת השליחה. «בחר הכול» מסמן את מה שמוצג עכשיו (אחרי חיפוש). «הוסף מספר» שומר מספר בלי לפתוח את אנשי הקשר.</string>
     <string name="add_number">הוסף מספר</string>
+    <string name="pick_contact">בחר מאנשי קשר</string>
     <string name="add_number_title">הוספת מספר</string>
     <string name="remove">הסר</string>
     <string name="make_target">יעד</string>

@@ -2,10 +2,14 @@ package com.babisnap.grouptest;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.content.ActivityNotFoundException;
+import android.content.ClipData;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.database.Cursor;
 import android.net.Uri;
 import android.os.Bundle;
+import android.provider.ContactsContract;
 import android.provider.Settings;
 import android.text.Editable;
 import android.text.InputType;
@@ -36,6 +40,7 @@ import java.util.concurrent.Executors;
 /** One list: phone contacts plus captured groups. Selection stays on the device. */
 public class RecipientsActivity extends Activity {
     private static final int REQ_CONTACTS = 7;
+    private static final int REQ_PICK = 8;
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final List<Row> all = new ArrayList<>();
@@ -59,6 +64,7 @@ public class RecipientsActivity extends Activity {
             @Override public void afterTextChanged(Editable s) { applyFilter(); }
         });
         findViewById(R.id.select_all).setOnClickListener(v -> selectAll());
+        findViewById(R.id.pick_contact).setOnClickListener(v -> pickFromContacts());
         findViewById(R.id.add_number).setOnClickListener(v -> addNumber());
         findViewById(R.id.perm_button).setOnClickListener(v -> askContacts());
         if (!BuildConfig.LITE
@@ -133,12 +139,118 @@ public class RecipientsActivity extends Activity {
         TextView status = findViewById(R.id.perm_status);
         Button button = findViewById(R.id.perm_button);
         if (BuildConfig.LITE) {
-            status.setText("בלי גישה לאנשי הקשר. הוסיפו מספר, או קבוצה מכפתור «הוסף קבוצה».");
+            status.setText("«בחר מאנשי קשר» נותן שורה אחת שנבחרה, בלי הרשאה קבועה. «הוסף מספר» הוא גיבוי.");
             button.setVisibility(View.GONE);
             return;
         }
         status.setText(granted ? "✅ הרשאת אנשי קשר" : "❌ אין הרשאת אנשי קשר — קבוצות עדיין מוצגות");
         button.setVisibility(granted ? View.GONE : View.VISIBLE);
+    }
+
+    /** System picker. EXTRA_ALLOW_MULTIPLE is honored only by some phones; otherwise one row comes back. */
+    private void pickFromContacts() {
+        Intent pick = new Intent(Intent.ACTION_PICK, ContactsContract.CommonDataKinds.Phone.CONTENT_URI);
+        pick.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+        try {
+            startActivityForResult(pick, REQ_PICK);
+            ProbeLog.code("PICK_LAUNCHED");
+        } catch (ActivityNotFoundException e) {
+            ProbeLog.code("PICK_MISSING");
+            Toast.makeText(this, "בורר אנשי הקשר לא נמצא. השתמשו ב«הוסף מספר».", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    @Override
+    @SuppressWarnings("deprecation")
+    protected void onActivityResult(int request, int result, Intent data) {
+        super.onActivityResult(request, result, data);
+        if (request != REQ_PICK) return;
+        if (result != RESULT_OK || data == null) {
+            ProbeLog.code("PICK_CANCELLED");
+            return;
+        }
+        int added = 0;
+        int skipped = 0;
+        for (Uri uri : pickedUris(data)) {
+            int n = readPicked(uri);
+            if (n > 0) added += n;
+            else skipped++;
+        }
+        if (added > 0) {
+            ProbeLog.code("PICK_ADDED");
+            String message = added == 1
+                    ? "איש קשר נוסף. לחצו יעד כדי לשלוח בדיקה."
+                    : "נוספו " + added + ". לחצו יעד על מי שבודקים.";
+            if (skipped > 0) message = message + " מספר שלא זוהה כמספר ישראלי לא נשמר.";
+            Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
+            load();
+        } else {
+            ProbeLog.code("PICK_EMPTY");
+            Toast.makeText(this, "לא נשמר מספר. נסו «הוסף מספר».", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    /** One URI from the data field, plus any extra URIs when the picker returns several. */
+    static List<Uri> pickedUris(Intent data) {
+        List<Uri> uris = new ArrayList<>();
+        if (data == null) return uris;
+        ClipData clip = data.getClipData();
+        if (clip != null) {
+            for (int i = 0; i < clip.getItemCount(); i++) {
+                Uri uri = clip.getItemAt(i).getUri();
+                if (uri != null && !uris.contains(uri)) uris.add(uri);
+            }
+        }
+        Uri one = data.getData();
+        if (one != null && !uris.contains(one)) uris.add(one);
+        return uris;
+    }
+
+    /** Reads only the URI the user picked. That grant does not cover the rest of the address book. */
+    private int readPicked(Uri uri) {
+        if (uri == null) return 0;
+        int added = 0;
+        try (Cursor cursor = getContentResolver().query(uri, null, null, null, null)) {
+            if (cursor == null) return 0;
+            int guard = 0;
+            while (cursor.moveToNext() && guard++ < 20) {
+                if (storePickedRow(cursor)) added++;
+            }
+        } catch (SecurityException e) {
+            ProbeLog.code("PICK_DENIED");
+        } catch (RuntimeException e) {
+            ProbeLog.code("PICK_FAIL");
+        }
+        return added;
+    }
+
+    private boolean storePickedRow(Cursor cursor) {
+        String number = column(cursor, ContactsContract.CommonDataKinds.Phone.NUMBER, "data1");
+        String e164 = ProbeLogic.toIlE164(number);
+        if (e164 == null) return false;
+        String digits = e164.substring(1);
+        String name = column(cursor,
+                ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
+                ContactsContract.Contacts.DISPLAY_NAME,
+                "display_name");
+        if (name == null || name.trim().isEmpty()) name = e164;
+        else name = name.trim();
+        String alias = "";
+        for (Store.ContactSel saved : store.contacts()) {
+            if (digits.equals(saved.e164)) alias = saved.alias;
+        }
+        store.saveContact("", digits, name, alias, true);
+        return true;
+    }
+
+    private static String column(Cursor cursor, String... names) {
+        for (String name : names) {
+            int index = cursor.getColumnIndex(name);
+            if (index < 0) continue;
+            String value = cursor.getString(index);
+            if (value != null && !value.trim().isEmpty()) return value;
+        }
+        return null;
     }
 
     private void addNumber() {

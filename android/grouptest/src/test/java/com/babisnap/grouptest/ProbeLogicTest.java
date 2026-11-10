@@ -81,6 +81,19 @@ public class ProbeLogicTest {
     }
 
     @Test
+    public void localMobileBecomesIsraeliE164() {
+        assertEquals("+972501234567", ProbeLogic.toIlE164("0501234567"));
+        assertEquals("+972501234567", ProbeLogic.toIlE164("050-123-4567"));
+        assertEquals("+972501234567", ProbeLogic.toIlE164("05 01234567"));
+        assertEquals("+972501234567", ProbeLogic.toIlE164("+972 50 123 4567"));
+        assertEquals("+972501234567", ProbeLogic.toIlE164("972501234567"));
+        assertEquals("+97231234567", ProbeLogic.toIlE164("03-1234567"));
+        assertNull(ProbeLogic.toIlE164("12345"));
+        assertNull(ProbeLogic.toIlE164(null));
+        assertTrue(ProbeLogic.toIlE164("0501234567").startsWith("+9725"));
+    }
+
+    @Test
     public void headlineShowsAliasAndFullCountdown() {
         assertEquals("שולח לאמא בעוד 8 שניות", ProbeLogic.cardHeadline("contact", "שרה", "אמא", 8));
         assertEquals("שולח לקבוצה: משפחה · בעוד 8 שניות", ProbeLogic.cardHeadline("group", "משפחה", "", 8));

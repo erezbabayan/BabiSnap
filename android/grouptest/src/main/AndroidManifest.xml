@@ -14,6 +14,11 @@
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="https" android:host="wa.me" />
         </intent>
+        <!-- See the system contact picker. Not a permission; the result URI is one chosen row. -->
+        <intent>
+            <action android:name="android.intent.action.PICK" />
+            <data android:mimeType="vnd.android.cursor.dir/phone_v2" />
+        </intent>
     </queries>
 
     <application

@@ -134,6 +134,12 @@ public final class ProbeLogic {
         return s;
     }
 
+    /** Israeli E.164 with a leading plus. A local 05… number becomes +9725…. */
+    public static String toIlE164(String raw) {
+        String digits = toIlDigits(raw);
+        return digits == null ? null : "+" + digits;
+    }
+
     public static String contactJid(String e164Digits) {
         if (e164Digits == null || !e164Digits.matches("972[0-9]{8,10}")) return null;
         return e164Digits + "@s.whatsapp.net";

@@ -38,8 +38,13 @@
         android:visibility="gone" />
 
     <Button
-        android:id="@+id/add_number"
+        android:id="@+id/pick_contact"
         style="@style/PrimaryButton"
+        android:text="@string/pick_contact" />
+
+    <Button
+        android:id="@+id/add_number"
+        style="@style/GhostButton"
         android:text="@string/add_number" />
 
     <EditText

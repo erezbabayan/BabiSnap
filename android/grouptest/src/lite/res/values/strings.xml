@@ -2,5 +2,5 @@
 <resources>
     <string name="app_name">BabiSnap בדיקה קלה</string>
     <string name="screen_sub">בדיקה קלה: בלי נגישות ובלי התראות. הצ׳אט נפתח עם הטקסט, והשליחה ידנית.</string>
-    <string name="recipients_help">קבוצות מהקיצור, ומספרים שמוסיפים כאן. חיפוש, סימון, «בחר הכול» ו«יעד».</string>
+    <string name="recipients_help">«בחר מאנשי קשר» פותח את הבורר של הטלפון, בלי הרשאה קבועה. «הוסף מספר» הוא גיבוי. יש חיפוש, סימון, «בחר הכול» ו«יעד».</string>
 </resources>
