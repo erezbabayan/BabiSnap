@@ -278,6 +278,7 @@ public final class ProbeLogic {
         public String sendButton;
         public String sendLabel;
         public String autoResult;
+        public String variant;
 
         public String format() {
             StringBuilder sb = new StringBuilder();
@@ -304,6 +305,7 @@ public final class ProbeLogic {
             line(sb, "כפתור שלח (SEND_BUTTON)", sanitizeCode(sendButton, "UNKNOWN"));
             line(sb, "כיתוב כפתור (SEND_LABEL)", sanitizeCode(sendLabel, "NONE"));
             line(sb, "תוצאת לחיצה (AUTO_RESULT)", sanitizeCode(autoResult, "NONE"));
+            line(sb, "מסלול (VARIANT)", sanitizeCode(variant, "FULL"));
             return sb.toString();
         }
 

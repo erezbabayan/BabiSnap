@@ -71,6 +71,11 @@ public class ProbeActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_probe);
+        if (BuildConfig.LITE) {
+            findViewById(R.id.step2_block).setVisibility(View.GONE);
+            findViewById(R.id.step5_block).setVisibility(View.GONE);
+            findViewById(R.id.restricted_help).setVisibility(View.GONE);
+        }
         store = Store.get(this);
         transcript = findViewById(R.id.transcript);
         card = findViewById(R.id.countdown_card);
@@ -172,8 +177,8 @@ public class ProbeActivity extends Activity {
         store.putCode("sendPath", "NONE");
         store.putCode("flow", "NONE");
         store.setObservation("UNKNOWN", "UNKNOWN", "NONE", "");
-        boolean auto = store.bool("autoPress");
-        boolean a11y = Access.accessibility(this);
+        boolean auto = !BuildConfig.LITE && store.bool("autoPress");
+        boolean a11y = SpecialAccess.accessibility(this);
         if (auto && target.checked && a11y) {
             Arm.arm(new Arm.Payload(target.name, target.kind, target.alias, target.name, text, true));
             store.putCode("autoResult", "NONE");
@@ -358,9 +363,10 @@ public class ProbeActivity extends Activity {
                 Access.waVersion(this),
                 Access.installed(this, Access.WA),
                 Access.installed(this, Access.W4B),
-                Access.notifications(this),
+                SpecialAccess.notifications(this),
                 checkSelfPermission(android.Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED,
-                Access.accessibility(this));
+                SpecialAccess.accessibility(this));
+        report.variant = BuildConfig.LITE ? "LITE" : "FULL";
         String text = report.format();
         ClipboardManager clipboard = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
         if (clipboard != null) clipboard.setPrimaryClip(ClipData.newPlainText("k0", text));
@@ -424,7 +430,7 @@ public class ProbeActivity extends Activity {
     }
 
     private String step2() {
-        boolean on = Access.notifications(this);
+        boolean on = SpecialAccess.notifications(this);
         String line = (on ? "✅" : "❌") + " גישה להתראות " + (on ? "פעילה" : "כבויה");
         line += "\n" + (store.bool("directReply") ? "✅" : "❌") + " מענה ישיר (RemoteInput) "
                 + (store.bool("directReply") ? "נצפה" : "עדיין לא נצפה");
@@ -459,7 +465,7 @@ public class ProbeActivity extends Activity {
     }
 
     private String step5() {
-        boolean on = Access.accessibility(this);
+        boolean on = SpecialAccess.accessibility(this);
         String line = (on ? "✅" : "❌") + " שירות נגישות " + (on ? "פעיל" : "כבוי");
         line += "\n" + mark(store.code("titleMatch", "UNKNOWN"), "כותרת תואמת בדיוק");
         line += "\n" + mark(store.code("sendButton", "UNKNOWN"), "כפתור שלח");

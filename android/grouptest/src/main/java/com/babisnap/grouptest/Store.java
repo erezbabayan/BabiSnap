@@ -166,6 +166,22 @@ final class Store {
         });
     }
 
+    void removeContact(String id) {
+        if (id == null || id.isEmpty()) return;
+        edit(root -> {
+            JSONArray arr = root.optJSONArray("contacts");
+            JSONArray next = new JSONArray();
+            if (arr != null) {
+                for (int i = 0; i < arr.length(); i++) {
+                    JSONObject c = arr.optJSONObject(i);
+                    if (c != null && !id.equals(c.optString("id"))) next.put(c);
+                }
+            }
+            root.put("contacts", next);
+            if (id.equals(root.optString("targetId"))) root.put("targetId", "");
+        });
+    }
+
     void removeGroup(String jid) {
         edit(root -> {
             JSONArray arr = root.optJSONArray("groups");

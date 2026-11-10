@@ -59,18 +59,25 @@
             android:id="@+id/step1_status"
             style="@style/Status" />
 
-        <TextView
-            style="@style/Section"
-            android:text="2. התראות (גיבוי למזהה)" />
+        <LinearLayout
+            android:id="@+id/step2_block"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
 
-        <Button
-            android:id="@+id/notif_settings"
-            style="@style/PrimaryButton"
-            android:text="@string/notif_settings" />
+            <TextView
+                style="@style/Section"
+                android:text="2. התראות (גיבוי למזהה)" />
 
-        <TextView
-            android:id="@+id/step2_status"
-            style="@style/Status" />
+            <Button
+                android:id="@+id/notif_settings"
+                style="@style/PrimaryButton"
+                android:text="@string/notif_settings" />
+
+            <TextView
+                android:id="@+id/step2_status"
+                style="@style/Status" />
+        </LinearLayout>
 
         <TextView
             style="@style/Section"
@@ -144,36 +151,43 @@
                 android:text="@string/mark_bad" />
         </LinearLayout>
 
-        <TextView
-            style="@style/Section"
-            android:text="5. נגישות" />
-
-        <Button
-            android:id="@+id/a11y_settings"
-            style="@style/PrimaryButton"
-            android:text="@string/a11y_settings" />
-
-        <TextView
-            android:id="@+id/step5_status"
-            style="@style/Status" />
-
-        <Switch
-            android:id="@+id/auto_switch"
+        <LinearLayout
+            android:id="@+id/step5_block"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:minHeight="48dp"
-            android:text="@string/auto_switch"
-            android:textColor="@color/ink"
-            android:textSize="17sp" />
+            android:orientation="vertical">
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:text="@string/auto_hint"
-            android:textColor="@color/muted"
-            android:textSize="14sp" />
+            <TextView
+                style="@style/Section"
+                android:text="5. נגישות" />
+
+            <Button
+                android:id="@+id/a11y_settings"
+                style="@style/PrimaryButton"
+                android:text="@string/a11y_settings" />
+
+            <TextView
+                android:id="@+id/step5_status"
+                style="@style/Status" />
+
+            <Switch
+                android:id="@+id/auto_switch"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:minHeight="48dp"
+                android:text="@string/auto_switch"
+                android:textColor="@color/ink"
+                android:textSize="17sp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="@string/auto_hint"
+                android:textColor="@color/muted"
+                android:textSize="14sp" />
+        </LinearLayout>
 
         <TextView
             style="@style/Section"
@@ -193,6 +207,7 @@
             android:textSize="14sp" />
 
         <TextView
+            android:id="@+id/restricted_help"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"

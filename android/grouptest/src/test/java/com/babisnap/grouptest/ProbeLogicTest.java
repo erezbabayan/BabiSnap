@@ -129,7 +129,9 @@ public class ProbeLogicTest {
         report.sendButton = "YES";
         report.sendLabel = "SEND_HE";
         report.autoResult = "NONE";
+        report.variant = "אמא";
         String text = report.format();
+        assertTrue(text.contains("VARIANT): FULL"));
         assertTrue(text.contains("SHORTCUT): NOT_TRIED"));
         assertTrue(text.contains("TITLE_MATCH): UNKNOWN"));
         assertTrue(text.contains("SHORTCUT_ACTIVITY): NONE"));

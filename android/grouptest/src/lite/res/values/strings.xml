@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">BabiSnap בדיקה קלה</string>
+    <string name="screen_sub">בדיקה קלה: בלי נגישות ובלי התראות. הצ׳אט נפתח עם הטקסט, והשליחה ידנית.</string>
+    <string name="recipients_help">קבוצות מהקיצור, ומספרים שמוסיפים כאן. חיפוש, סימון, «בחר הכול» ו«יעד».</string>
+</resources>

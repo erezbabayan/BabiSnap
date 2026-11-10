@@ -1,12 +1,14 @@
 package com.babisnap.grouptest;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.text.Editable;
+import android.text.InputType;
 import android.text.TextWatcher;
 import android.view.View;
 import android.view.ViewGroup;
@@ -14,16 +16,20 @@ import android.widget.BaseAdapter;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
+import android.widget.LinearLayout;
 import android.widget.ListView;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import java.text.Collator;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -53,8 +59,10 @@ public class RecipientsActivity extends Activity {
             @Override public void afterTextChanged(Editable s) { applyFilter(); }
         });
         findViewById(R.id.select_all).setOnClickListener(v -> selectAll());
+        findViewById(R.id.add_number).setOnClickListener(v -> addNumber());
         findViewById(R.id.perm_button).setOnClickListener(v -> askContacts());
-        if (checkSelfPermission(android.Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) {
+        if (!BuildConfig.LITE
+                && checkSelfPermission(android.Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(new String[]{android.Manifest.permission.READ_CONTACTS}, REQ_CONTACTS);
         }
     }
@@ -100,7 +108,8 @@ public class RecipientsActivity extends Activity {
     }
 
     private void load() {
-        boolean granted = checkSelfPermission(android.Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED;
+        boolean granted = !BuildConfig.LITE
+                && checkSelfPermission(android.Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED;
         showPermission(granted);
         bind(store.groups(), Collections.emptyList(), store.contacts());
         if (!granted) return;
@@ -123,8 +132,60 @@ public class RecipientsActivity extends Activity {
     private void showPermission(boolean granted) {
         TextView status = findViewById(R.id.perm_status);
         Button button = findViewById(R.id.perm_button);
+        if (BuildConfig.LITE) {
+            status.setText("בלי גישה לאנשי הקשר. הוסיפו מספר, או קבוצה מכפתור «הוסף קבוצה».");
+            button.setVisibility(View.GONE);
+            return;
+        }
         status.setText(granted ? "✅ הרשאת אנשי קשר" : "❌ אין הרשאת אנשי קשר — קבוצות עדיין מוצגות");
         button.setVisibility(granted ? View.GONE : View.VISIBLE);
+    }
+
+    private void addNumber() {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        int pad = (int) (16 * getResources().getDisplayMetrics().density);
+        box.setPadding(pad, pad, pad, 0);
+        EditText name = field("שם שיוצג בכרטיס");
+        EditText phone = field("מספר טלפון");
+        phone.setInputType(InputType.TYPE_CLASS_PHONE);
+        EditText alias = field(getString(R.string.alias_hint));
+        box.addView(name);
+        box.addView(phone);
+        box.addView(alias);
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle(R.string.add_number_title)
+                .setView(box)
+                .setPositiveButton(R.string.add_number, null)
+                .setNegativeButton(R.string.cancel, null)
+                .create();
+        dialog.setOnShowListener(d -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+            if (saveManual(name, phone, alias)) dialog.dismiss();
+        }));
+        dialog.show();
+    }
+
+    private boolean saveManual(EditText name, EditText phone, EditText alias) {
+        String digits = ProbeLogic.toIlDigits(phone.getText().toString());
+        if (digits == null) {
+            Toast.makeText(this, "המספר לא זוהה. נסו 05… או +972…", Toast.LENGTH_SHORT).show();
+            return false;
+        }
+        String shown = name.getText().toString().trim();
+        if (shown.isEmpty()) shown = "+" + digits;
+        store.saveContact("", digits, shown, alias.getText().toString().trim(), true);
+        ProbeLog.code("MANUAL_NUMBER");
+        Toast.makeText(this, "המספר נוסף. לחצו יעד כדי לשלוח אליו בדיקה.", Toast.LENGTH_SHORT).show();
+        load();
+        return true;
+    }
+
+    private EditText field(String hint) {
+        EditText edit = new EditText(this);
+        edit.setHint(hint);
+        edit.setTextDirection(View.TEXT_DIRECTION_RTL);
+        edit.setSingleLine(true);
+        return edit;
     }
 
     private void bind(List<Store.Group> groups, List<ContactsRead.Person> people, List<Store.ContactSel> saved) {
@@ -132,6 +193,7 @@ public class RecipientsActivity extends Activity {
         Map<String, Store.ContactSel> byId = new HashMap<>();
         for (Store.ContactSel sel : saved) byId.put(sel.id, sel);
         all.clear();
+        Set<String> seen = new HashSet<>();
         for (Store.Group group : groups) {
             Row row = new Row("group", group.id(), group.jid, "", "", group.name,
                     "קבוצה · " + ("notification".equals(group.source) ? "מהתראה" : "מהקיצור"), false);
@@ -151,6 +213,18 @@ public class RecipientsActivity extends Activity {
                 row.checked = sel.checked;
             }
             row.target = id.equals(target);
+            seen.add(id);
+            all.add(row);
+        }
+        for (Store.ContactSel sel : saved) {
+            if (sel.e164.isEmpty() || seen.contains(sel.id)) continue;
+            String jid = ProbeLogic.contactJid(sel.e164);
+            Row row = new Row("contact", sel.id, jid, sel.e164, sel.lookup, sel.name,
+                    "מספר שהוזן · +" + sel.e164, false);
+            row.manual = true;
+            row.alias = sel.alias;
+            row.checked = sel.checked;
+            row.target = sel.id.equals(target);
             all.add(row);
         }
         Collator collator = Collator.getInstance(new Locale("he"));
@@ -209,6 +283,7 @@ public class RecipientsActivity extends Activity {
         String alias = "";
         boolean checked;
         boolean target;
+        boolean manual;
 
         Row(String kind, String id, String jid, String e164, String lookup, String name, String detail, boolean whatsApp) {
             this.kind = kind;
@@ -270,10 +345,15 @@ public class RecipientsActivity extends Activity {
                 notifyDataSetChanged();
                 ProbeLog.code("TARGET_SET");
             });
-            remove.setVisibility("group".equals(row.kind) ? View.VISIBLE : View.GONE);
+            remove.setVisibility("group".equals(row.kind) || row.manual ? View.VISIBLE : View.GONE);
             remove.setOnClickListener(v -> {
-                store.removeGroup(row.jid);
-                ProbeLog.code("GROUP_REMOVED");
+                if ("group".equals(row.kind)) {
+                    store.removeGroup(row.jid);
+                    ProbeLog.code("GROUP_REMOVED");
+                } else {
+                    store.removeContact(row.id);
+                    ProbeLog.code("NUMBER_REMOVED");
+                }
                 load();
             });
             return view;

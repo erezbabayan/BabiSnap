@@ -37,6 +37,11 @@
         android:text="אפשר אנשי קשר"
         android:visibility="gone" />
 
+    <Button
+        android:id="@+id/add_number"
+        style="@style/PrimaryButton"
+        android:text="@string/add_number" />
+
     <EditText
         android:id="@+id/search"
         android:layout_width="match_parent"

@@ -1,11 +1,11 @@
 plugins { id 'com.android.application' }
 
 // Feasibility probe only. Debug signing (the default). No release keystore, no link to :app.
+// lite: no accessibility, no notification listener, no sensitive permissions.
 android {
     namespace = 'com.babisnap.grouptest'
     compileSdk = 35
     defaultConfig {
-        applicationId = 'com.babisnap.grouptest'
         minSdk = 26
         targetSdk = 34
         versionCode = 1
@@ -15,8 +15,29 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+    buildFeatures { buildConfig = true }
     testOptions { unitTests.returnDefaultValues = true }
+    flavorDimensions = ['probe']
+    productFlavors {
+        full {
+            dimension 'probe'
+            applicationId = 'com.babisnap.grouptest'
+            targetSdk = 34
+            versionName = 'k0'
+            buildConfigField 'boolean', 'LITE', 'false'
+        }
+        lite {
+            dimension 'probe'
+            applicationId = 'com.babisnap.grouptest.lite'
+            targetSdk = 35
+            versionName = 'k0-lite'
+            buildConfigField 'boolean', 'LITE', 'true'
+        }
+    }
     buildTypes {
+        debug {
+            minifyEnabled = false
+        }
         release {
             minifyEnabled = false
         }
