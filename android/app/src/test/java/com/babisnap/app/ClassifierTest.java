@@ -121,8 +121,12 @@ public class ClassifierTest {
     @Test public void hebrewExamples() {
         StringBuilder bad = new StringBuilder();
         for (Object[] c : CASES) {
-            Classifier.Kind k = Classifier.classify((String) c[0], (Boolean) c[2]).kind;
-            if (k != c[1]) bad.append(c[0]).append(" => ").append(k).append(" (expected ").append(c[1]).append(")\n");
+            Classifier.Result live = Classifier.classify((String) c[0], (Boolean) c[2]);
+            Classifier.Result off = Classifier.classify((String) c[0], (Boolean) c[2], false);
+            if (live.kind != c[1]) bad.append(c[0]).append(" => ").append(live.kind).append(" (expected ").append(c[1]).append(")\n");
+            if (off.kind != live.kind || !off.stripped.equals(live.stripped))
+                bad.append(c[0]).append(" flag-off diverged\n");
+            if (live.kind == WHATSAPP) bad.append(c[0]).append(" live path returned WHATSAPP\n");
         }
         assertEquals(bad.toString(), "", bad.toString());
     }
@@ -195,5 +199,66 @@ public class ClassifierTest {
         assertEquals("מחר בעשר שמירה", Classifier.classify("יומן מחר בעשר שמירה", true).stripped);
         assertEquals("שיעור פרטי", Classifier.stripConnectorShin("שיעור פרטי"));
         assertEquals("שמירה", Classifier.stripConnectorShin("שמירה"));
+    }
+
+    static final String[] WA_TOKENS = {
+        "וואטסאפ", "WhatsApp", "whatsapp", "WHATSAPP", "ווטסאפ", "בואטסאפ", "בוואטסאפ",
+        "לוואטסאפ", "לווטסאפ", "בווטסאפ", "הוואטסאפ", "מוואטסאפ", "ובוואטסאפ", "ובואטסאפ", "לבואטסאפ",
+        "ובווטסאפ", "הווטסאפ", "מווטסאפ", "ווואטסאפ", "וווטסאפ",
+        "ל-וואטסאפ", "ב-וואטסאפ", "ל-ווטסאפ", "ב-ווטסאפ"
+    };
+
+    @Test public void channelWordIsNotADestinationUntilEnabled() {
+        for (String w : WA_TOKENS) {
+            String phrase = w + " פגישה עם דני מחר בעשר";
+            Classifier.Result live = Classifier.classify(phrase, true);
+            Classifier.Result off = Classifier.classify(phrase, true, false);
+            assertNotEquals(w, WHATSAPP, live.kind);
+            assertEquals(w, live.kind, off.kind);
+            assertEquals(w, live.stripped, off.stripped);
+            assertTrue(w + " => " + live.stripped, live.stripped.contains(w.equals("WhatsApp") || w.equals("whatsapp") || w.equals("WHATSAPP") ? "whatsapp" : w) || live.stripped.toLowerCase(java.util.Locale.US).contains("whatsapp"));
+        }
+        // "לוואטסאפ" stays an ordinary word on the live path (not added to the verb blocklist).
+        assertEquals(Classifier.classify("לוואטסאפ לדני", false).kind, Classifier.classify("לוואטסאפ לדני", false, false).kind);
+        assertNotEquals(WHATSAPP, Classifier.classify("לוואטסאפ לדני", false).kind);
+    }
+
+    @Test public void enabledFlagDoesNotChangePhrasesWithoutChannelWord() {
+        for (Object[] c : CASES) {
+            String text = (String) c[0];
+            boolean time = (Boolean) c[2];
+            Classifier.Result a = Classifier.classify(text, time);
+            Classifier.Result b = Classifier.classify(text, time, true);
+            assertEquals(text, a.kind, b.kind);
+            assertEquals(text, a.stripped, b.stripped);
+        }
+    }
+
+    @Test public void channelWordRoutesToWhatsAppAndLeavesTheMessage() {
+        for (String w : WA_TOKENS) {
+            Classifier.Result c = Classifier.classify(w + " לדני אני מאחר", false, true);
+            assertEquals(w, WHATSAPP, c.kind);
+            assertEquals(w, "לדני אני מאחר", c.stripped);
+            assertFalse(c.stripped.toLowerCase(java.util.Locale.US).contains("whatsapp"));
+            assertFalse(c.stripped.contains("וואטסאפ"));
+            assertFalse(c.stripped.contains("ווטסאפ"));
+            assertFalse(c.stripped.contains("בואטסאפ"));
+            assertFalse(c.stripped.contains("בוואטסאפ"));
+        }
+        assertEquals("פגישה עם דני מחר בעשר", Classifier.classify("וואטסאפ פגישה עם דני מחר בעשר", true, true).stripped);
+        assertEquals("לקנות חלב", Classifier.classify("בוואטסאפ לקנות חלב", false, true).stripped);
+        assertEquals("למשימה לשלוח מייל ליוסי", Classifier.classify("וואטסאפ למשימה לשלוח מייל ליוסי", false, true).stripped);
+        assertEquals("הערה הקוד הוא 1234", Classifier.classify("הערה בוואטסאפ הקוד הוא 1234", false, true).stripped);
+        assertEquals(NOTE, Classifier.classify("הערה בוואטסאפ הקוד הוא 1234", false).kind);
+        assertEquals("אני מאחר", Classifier.classify("אני מאחר וואטסאפ", false, true).stripped);
+        assertEquals("תגיד לדני שאני מאחר", Classifier.classify("תגיד לדני בוואטסאפ שאני מאחר", false, true).stripped);
+        assertEquals("הגעתי", Classifier.classify("וואטסאפ שהגעתי", false, true).stripped);
+        assertEquals("שיעור פסנתר", Classifier.classify("וואטסאפ שיעור פסנתר", false, true).stripped);
+        assertEquals("", Classifier.classify("וואטסאפ", false, true).stripped);
+        assertEquals("לדני", Classifier.classify("וואטסאפ, לדני", false, true).stripped);
+        assertNotEquals(WHATSAPP, Classifier.classify("וואטסאפון לדני", false, true).kind);
+        assertNotEquals(WHATSAPP, Classifier.classify("whatsappbusiness today", false, true).kind);
+        // one destination: the kind is WhatsApp, not also a meeting
+        assertEquals(WHATSAPP, Classifier.classify("יומן וואטסאפ מחר בעשר רופא", true, true).kind);
     }
 }

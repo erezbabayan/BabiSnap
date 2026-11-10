@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.content.ActivityNotFoundException;
 import android.content.Context;
 import android.content.Intent;
+import android.net.Uri;
 import android.os.Bundle;
 import android.speech.RecognizerIntent;
 import android.widget.Toast;
@@ -22,13 +23,19 @@ import org.json.JSONObject;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Widget/launcher target: speech (he-IL) -> parse on device -> (optional confirm) -> durable calendar / BabiTk queue. */
+/** Widget/launcher target: speech (he-IL) -> parse on device -> (optional confirm) -> durable calendar / BabiTk queue.
+ *  WhatsApp is a separate opt-in destination (setting off by default) and never writes those queues. */
 public class VoiceActivity extends Activity {
-    static final int REQ_SPEECH = 1, REQ_AUTH = 2, REQ_MIC = 3, REQ_CONTACTS = 4;
+    static final int REQ_SPEECH = 1, REQ_AUTH = 2, REQ_MIC = 3, REQ_CONTACTS = 4, REQ_WA = WhatsAppShare.REQ;
     private JSONObject parsed; private String spoken; private java.util.List<String> spokenTags = new java.util.ArrayList<>();
 
     private SpeechRecognizer rec; private View logo, halo; private TextView status, partial;
     private int listenRetries;
+    private WhatsAppCapture waAudio;
+    private boolean waPending, waHandedOff, waLeft, waCaptureGaveUp;
+    private String waText = "";
+    private Uri waUri;
+    private android.animation.ObjectAnimator waAnim;
 
     @Override protected void onCreate(Bundle b) {
         super.onCreate(b);
@@ -45,7 +52,9 @@ public class VoiceActivity extends Activity {
         super.onNewIntent(intent);
         setIntent(intent);
         // Back-to-back from MainActivity/widget while Undo (or listen) is open: commit then re-listen.
-        if ((pendingBody != null || pendingMeeting) && !committed) commitPending();
+        // A WhatsApp card is not a queue item — leaving it cancels and deletes, it does not save.
+        if (waPending && !waHandedOff) cancelWhatsApp(null);
+        else if ((pendingBody != null || pendingMeeting) && !committed) commitPending();
         else if (pickerMode && !cardClosed && !awaitingConsent) finishInvites();
         restartListening();
     }
@@ -53,6 +62,7 @@ public class VoiceActivity extends Activity {
     private void beginListenUi() {
         if (!SpeechRecognizer.isRecognitionAvailable(this)) { systemDialog(); return; }
         try { requestWindowFeature(Window.FEATURE_NO_TITLE); } catch (Exception ignored) {}
+        WhatsAppCapture.sweep(getCacheDir());
         setContentView(R.layout.activity_listen);
         getWindow().setBackgroundDrawableResource(android.R.color.transparent);
         logo = findViewById(R.id.logo); halo = findViewById(R.id.halo);
@@ -65,14 +75,16 @@ public class VoiceActivity extends Activity {
 
     /** Reset session state and open the mic again (after onNewIntent commit). */
     private void restartListening() {
-        ui.removeCallbacks(commit); ui.removeCallbacks(closeCard); ui.removeCallbacks(pickerTimeout);
+        ui.removeCallbacks(commit); ui.removeCallbacks(closeCard); ui.removeCallbacks(pickerTimeout); ui.removeCallbacks(waExpire);
         ended = true; tick.removeCallbacks(ticker); stopRec();
+        if (waHandedOff) { waAudio = null; waUri = null; } else discardWa();
+        waPending = false; waHandedOff = false; waLeft = false; waText = "";
         pendingBody = null; pendingId = null; pendingMeeting = false; committed = false;
         cardClosed = false; awaitingConsent = false; pickerMode = false;
         invitees.clear(); inviteQueries = new ArrayList<>();
         draftId = null; parsed = null; spoken = null; spokenTags = new ArrayList<>();
         jobClientId = null;
-        listenRetries = 0;
+        listenRetries = 0; waCaptureGaveUp = false;
         beginListenUi();
     }
 
@@ -96,7 +108,8 @@ public class VoiceActivity extends Activity {
             .putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             .putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 4000L)
             .putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 4000L)
-            .putExtra(RecognizerIntent.EXTRA_PROMPT, "פגישה, משימה או הערה?");
+            .putExtra(RecognizerIntent.EXTRA_PROMPT, Core.whatsAppEnabled(this)
+                ? "פגישה, משימה, הערה או וואטסאפ?" : "פגישה, משימה או הערה?");
     }
 
     private void systemDialog() {
@@ -132,17 +145,18 @@ public class VoiceActivity extends Activity {
         ended = true; tick.removeCallbacks(ticker);
         if (rec != null) { try { rec.stopListening(); } catch (Exception ignored) {} }
         stopRec();
+        stopWaCapture();
         if (text != null && !text.isEmpty()) { partial.setText(text); handleSpoken(text); }
     }
 
     private void listen(boolean isRetry) {
-        if (!isRetry) listenRetries = 0;
+        if (!isRetry) { listenRetries = 0; waCaptureGaveUp = false; }
         silence = new SilenceDetector(android.os.SystemClock.elapsedRealtime()); ended = false;
         tick.removeCallbacks(ticker); tick.postDelayed(ticker, 250);
         stopRec();
         rec = SpeechRecognizer.createSpeechRecognizer(this);
         rec.setRecognitionListener(new RecognitionListener() {
-            public void onReadyForSpeech(Bundle p) { status.setText("מקשיב… (הקש לסיום)"); }
+            public void onReadyForSpeech(Bundle p) { status.setText("מקשיב… (הקש לסיום)"); startWaCaptureIfWanted(); }
             public void onBeginningOfSpeech() {}
             public void onRmsChanged(float db) { pulse(db); }
             public void onBufferReceived(byte[] buf) {}
@@ -151,6 +165,18 @@ public class VoiceActivity extends Activity {
                 if (ended) return;
                 String t = silence.lastText();
                 if (!t.isEmpty()) { endRecording(t); return; }
+                // A second recorder can take the mic from the recognizer. Drop it and listen once more.
+                if (waAudio != null && waAudio.isRecording() && !waCaptureGaveUp) {
+                    waCaptureGaveUp = true;
+                    discardWa();
+                    ended = true; tick.removeCallbacks(ticker); stopRec();
+                    tick.postDelayed(() -> {
+                        if (isFinishing() || cardClosed) return;
+                        status.setText("מנסה שוב…");
+                        listen(true);
+                    }, 350L);
+                    return;
+                }
                 if ((err == SpeechRecognizer.ERROR_RECOGNIZER_BUSY || err == SpeechRecognizer.ERROR_CLIENT)
                         && listenRetries < 2) {
                     listenRetries++;
@@ -185,13 +211,20 @@ public class VoiceActivity extends Activity {
     }
 
     private void stopRec() { if (rec != null) { try { rec.destroy(); } catch (Exception ignored) {} rec = null; } }
-    @Override protected void onDestroy() { ended = true; tick.removeCallbacks(ticker); stopRec(); super.onDestroy(); }
+    @Override protected void onDestroy() {
+        ended = true; tick.removeCallbacks(ticker); ui.removeCallbacks(waExpire); stopRec();
+        if (!waHandedOff) discardWa();
+        super.onDestroy();
+    }
 
     private void handleSpoken(String text) {
         Tags.Result tr = Tags.extract(text, Tags.names(this));
         spoken = tr.text; spokenTags = tr.tags;
         try { parsed = Core.parse(this, spoken); } catch (Exception e) { done("שגיאת פענוח: " + e.getMessage()); return; }
-        Classifier.Result c = Classifier.classify(spoken, !parsed.optBoolean("timeDefaulted", true) || parsed.optBoolean("allDay", false));
+        boolean explicitTime = !parsed.optBoolean("timeDefaulted", true) || parsed.optBoolean("allDay", false);
+        Classifier.Result c = Classifier.classify(spoken, explicitTime, Core.whatsAppEnabled(this));
+        if (c.kind == Classifier.Kind.WHATSAPP) { showWhatsApp(c); return; }
+        discardWa();
         if (c.kind != Classifier.Kind.MEETING) { showSaved(c); return; }
         // Re-parse the text after destination/command words were stripped, so "יומן" / "לקלנדר" never stay in the title.
         try {
@@ -222,6 +255,10 @@ public class VoiceActivity extends Activity {
     }
 
     @Override protected void onActivityResult(int req, int res, Intent data) {
+        if (req == REQ_WA) {
+            if (waLeft) finishWaShare();
+            return;
+        }
         if (req == REQ_SPEECH) {
             ArrayList<String> r = data == null ? null : data.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS);
             if (res != RESULT_OK || r == null || r.isEmpty()) { done(null); return; }
@@ -373,6 +410,7 @@ public class VoiceActivity extends Activity {
     private final Runnable commit = this::commitPending;
 
     private void showSaved(Classifier.Result c) {
+        if (c.kind == Classifier.Kind.WHATSAPP) { showWhatsApp(c); return; }
         JSONObject p = parsed;
         try { if (!c.stripped.isEmpty() && !c.stripped.equals(Classifier.normalize(spoken))) p = Core.parse(this, c.stripped, true); }
         catch (Exception ignored) {}
@@ -414,14 +452,146 @@ public class VoiceActivity extends Activity {
     }
 
     @Override protected void onStop() {
+        if (waHandedOff) waLeft = true;
+        else if (waPending) cancelWhatsApp("בוטל – לא נשלח לוואטסאפ");
         if ((pendingBody != null || pendingMeeting) && !committed) commitPending();
         else if (pickerMode && !cardClosed && !awaitingConsent) finishInvites();
         super.onStop();
     }
 
+    @Override protected void onResume() {
+        super.onResume();
+        if (waHandedOff && waLeft) finishWaShare();
+    }
+
     private void done(String msg) {
-        cardClosed = true; ui.removeCallbacks(closeCard); ui.removeCallbacks(commit); ui.removeCallbacks(pickerTimeout);
+        cardClosed = true; ui.removeCallbacks(closeCard); ui.removeCallbacks(commit); ui.removeCallbacks(pickerTimeout); ui.removeCallbacks(waExpire);
+        if (waAnim != null) waAnim.cancel();
+        if (!waHandedOff) discardWa();
         if (msg != null) Toast.makeText(getApplicationContext(), msg, Toast.LENGTH_LONG).show();
         if (!isFinishing()) finish();
+    }
+
+    /** Record only while the setting is on and the mode can send a voice message. Failure leaves transcript-only. */
+    private void startWaCaptureIfWanted() {
+        if (waCaptureGaveUp || waAudio != null) return;
+        if (!Core.whatsAppEnabled(this)) return;
+        if (!WhatsAppLogic.wantsVoice(Core.whatsAppMode(this))) return;
+        WhatsAppCapture cap = new WhatsAppCapture();
+        if (cap.start(this)) waAudio = cap;
+    }
+
+    private void stopWaCapture() { if (waAudio != null) waAudio.stop(); }
+
+    /** Release the temp file. Does not log the path or the transcript. */
+    private void discardWa() {
+        if (waUri != null) {
+            try { revokeUriPermission(waUri, Intent.FLAG_GRANT_READ_URI_PERMISSION); } catch (Exception ignored) {}
+            waUri = null;
+        }
+        if (waAudio != null) { waAudio.delete(); waAudio = null; }
+    }
+
+    private final Runnable waExpire = () -> cancelWhatsApp("בוטל – לא נשלח לוואטסאפ");
+
+    private void cancelWhatsApp(String toast) {
+        if (waHandedOff) return;
+        waPending = false;
+        ui.removeCallbacks(waExpire);
+        if (waAnim != null) waAnim.cancel();
+        discardWa();
+        if (toast != null) done(toast);
+    }
+
+    private void showWhatsApp(Classifier.Result c) {
+        stopWaCapture();
+        waText = c.stripped == null ? "" : c.stripped.trim();
+        waPending = true; waHandedOff = false; waLeft = false;
+        pendingBody = null; pendingMeeting = false; committed = false;
+        WhatsAppLogic.Mode mode = Core.whatsAppMode(this);
+        boolean hasVoice = waAudio != null && waAudio.ready();
+        boolean hasText = !waText.isEmpty();
+        WhatsAppLogic.Buttons buttons = WhatsAppLogic.buttons(mode, hasVoice, hasText);
+        setContentView(R.layout.card_whatsapp);
+        getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+        ((TextView) findViewById(R.id.summary)).setText(WhatsAppLogic.preview(waText));
+        if (WhatsAppLogic.wantsVoice(mode) && !hasVoice && buttons.transcript)
+            ((TextView) findViewById(R.id.wa_hint)).setText("לא נשמרה הקלטה. אפשר לשלוח את התמלול, או לבטל.");
+        else if (!buttons.voice && !buttons.transcript)
+            ((TextView) findViewById(R.id.wa_hint)).setText("אין מה לשלוח. ההודעה תימחק.");
+        View voiceBtn = findViewById(R.id.send_voice);
+        View textBtn = findViewById(R.id.send_text);
+        voiceBtn.setVisibility(buttons.voice ? View.VISIBLE : View.GONE);
+        textBtn.setVisibility(buttons.transcript ? View.VISIBLE : View.GONE);
+        voiceBtn.setOnClickListener(v -> sendWhatsApp(true));
+        textBtn.setOnClickListener(v -> sendWhatsApp(false));
+        findViewById(R.id.cancel_wa).setOnClickListener(v -> cancelWhatsApp("בוטל – לא נשלח לוואטסאפ"));
+        armWaTimer();
+    }
+
+    private void armWaTimer() {
+        ui.removeCallbacks(waExpire);
+        if (waAnim != null) waAnim.cancel();
+        long ms = WhatsAppLogic.confirmMs(waText);
+        android.widget.ProgressBar bar = findViewById(R.id.countdown);
+        if (bar != null) {
+            bar.setMax((int) ms);
+            bar.setProgress((int) ms);
+            waAnim = android.animation.ObjectAnimator.ofInt(bar, "progress", (int) ms, 0).setDuration(ms);
+            waAnim.start();
+        }
+        ui.postDelayed(waExpire, ms);
+    }
+
+    /** One payload: voice or transcript. The other file/text is not attached. */
+    private void sendWhatsApp(boolean voice) {
+        if (!waPending || waHandedOff) return;
+        ui.removeCallbacks(waExpire);
+        if (waAnim != null) waAnim.cancel();
+        String pkg = WhatsAppShare.resolvePackage(this);
+        if (pkg == null) {
+            Toast.makeText(this, "וואטסאפ לא מותקן במכשיר", Toast.LENGTH_LONG).show();
+            armWaTimer();
+            return;
+        }
+        Intent intent;
+        if (voice) {
+            if (waAudio == null || !waAudio.ready()) {
+                Toast.makeText(this, "אין הקלטה לשליחה", Toast.LENGTH_SHORT).show();
+                armWaTimer();
+                return;
+            }
+            intent = WhatsAppShare.voice(this, pkg, waAudio.file(), waAudio.mime());
+            waUri = intent.getClipData() != null && intent.getClipData().getItemCount() > 0
+                ? intent.getClipData().getItemAt(0).getUri() : null;
+            if (waUri != null) grantUriPermission(pkg, waUri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        } else {
+            if (waText.isEmpty()) {
+                Toast.makeText(this, "אין תמלול לשליחה", Toast.LENGTH_SHORT).show();
+                armWaTimer();
+                return;
+            }
+            intent = WhatsAppShare.text(pkg, waText);
+        }
+        // Set before startActivity: onStop can run inside that call, and must not cancel the share.
+        waHandedOff = true;
+        waPending = false;
+        try {
+            startActivityForResult(intent, REQ_WA);
+            if (!voice) discardWa();
+        } catch (ActivityNotFoundException e) {
+            waHandedOff = false;
+            waPending = true;
+            Toast.makeText(this, "וואטסאפ לא מותקן במכשיר", Toast.LENGTH_LONG).show();
+            armWaTimer();
+        }
+    }
+
+    private void finishWaShare() {
+        waHandedOff = false;
+        waPending = false;
+        waLeft = false;
+        discardWa();
+        done(null);
     }
 }
