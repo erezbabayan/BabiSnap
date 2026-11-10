@@ -108,4 +108,116 @@ public class RoutingTest {
         assertEquals("2026-10-24 20:00", o.parsed.optString("startStr"));
         assertFalse(o.parsed.optBoolean("allDay"));
     }
+
+    @Test public void digitClockMinutesStayOutOfTitle() throws Exception {
+        HebrewParser p = parser();
+        Out o = run(p, "קבע ללכת לקניות היום ב-17:00");
+        assertEquals(MEETING, o.kind);
+        assertEquals("ללכת לקניות", o.title);
+        assertEquals("2026-10-22 17:00", o.parsed.optString("startStr"));
+
+        o = run(p, "תרשום ביומן ללכת לקניות היום ב-17:00");
+        assertEquals(MEETING, o.kind);
+        assertEquals("ללכת לקניות", o.title);
+        assertEquals("2026-10-22 17:00", o.parsed.optString("startStr"));
+
+        o = run(p, "יומן היום ב17:00 ללכת לקניות");
+        assertEquals(MEETING, o.kind);
+        assertEquals("ללכת לקניות", o.title);
+        assertEquals("2026-10-22 17:00", o.parsed.optString("startStr"));
+
+        o = run(p, "יומן ללכת לקניות היום ב17 00");
+        assertEquals(MEETING, o.kind);
+        assertEquals("ללכת לקניות", o.title);
+        assertEquals("2026-10-22 17:00", o.parsed.optString("startStr"));
+
+        o = run(p, "יומן ללכת לקניות בחמש 00");
+        assertEquals(MEETING, o.kind);
+        assertEquals("ללכת לקניות", o.title);
+        assertEquals("2026-10-22 17:00", o.parsed.optString("startStr"));
+
+        o = run(p, "יומן ללכת לקניות היום ב-17 30");
+        assertEquals(MEETING, o.kind);
+        assertEquals("ללכת לקניות", o.title);
+        assertEquals("2026-10-22 17:30", o.parsed.optString("startStr"));
+
+        o = run(p, "יומן ללכת לקניות היום ב-17.00");
+        assertEquals(MEETING, o.kind);
+        assertEquals("ללכת לקניות", o.title);
+        assertEquals("2026-10-22 17:00", o.parsed.optString("startStr"));
+
+        o = run(p, "יומן ללכת לקניות היום ב־17:00");
+        assertEquals(MEETING, o.kind);
+        assertEquals("ללכת לקניות", o.title);
+        assertEquals("2026-10-22 17:00", o.parsed.optString("startStr"));
+
+        o = run(p, "יומן ללכת לקניות היום ב–17:00");
+        assertEquals(MEETING, o.kind);
+        assertEquals("ללכת לקניות", o.title);
+        assertEquals("2026-10-22 17:00", o.parsed.optString("startStr"));
+
+        o = run(p, "יומן ללכת לקניות היום בשעה שבע עשרה");
+        assertEquals(MEETING, o.kind);
+        assertEquals("ללכת לקניות", o.title);
+        assertEquals("2026-10-22 17:00", o.parsed.optString("startStr"));
+
+        o = run(p, "יומן ללכת לקניות ב-17.00");
+        assertEquals(MEETING, o.kind);
+        assertEquals("ללכת לקניות", o.title);
+        assertEquals("2026-10-22 17:00", o.parsed.optString("startStr"));
+    }
+
+    @Test public void leftoverShinAndEveningContext() throws Exception {
+        HebrewParser p = parser();
+        Out o = run(p, "תרשום ביומן שהרכב צריך טסט");
+        assertEquals(MEETING, o.kind);
+        assertEquals("הרכב צריך טסט", o.title);
+
+        o = run(p, "תרשום ביומן שמחר בעשר יש רופא שיניים");
+        assertEquals(MEETING, o.kind);
+        assertEquals("רופא שיניים", o.title);
+        assertEquals("2026-10-23 10:00", o.parsed.optString("startStr"));
+
+        o = run(p, "תרשום ביומן שיש לי פגישה עם אורי מחר בעשר");
+        assertEquals(MEETING, o.kind);
+        assertEquals("פגישה עם אורי", o.title);
+        assertEquals("2026-10-23 10:00", o.parsed.optString("startStr"));
+
+        o = run(p, "יומן מחר בעשר שיעור פרטי");
+        assertEquals(MEETING, o.kind);
+        assertEquals("שיעור פרטי", o.title);
+
+        o = run(p, "קבע שיחה עם דני מחר בעשר");
+        assertEquals(MEETING, o.kind);
+        assertEquals("שיחה עם דני", o.title);
+
+        o = run(p, "יומן מחר בעשר שמירה");
+        assertEquals(MEETING, o.kind);
+        assertEquals("שמירה", o.title);
+
+        o = run(p, "ארוחת ערב מחר בשמונה");
+        assertEquals(MEETING, o.kind);
+        assertEquals("ארוחת ערב", o.title);
+        assertEquals("2026-10-23 20:00", o.parsed.optString("startStr"));
+
+        o = run(p, "ארוחת ערב ב-8");
+        assertEquals("ארוחת ערב", o.title);
+        assertEquals("2026-10-22 20:00", o.parsed.optString("startStr"));
+
+        o = run(p, "ארוחת צהריים בשתיים");
+        assertEquals("ארוחת צהריים", o.title);
+        assertEquals("2026-10-22 14:00", o.parsed.optString("startStr"));
+
+        o = run(p, "מסיבה בתשע");
+        assertEquals("מסיבה", o.title);
+        assertEquals("2026-10-22 21:00", o.parsed.optString("startStr"));
+
+        o = run(p, "ארוחת בוקר בשמונה");
+        assertEquals("ארוחת בוקר", o.title);
+        assertEquals("2026-10-22 08:00", o.parsed.optString("startStr"));
+
+        o = run(p, "ארוחת ערב ב-08:00");
+        assertEquals("ארוחת ערב", o.title);
+        assertEquals("2026-10-22 08:00", o.parsed.optString("startStr"));
+    }
 }

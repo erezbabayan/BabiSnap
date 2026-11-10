@@ -54,7 +54,36 @@ public final class Classifier {
     static final Pattern COMMAND = Pattern.compile("^(?:(?:תוסיף|תוסיפי|הוסף|הוסיפי|שים|תשים|תשימי|תכניס|תכניסי|הכנס|תיצור|צור)(?:\\s+(?:לי|לנו))?\\s+|(?:תרשום|תרשמי|רשום)\\s+(?:לי|לנו)\\s+|(?:תקבע|תקבעי)\\s+(?:לי|לנו)\\s+(?=פגישה|משימה|הערה|תזכורת)|(?:לי|לנו)\\s+)+");
 
     public static String normalize(String s) {
-        return s == null ? "" : s.replaceAll("[\\u0591-\\u05C7]", "").replaceAll("[.,!?;:\"'״׳]", " ").replaceAll("\\s+", " ").trim();
+        if (s == null) return "";
+        // Maqaf (U+05BE) and en/em dash after ב/ל should look like ב- to a later re-parse.
+        String t = s.replaceAll("([א-ת])[\u05BE\u2013\u2014]([א-ת])", "$1 $2")
+                .replace('\u05BE', '-')
+                .replaceAll("([בל])[\u2013\u2014]", "$1-");
+        // Keep clock times like 17:00 so a later calendar re-parse still sees the colon.
+        t = t.replaceAll("(\\d{1,2}):(\\d{2})", "$1\u0000$2");
+        t = t.replaceAll("[\\u0591-\\u05C7]", "").replaceAll("[.,!?;:\"'״׳]", " ").replaceAll("\\s+", " ").trim();
+        return t.replace('\u0000', ':');
+    }
+
+    /** Words that legitimately start with ש; a leftover complementizer ש after a command/route must not eat them. */
+    static final Set<String> SHIN_KEEP = new HashSet<>(Arrays.asList(
+        "שיעור", "שיעורים", "שיעורי", "שיחת", "שיחה", "שיחות", "שמירה", "שמירת", "שמירות", "שישי", "שבת", "שעה", "שעות", "שעתיים", "שני", "שניה", "שנייה", "שנים", "שנה", "שבוע", "שבועות", "שירות", "שירותים", "שיר", "שירים", "שירה", "שחר", "שחרית", "שחייה", "שחיה", "שחמט", "שוק", "שער", "שערים", "שלום", "שמחה", "שבע", "שמונה", "שש", "שלוש", "שתיים", "שתים", "שותף", "שותפות", "שיט", "שיניים", "שינה", "שינת", "שקד", "שלומי"));
+
+    /** Drop a connector ש left after a stripped command/route ("תרשום ביומן שהרכב" → "הרכב"), not "שיעור"/"שיחה"/"שמירה". */
+    public static String stripConnectorShin(String s) {
+        if (s == null) return "";
+        s = s.replaceAll("^\\s+", "");
+        if (s.equals("ש") || s.startsWith("ש ")) return s.substring(1).trim();
+        if (s.length() > 1 && s.charAt(0) == 'ש') {
+            int cut = s.length();
+            for (int i = 1; i < s.length(); i++) {
+                char c = s.charAt(i);
+                if (c == ' ' || c == ',' || c == '.' || c == '!' || c == '?') { cut = i; break; }
+            }
+            String tok = s.substring(0, cut);
+            if (!SHIN_KEEP.contains(tok)) return s.substring(1).trim();
+        }
+        return s;
     }
 
     /** @param explicitTime true when the user said a time of day (parser timeDefaulted == false). */
@@ -65,16 +94,20 @@ public final class Classifier {
         if ((s = strip(t, EXPLICIT_NOTE)) != null) return new Result(Kind.NOTE, s);
         if (CALENDAR.matcher(t).find()) {
             String c = CALENDAR.matcher(t).replaceAll(" ").replaceAll("\\s+", " ").trim();
-            return new Result(Kind.MEETING, c.isEmpty() ? t : c);
+            if (c.isEmpty()) return new Result(Kind.MEETING, t);
+            // leftover command word + connector ש ("תרשום שהרכב")
+            String afterCmd = strip(c, new String[]{"תוסיף","תוסיפי","הוסף","הוסיפי","תקבע","תקבעי","קבע","קבעי","תרשום","תרשמי","רשום","רשמי","שים","תשים","תשימי","תכניס","תכניסי","הכנס","תיצור","תיצרי","צור","צרי","תזמן","תזמני","תזכיר לי","תזכירי לי"});
+            if (afterCmd != null) c = afterCmd;
+            return new Result(Kind.MEETING, stripConnectorShin(c));
         }
-        if ((s = strip(t, MEETING_PREFIX)) != null) return new Result(Kind.MEETING, s);
+        if ((s = strip(t, MEETING_PREFIX)) != null) return new Result(Kind.MEETING, stripConnectorShin(s));
         if ((s = strip(t, TASK_PREFIX)) != null) {
             // "תזכיר לי פגישה עם אורי" — meeting cue wins over the reminder prefix.
+            s = stripConnectorShin(s);
             if (meetingCue(s)) return new Result(Kind.MEETING, s);
             return new Result(Kind.TASK, s);
         }
-        if ((s = strip(t, NOTE_PREFIX)) != null) return new Result(Kind.NOTE, s);
-
+        if ((s = strip(t, NOTE_PREFIX)) != null) return new Result(Kind.NOTE, stripConnectorShin(s));
         if (INVITE_TO_MEETING.matcher(t).find()) return new Result(Kind.MEETING, t);
         if (STARTS_MEETING.matcher(t).find()) return new Result(Kind.MEETING, t);
         if (eventAfterTime(t)) return new Result(Kind.MEETING, t);
