@@ -1,0 +1,282 @@
+package com.babisnap.grouptest;
+
+import android.app.Activity;
+import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.net.Uri;
+import android.os.Bundle;
+import android.provider.Settings;
+import android.text.Editable;
+import android.text.TextWatcher;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.BaseAdapter;
+import android.widget.Button;
+import android.widget.CheckBox;
+import android.widget.EditText;
+import android.widget.ListView;
+import android.widget.TextView;
+
+import java.text.Collator;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+/** One list: phone contacts plus captured groups. Selection stays on the device. */
+public class RecipientsActivity extends Activity {
+    private static final int REQ_CONTACTS = 7;
+
+    private final ExecutorService executor = Executors.newSingleThreadExecutor();
+    private final List<Row> all = new ArrayList<>();
+    private final List<Row> shown = new ArrayList<>();
+    private Store store;
+    private EditText search;
+    private Adapter adapter;
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_recipients);
+        store = Store.get(this);
+        search = findViewById(R.id.search);
+        ListView list = findViewById(R.id.list);
+        adapter = new Adapter();
+        list.setAdapter(adapter);
+        search.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {}
+            @Override public void afterTextChanged(Editable s) { applyFilter(); }
+        });
+        findViewById(R.id.select_all).setOnClickListener(v -> selectAll());
+        findViewById(R.id.perm_button).setOnClickListener(v -> askContacts());
+        if (checkSelfPermission(android.Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{android.Manifest.permission.READ_CONTACTS}, REQ_CONTACTS);
+        }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        store = Store.get(this);
+        UiHook.set(() -> runOnUiThread(this::load));
+        load();
+    }
+
+    @Override
+    protected void onPause() {
+        UiHook.set(null);
+        super.onPause();
+    }
+
+    @Override
+    protected void onDestroy() {
+        executor.shutdownNow();
+        super.onDestroy();
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int request, String[] permissions, int[] results) {
+        super.onRequestPermissionsResult(request, permissions, results);
+        if (request == REQ_CONTACTS) load();
+    }
+
+    private void askContacts() {
+        if (checkSelfPermission(android.Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED) {
+            load();
+            return;
+        }
+        Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+        intent.setData(Uri.parse("package:" + getPackageName()));
+        try {
+            startActivity(intent);
+        } catch (RuntimeException e) {
+            ProbeLog.code("SETTINGS_MISSING");
+        }
+    }
+
+    private void load() {
+        boolean granted = checkSelfPermission(android.Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED;
+        showPermission(granted);
+        bind(store.groups(), Collections.emptyList(), store.contacts());
+        if (!granted) return;
+        executor.execute(() -> {
+            List<ContactsRead.Person> people;
+            try {
+                people = ContactsRead.load(this);
+            } catch (RuntimeException e) {
+                ProbeLog.code("CONTACTS_FAIL");
+                people = Collections.emptyList();
+            }
+            List<ContactsRead.Person> ready = people;
+            runOnUiThread(() -> {
+                if (isFinishing()) return;
+                bind(store.groups(), ready, store.contacts());
+            });
+        });
+    }
+
+    private void showPermission(boolean granted) {
+        TextView status = findViewById(R.id.perm_status);
+        Button button = findViewById(R.id.perm_button);
+        status.setText(granted ? "✅ הרשאת אנשי קשר" : "❌ אין הרשאת אנשי קשר — קבוצות עדיין מוצגות");
+        button.setVisibility(granted ? View.GONE : View.VISIBLE);
+    }
+
+    private void bind(List<Store.Group> groups, List<ContactsRead.Person> people, List<Store.ContactSel> saved) {
+        String target = store.targetId();
+        Map<String, Store.ContactSel> byId = new HashMap<>();
+        for (Store.ContactSel sel : saved) byId.put(sel.id, sel);
+        all.clear();
+        for (Store.Group group : groups) {
+            Row row = new Row("group", group.id(), group.jid, "", "", group.name,
+                    "קבוצה · " + ("notification".equals(group.source) ? "מהתראה" : "מהקיצור"), false);
+            row.alias = group.alias;
+            row.checked = group.checked;
+            row.target = group.id().equals(target);
+            all.add(row);
+        }
+        for (ContactsRead.Person person : people) {
+            String id = Store.contactId(person.lookup, person.e164);
+            Store.ContactSel sel = byId.get(id);
+            String detail = person.detail + " · +" + person.e164 + (person.whatsApp ? " · רמז WhatsApp" : "");
+            Row row = new Row("contact", id, ProbeLogic.contactJid(person.e164), person.e164, person.lookup,
+                    person.name, detail, person.whatsApp);
+            if (sel != null) {
+                row.alias = sel.alias;
+                row.checked = sel.checked;
+            }
+            row.target = id.equals(target);
+            all.add(row);
+        }
+        Collator collator = Collator.getInstance(new Locale("he"));
+        Collections.sort(all, (a, b) -> {
+            if (!a.kind.equals(b.kind)) return "group".equals(a.kind) ? -1 : 1;
+            if (a.whatsApp != b.whatsApp) return a.whatsApp ? -1 : 1;
+            return collator.compare(a.name == null ? "" : a.name, b.name == null ? "" : b.name);
+        });
+        applyFilter();
+    }
+
+    private void applyFilter() {
+        String query = search.getText().toString().trim().toLowerCase(Locale.ROOT);
+        shown.clear();
+        for (Row row : all) {
+            if (query.isEmpty() || contains(row.name, query) || contains(row.alias, query) || contains(row.detail, query)) {
+                shown.add(row);
+            }
+        }
+        adapter.notifyDataSetChanged();
+        TextView count = findViewById(R.id.list_count);
+        count.setText(shown.isEmpty() ? "אין פריטים להצגה" : "מוצגים " + shown.size());
+    }
+
+    private void selectAll() {
+        if (shown.isEmpty()) return;
+        boolean allOn = true;
+        for (Row row : shown) if (!row.checked) allOn = false;
+        boolean next = !allOn;
+        for (Row row : shown) {
+            row.checked = next;
+            persist(row);
+        }
+        adapter.notifyDataSetChanged();
+        ProbeLog.code(next ? "SELECT_ALL" : "SELECT_NONE");
+    }
+
+    private void persist(Row row) {
+        if ("group".equals(row.kind)) store.saveGroup(row.jid, row.alias, row.checked);
+        else store.saveContact(row.lookup, row.e164, row.name, row.alias, row.checked);
+    }
+
+    private static boolean contains(String hay, String query) {
+        return hay != null && hay.toLowerCase(Locale.ROOT).contains(query);
+    }
+
+    private static final class Row {
+        final String kind;
+        final String id;
+        final String jid;
+        final String e164;
+        final String lookup;
+        final String name;
+        final String detail;
+        final boolean whatsApp;
+        String alias = "";
+        boolean checked;
+        boolean target;
+
+        Row(String kind, String id, String jid, String e164, String lookup, String name, String detail, boolean whatsApp) {
+            this.kind = kind;
+            this.id = id;
+            this.jid = jid == null ? "" : jid;
+            this.e164 = e164 == null ? "" : e164;
+            this.lookup = lookup == null ? "" : lookup;
+            this.name = name == null ? "" : name;
+            this.detail = detail == null ? "" : detail;
+            this.whatsApp = whatsApp;
+        }
+    }
+
+    private final class Adapter extends BaseAdapter {
+        @Override public int getCount() { return shown.size(); }
+        @Override public Object getItem(int position) { return shown.get(position); }
+        @Override public long getItemId(int position) { return position; }
+
+        @Override
+        public View getView(int position, View convert, ViewGroup parent) {
+            View view = convert;
+            if (view == null) view = getLayoutInflater().inflate(R.layout.row_recipient, parent, false);
+            Row row = shown.get(position);
+            TextView name = view.findViewById(R.id.row_name);
+            TextView detail = view.findViewById(R.id.row_detail);
+            CheckBox check = view.findViewById(R.id.row_check);
+            EditText alias = view.findViewById(R.id.row_alias);
+            Button target = view.findViewById(R.id.row_target);
+            Button remove = view.findViewById(R.id.row_remove);
+            String shownName = row.name.isEmpty() ? ("group".equals(row.kind) ? "קבוצה" : "איש קשר") : row.name;
+            name.setText(shownName);
+            detail.setText(row.detail);
+            view.setBackgroundColor(row.target ? 0xFFE4F2EA : 0xFFFFFFFF);
+            check.setOnCheckedChangeListener(null);
+            check.setChecked(row.checked);
+            check.setOnCheckedChangeListener((button, on) -> {
+                row.checked = on;
+                persist(row);
+            });
+            Object old = alias.getTag();
+            if (old instanceof TextWatcher) alias.removeTextChangedListener((TextWatcher) old);
+            alias.setText(row.alias);
+            TextWatcher watcher = new TextWatcher() {
+                @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+                @Override public void onTextChanged(CharSequence s, int start, int before, int count) {}
+                @Override public void afterTextChanged(Editable s) {
+                    row.alias = s.toString();
+                    persist(row);
+                }
+            };
+            alias.addTextChangedListener(watcher);
+            alias.setTag(watcher);
+            target.setText(row.target ? R.string.target_on : R.string.make_target);
+            target.setOnClickListener(v -> {
+                store.setTarget(row.id);
+                for (Row other : all) other.target = other.id.equals(row.id);
+                row.target = true;
+                persist(row);
+                notifyDataSetChanged();
+                ProbeLog.code("TARGET_SET");
+            });
+            remove.setVisibility("group".equals(row.kind) ? View.VISIBLE : View.GONE);
+            remove.setOnClickListener(v -> {
+                store.removeGroup(row.jid);
+                ProbeLog.code("GROUP_REMOVED");
+                load();
+            });
+            return view;
+        }
+    }
+}

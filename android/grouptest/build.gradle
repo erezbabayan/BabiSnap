@@ -1,0 +1,28 @@
+plugins { id 'com.android.application' }
+
+// Feasibility probe only. Debug signing (the default). No release keystore, no link to :app.
+android {
+    namespace = 'com.babisnap.grouptest'
+    compileSdk = 35
+    defaultConfig {
+        applicationId = 'com.babisnap.grouptest'
+        minSdk = 26
+        targetSdk = 34
+        versionCode = 1
+        versionName = 'k0'
+    }
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+    testOptions { unitTests.returnDefaultValues = true }
+    buildTypes {
+        release {
+            minifyEnabled = false
+        }
+    }
+}
+
+dependencies {
+    testImplementation 'junit:junit:4.13.2'
+}
