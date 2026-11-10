@@ -180,4 +180,16 @@ public class ClassifierTest {
         assertEquals("ללכת לקניות היום ב-17:00", Classifier.normalize("ללכת לקניות היום ב—17:00"));
         assertEquals("היום ב-17:00 ללכת לקניות", Classifier.classify("יומן היום ב־17:00 ללכת לקניות", true).stripped);
     }
+
+    @Test public void connectorShinAfterCommandIsStrippedButRealShinWordsStay() {
+        assertEquals("הרכב צריך טסט", Classifier.classify("תרשום ביומן שהרכב צריך טסט", false).stripped);
+        assertEquals("מחר בעשר יש רופא שיניים", Classifier.classify("תרשום ביומן שמחר בעשר יש רופא שיניים", true).stripped);
+        assertEquals("יש לי פגישה עם אורי מחר בעשר", Classifier.stripConnectorShin("שיש לי פגישה עם אורי מחר בעשר"));
+        assertEquals("יש לי פגישה עם אורי מחר בעשר", Classifier.classify("תרשום ביומן שיש לי פגישה עם אורי מחר בעשר", true).stripped);
+        assertEquals("מחר בעשר שיעור פרטי", Classifier.classify("יומן מחר בעשר שיעור פרטי", true).stripped);
+        assertEquals("שיחה עם דני מחר בעשר", Classifier.classify("קבע שיחה עם דני מחר בעשר", true).stripped);
+        assertEquals("מחר בעשר שמירה", Classifier.classify("יומן מחר בעשר שמירה", true).stripped);
+        assertEquals("שיעור פרטי", Classifier.stripConnectorShin("שיעור פרטי"));
+        assertEquals("שמירה", Classifier.stripConnectorShin("שמירה"));
+    }
 }

@@ -40,6 +40,21 @@ var SYNONYMS = [
 ];
 // Command prefixes ("תוסיף לי", "תקבע לי", "שים לי"...) and leftover time-of-day words never belong in a title.
 var CMD_PREFIX_ = /^(?:(?:תוסיף|תוסיפי|הוסף|הוסיפי|תקבע|תקבעי|קבע|קבעי|תרשום|תרשמי|רשום|רשמי|שים|תשים|תשימי|תכניס|תכניסי|הכנס|תיצור|תיצרי|צור|צרי|תזמן|תזמני)(?:\s+(?:לי|לנו))?\s+|(?:לי|לנו)\s+)+/;
+
+// Command/route at the start of a phrase. A following connector ש ("תרשום ביומן שמחר...") is not part of the title.
+var CMD_HEAD_ = '^(?:\\s*(?:תזכיר|תזכירי)\\s+לי\\s+|\\s*(?:תוסיף|תוסיפי|הוסף|הוסיפי|תקבע|תקבעי|קבע|קבעי|תרשום|תרשמי|רשום|רשמי|שים|תשים|תשימי|תכניס|תכניסי|הכנס|תיצור|תיצרי|צור|צרי|תזמן|תזמני)(?:\\s+(?:לי|לנו))?\\s+)';
+var DEST_HEAD_ = '^(?:\\s*(?:ו?[בלהמ]?(?:יומן|יומנים|יומני|יומנך|יומנו|היומן)|לוח השנה|לוח שנה|בלוח השנה|ללוח השנה|קלנדר|קלנדאר|לקלנדר|בקלנדר|גוגל קלנדר|יומן גוגל|calendar|google calendar|ביומן|ליומן)\\s+)';
+var SHIN_KEEP_ = { 'שיעור':1, 'שיעורים':1, 'שיעורי':1, 'שיחת':1, 'שיחה':1, 'שיחות':1, 'שמירה':1, 'שמירת':1, 'שמירות':1, 'שישי':1, 'שבת':1, 'שעה':1, 'שעות':1, 'שעתיים':1, 'שני':1, 'שניה':1, 'שנייה':1, 'שנים':1, 'שנה':1, 'שבוע':1, 'שבועות':1, 'שירות':1, 'שירותים':1, 'שיר':1, 'שירים':1, 'שירה':1, 'שחר':1, 'שחרית':1, 'שחייה':1, 'שחיה':1, 'שחמט':1, 'שוק':1, 'שער':1, 'שערים':1, 'שלום':1, 'שמחה':1, 'שבע':1, 'שמונה':1, 'שש':1, 'שלוש':1, 'שתיים':1, 'שתים':1, 'שותף':1, 'שותפות':1, 'שיט':1, 'שיניים':1, 'שינה':1, 'שינת':1, 'שקד':1, 'שלומי':1 };
+function hasCommandOrDestHead_(s) {
+  return new RegExp(CMD_HEAD_, 'i').test(s) || new RegExp(DEST_HEAD_, 'i').test(s);
+}
+function stripConnectorShin_(s) {
+  s = String(s || '').replace(/^\s+/, '');
+  if (/^ש(?:\s|$)/.test(s)) return s.replace(/^ש\s*/, '').replace(/^\s+/, '');
+  var m = s.match(/^([א-ת]+)/);
+  if (m && m[1].charAt(0) === 'ש' && m[1].length > 1 && !SHIN_KEEP_[m[1]]) return s.slice(1);
+  return s;
+}
 var TOD_ = /(^|\s)(?:בערב|בבוקר|בצהריים|בצהרים|בלילה|אחה"צ|אחר הצהריים|אחרי הצהריים|לפנות ערב)(?=$|[\s,.!?])/g;
 function cleanTitle_(t) {
   t = t.replace(CMD_PREFIX_, '');
@@ -393,7 +408,7 @@ function titleOf_(s) {
   // strip dangling prepositions left from removed parts (repeat)
   for (var j = 0; j < 3; j++) t = t.replace(/(?:^|\s)(?:ב|ל|ב-|ל-|ביום|בשעה)$/, '').replace(/[\s,.\-:]+$/, '').trim();
   t = meetingTitle_(cleanTitle_(t));
-  t = t.replace(/^יש\s+/, '').trim();
+  t = t.replace(/^יש(?:\s+לי)?\s+/, '').trim();
   return t;
 }
 
@@ -401,6 +416,19 @@ function titleOf_(s) {
  * @param {string} text Hebrew free text
  * @param {{y:number,m:number,d:number,dow:number}} now  today's date in Asia/Jerusalem (dow 0=Sunday)
  */
+function clockExplicit24_(tok, h) {
+  return h >= 13 || h === 12 || !!(tok && /^\d+$/.test(tok) && tok.length === 2 && (h === 0 || tok.charAt(0) === '0'));
+}
+// Evening/lunch/night nouns (not בערב/בבוקר, which already set period): shift 1-11 to PM.
+function eveningContext_(s) {
+  if (/(?:^|\s)ארוחת צהריים(?=$|[\s,.!?])/.test(s)) return 'lunch';
+  if (/(?:^|\s)מסיבה(?=$|[\s,.!?])/.test(s)) return 'evening';
+  if (/(?:^|\s)(?:ה)?לילה(?=$|[\s,.!?])/.test(s)) return 'night';
+  if (/(?:^|\s)ארוחת ערב(?=$|[\s,.!?])/.test(s)) return 'evening';
+  if (/(?:^|\s)(?:ה)?ערב(?=$|[\s,.!?])/.test(s)) return 'evening';
+  return null;
+}
+
 function parseHebrewEvent(text, now) {
   var s = ' ' + String(text || '').replace(/[״“”]/g, '"').replace(/[׳‘’]/g, "'").replace(/([א-ת])[־–—]([א-ת])/g, '$1 $2').replace(/־/g, '-').replace(/([בל])[–—]/g, '$1-').replace(/\s+/g, ' ').trim() + ' ';
   var r = { durationMin: (now && now.defaultDuration) || 60, timeDefaulted: false, dateDefaulted: false, allDay: false, location: '' };
@@ -408,12 +436,15 @@ function parseHebrewEvent(text, now) {
   for (var si = 0; si < SYNONYMS.length; si++) s = s.replace(SYNONYMS[si][0], SYNONYMS[si][1]);
   function cut(re) { var m = s.match(re); if (m) s = s.replace(re, ' '); return m; }
 
-  // leading command words
-  s = s.replace(new RegExp('^\\s*(?:תקבע לי|תקבעי לי|קבע לי|קבעי לי|תקבע|תקבעי|קבע|תוסיף|תוסיפי|הוסף|תרשום|תרשמי|רשום)' + E), ' ');
+  // leading command words + destination words; then a leftover connector ש ("שמחר", "שהרכב")
+  var hadHead = hasCommandOrDestHead_(s);
+  s = s.replace(new RegExp(CMD_HEAD_), ' ');
   s = s.replace(new RegExp(B + 'בבקשה' + E, 'g'), ' ');
   if (!(now && now.skipDestStrip)) {
     s = s.replace(new RegExp(B + '(?:ו?[בלהמ]?(?:יומן|יומנים|יומני|יומנך|יומנו|היומן)|לוח השנה|לוח שנה|בלוח השנה|ללוח השנה|קלנדר|קלנדאר|לקלנדר|בקלנדר|גוגל קלנדר|יומן גוגל|calendar|google calendar|ביומן|ליומן)' + E, 'gi'), ' ');
   }
+  s = s.replace(new RegExp(CMD_HEAD_), ' ');
+  if (hadHead) s = stripConnectorShin_(s);
   // ---- v2.14 all-day: "יום שלם" / "כל היום" / "יום מלא" / "all day" -> Calendar all-day event (cut before "היום" is read as a date)
   if (cut(new RegExp(B + '(?:(?:של|ל|ב|ה)\\s?)?(?:(?:ל|ב)?כו?ל(?: ה| ה-|-)?יום(?: כולו)?|(?:ל|ב|ה)?(?:-)?יום (?:שלם|מלא|שלם כולו)|(?:ל|ב)?יממה שלמה|all[- ]day)' + E, 'gi'))) r.allDay = true;
   // ---- stage 2: invitees (only an explicit "תזמין" / "תשלח לה זימון"); removed from the text before anything else
@@ -510,17 +541,17 @@ function parseHebrewEvent(text, now) {
   if (m) { h = toNum_(m[1]) - 1; min = 45; if (h === 0) h = 12; }
   if (h === null) {
     m = cut(new RegExp(B + P + '(\\d{1,2})\\s*[:.]\\s*(\\d{2})' + E));
-    if (m) { h = +m[1]; min = +m[2]; explicit24 = h >= 13 || m[1].length === 2 && h === 0 || h === 12; }
+    if (m) { h = +m[1]; min = +m[2]; explicit24 = clockExplicit24_(m[1], h); }
   }
   if (h === null) {
     // "בשעה 17 00", "ב-17 30", "בחמש 00" (STT often drops the colon)
     m = cut(new RegExp(B + '(?:בשעה|ב-|ב|ל-|ל)\\s?' + NUMW + '\\s+([0-5]\\d)' + E));
-    if (m) { h = toNum_(m[1]); min = +m[2]; explicit24 = h >= 13; }
+    if (m) { h = toNum_(m[1]); min = +m[2]; explicit24 = clockExplicit24_(/^\d+$/.test(m[1]) ? m[1] : '', h); }
   }
   if (h === null) {
     // bare "17 00" (STT without a prefix); minutes must be 00-59
     m = cut(new RegExp(B + '(\\d{1,2})\\s+([0-5]\\d)' + E));
-    if (m) { h = +m[1]; min = +m[2]; explicit24 = h >= 13 || m[1].length === 2 && h === 0 || h === 12; }
+    if (m) { h = +m[1]; min = +m[2]; explicit24 = clockExplicit24_(m[1], h); }
   }
   if (h === null) {
     // "בשעה 3", "ב-8", "ב8 בערב", "15 וחצי", "בשעה שלוש ורבע"
@@ -542,7 +573,13 @@ function parseHebrewEvent(text, now) {
       if (period === 'בבוקר') { if (h === 12) h = 0; }
       else if (period === 'בלילה') { if (h >= 7 && h <= 11) h += 12; else if (h === 12) h = 0; }
       else if (period) { if (h < 12) h += 12; }       // צהריים/ערב
-      else if (h >= 1 && h <= 7) h += 12;              // no period: 1-7 => afternoon
+      else {
+        var ev = eveningContext_(s);
+        if (ev === 'lunch' && h >= 1 && h <= 5) h += 12;
+        else if (ev === 'night' && h >= 8 && h <= 11) h += 12;
+        else if (ev === 'evening' && h >= 1 && h <= 11) h += 12;
+        else if (h >= 1 && h <= 7) h += 12;            // no period: 1-7 => afternoon
+      }
     }
     if (h === 24) h = 0;
   } else if (period) {
