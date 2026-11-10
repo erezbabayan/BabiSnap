@@ -54,7 +54,11 @@ public final class Classifier {
     static final Pattern COMMAND = Pattern.compile("^(?:(?:תוסיף|תוסיפי|הוסף|הוסיפי|שים|תשים|תשימי|תכניס|תכניסי|הכנס|תיצור|צור)(?:\\s+(?:לי|לנו))?\\s+|(?:תרשום|תרשמי|רשום)\\s+(?:לי|לנו)\\s+|(?:תקבע|תקבעי)\\s+(?:לי|לנו)\\s+(?=פגישה|משימה|הערה|תזכורת)|(?:לי|לנו)\\s+)+");
 
     public static String normalize(String s) {
-        return s == null ? "" : s.replaceAll("[\\u0591-\\u05C7]", "").replaceAll("[.,!?;:\"'״׳]", " ").replaceAll("\\s+", " ").trim();
+        if (s == null) return "";
+        // Keep clock times like 17:00 so a later calendar re-parse still sees the colon.
+        String t = s.replaceAll("(\\d{1,2}):(\\d{2})", "$1\u0000$2");
+        t = t.replaceAll("[\\u0591-\\u05C7]", "").replaceAll("[.,!?;:\"'״׳]", " ").replaceAll("\\s+", " ").trim();
+        return t.replace('\u0000', ':');
     }
 
     /** @param explicitTime true when the user said a time of day (parser timeDefaulted == false). */

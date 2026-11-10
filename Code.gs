@@ -494,7 +494,17 @@ function parseHebrewEvent(text, now) {
   m = h === null ? cut(new RegExp(B + P + 'רבע ל(?:-)?' + NUMW + E)) : null;
   if (m) { h = toNum_(m[1]) - 1; min = 45; if (h === 0) h = 12; }
   if (h === null) {
-    m = cut(new RegExp(B + P + '(\\d{1,2}):(\\d{2})' + E));
+    m = cut(new RegExp(B + P + '(\\d{1,2})\\s*[:.]\\s*(\\d{2})' + E));
+    if (m) { h = +m[1]; min = +m[2]; explicit24 = h >= 13 || m[1].length === 2 && h === 0 || h === 12; }
+  }
+  if (h === null) {
+    // "בשעה 17 00", "ב-17 30", "בחמש 00" (STT often drops the colon)
+    m = cut(new RegExp(B + '(?:בשעה|ב-|ב|ל-|ל)\\s?' + NUMW + '\\s+([0-5]\\d)' + E));
+    if (m) { h = toNum_(m[1]); min = +m[2]; explicit24 = h >= 13; }
+  }
+  if (h === null) {
+    // bare "17 00" (STT without a prefix); minutes must be 00-59
+    m = cut(new RegExp(B + '(\\d{1,2})\\s+([0-5]\\d)' + E));
     if (m) { h = +m[1]; min = +m[2]; explicit24 = h >= 13 || m[1].length === 2 && h === 0 || h === 12; }
   }
   if (h === null) {

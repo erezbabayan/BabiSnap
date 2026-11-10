@@ -166,4 +166,14 @@ public class ClassifierTest {
         assertEquals("הקוד לשער 1234", Classifier.classify("תרשום הערה הקוד לשער 1234", false).stripped);
         assertEquals("קוד לשער 1234", Classifier.classify("קוד לשער 1234", false).stripped);
     }
+
+    @Test public void normalizeKeepsClockColon() {
+        assertEquals("ללכת לקניות היום ב-17:00", Classifier.normalize("ללכת לקניות היום ב-17:00"));
+        assertEquals("קבע ללכת לקניות היום ב-17:00", Classifier.normalize("קבע ללכת לקניות היום ב-17:00"));
+        assertEquals("יומן היום ב17:00 ללכת לקניות", Classifier.normalize("יומן היום ב17:00 ללכת לקניות"));
+        // a colon that is not a clock time is still stripped
+        assertEquals("הערה הקוד הוא 4521", Classifier.normalize("הערה: הקוד הוא 4521"));
+        assertEquals("ללכת לקניות היום ב-17:00", Classifier.classify("קבע ללכת לקניות היום ב-17:00", true).stripped);
+        assertEquals("היום ב17:00 ללכת לקניות", Classifier.classify("יומן היום ב17:00 ללכת לקניות", true).stripped);
+    }
 }
