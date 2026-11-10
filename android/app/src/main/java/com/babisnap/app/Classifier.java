@@ -59,10 +59,14 @@ public final class Classifier {
         String t = s.replaceAll("([א-ת])[\u05BE\u2013\u2014]([א-ת])", "$1 $2")
                 .replace('\u05BE', '-')
                 .replaceAll("([בל])[\u2013\u2014]", "$1-");
-        // Keep clock times like 17:00 so a later calendar re-parse still sees the colon.
+        // Keep clock times like 17:00 and calendar dates like 15.11 / 15/11 so a later re-parse still sees the separator.
         t = t.replaceAll("(\\d{1,2}):(\\d{2})", "$1\u0000$2");
+        t = t.replaceAll("(\\d{1,2})\\.(\\d{1,2})\\.(\\d{2,4})", "$1\u0001$2\u0001$3");
+        t = t.replaceAll("(\\d{1,2})\\.(\\d{1,2})", "$1\u0001$2");
+        t = t.replaceAll("(\\d{1,2})/(\\d{1,2})/(\\d{2,4})", "$1\u0002$2\u0002$3");
+        t = t.replaceAll("(\\d{1,2})/(\\d{1,2})", "$1\u0002$2");
         t = t.replaceAll("[\\u0591-\\u05C7]", "").replaceAll("[.,!?;:\"'״׳]", " ").replaceAll("\\s+", " ").trim();
-        return t.replace('\u0000', ':');
+        return t.replace('\u0000', ':').replace('\u0001', '.').replace('\u0002', '/');
     }
 
     /** Words that legitimately start with ש; a leftover complementizer ש after a command/route must not eat them. */

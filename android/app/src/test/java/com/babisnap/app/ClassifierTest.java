@@ -179,6 +179,10 @@ public class ClassifierTest {
         assertEquals("ללכת לקניות היום ב-17:00", Classifier.normalize("ללכת לקניות היום ב–17:00"));
         assertEquals("ללכת לקניות היום ב-17:00", Classifier.normalize("ללכת לקניות היום ב—17:00"));
         assertEquals("היום ב-17:00 ללכת לקניות", Classifier.classify("יומן היום ב־17:00 ללכת לקניות", true).stripped);
+        assertEquals("טיפול אצל דוקטור ב-15.11 בארבע וחצי", Classifier.normalize("טיפול אצל דוקטור ב-15.11 בארבע וחצי"));
+        assertEquals("טיפול אצל דוקטור ב-15/11 בארבע וחצי", Classifier.normalize("טיפול אצל דוקטור ב-15/11 בארבע וחצי"));
+        assertEquals("טיפול אצל דוקטור ב-17.11.26 בשעה 10", Classifier.normalize("טיפול אצל דוקטור ב-17.11.26 בשעה 10"));
+        assertEquals("טיפול אצל דוקטור ב-15.11 בארבע וחצי", Classifier.classify("יומן טיפול אצל דוקטור ב-15.11 בארבע וחצי", true).stripped);
     }
 
     @Test public void connectorShinAfterCommandIsStrippedButRealShinWordsStay() {
