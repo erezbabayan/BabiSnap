@@ -68,15 +68,34 @@ public class RouteGateTest {
         assertFalse(BabiTkJson.isWhatsAppPayload("{\"type\":\"task\"}"));
         assertFalse(BabiTkJson.isWhatsAppPayload(null));
         assertFalse(WhatsAppLogic.DEFAULT_ENABLED);
+        try {
+            BabiTkJson.build("תמרי", null, null, null, null, "call", "bsnap-2");
+            fail("call must not become a BabiTk task");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("CALL"));
+        }
+        assertTrue(BabiTkJson.isCallPayload("{\"type\":\"call\"}"));
+        assertFalse(BabiTkJson.isCallPayload("{\"type\":\"task\"}"));
+        assertFalse(BabiTkJson.isCallPayload("{\"type\":\"whatsapp\"}"));
+        assertFalse(RouteGate.toCalQueue(CALL));
+        assertFalse(RouteGate.toBabiTk(CALL));
+        assertTrue(RouteGate.toCall(CALL));
+        assertEquals(RouteGate.Dest.CALL, RouteGate.dest(CALL));
     }
 
     @Test public void voiceActivityReturnsBeforeTheQueues() throws Exception {
         String src = text("src/main/java/com/babisnap/app/VoiceActivity.java");
         int gate = src.indexOf("RouteGate.Dest.WHATSAPP");
+        int call = src.indexOf("RouteGate.Dest.CALL");
         int cal = src.indexOf("CalQueue.enqueue");
         int babi = src.indexOf("BabiTk.enqueue");
-        assertTrue(gate > 0 && cal > gate && babi > gate);
+        assertTrue(gate > 0 && call > gate && cal > call && babi > call);
         assertTrue(src.contains("if (!RouteGate.toBabiTk(c.kind)) return;"));
+        assertTrue(src.contains("Intent.ACTION_DIAL"));
+        assertFalse(src.contains("ACTION_CALL"));
+        assertFalse(src.contains("CALL_PHONE"));
+        assertTrue(src.contains("CallDial.CONFIRM_MS"));
+        assertTrue(src.contains("BabiTkJson.isCallPayload(pendingBody)"));
         assertTrue(src.contains("BabiTkJson.isWhatsAppPayload(pendingBody)"));
         assertFalse(src.contains("AccessibilityService"));
         assertFalse(src.contains("NotificationListener"));
@@ -100,6 +119,10 @@ public class RouteGateTest {
         assertFalse(manifest.contains("QUERY_ALL_PACKAGES"));
         assertFalse(manifest.contains("WhatsAppRecipientsActivity"));
         assertFalse(manifest.contains("android.intent.action.PICK"));
+        assertFalse(manifest.contains("CALL_PHONE"));
+        assertFalse(manifest.contains("READ_PHONE_STATE"));
+        assertFalse(manifest.contains("READ_CALL_LOG"));
+        assertTrue(manifest.contains("android.intent.action.DIAL"));
         assertTrue(manifest.contains("wa.me"));
         int contactsPerm = 0;
         int from = 0;

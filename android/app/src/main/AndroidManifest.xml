@@ -2,7 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
-    <!-- Invites, and WhatsApp name lookup. On-device only. No extra permission beyond this one. -->
+    <!-- Invites, WhatsApp name lookup, and an immediate voice call. On-device only. No dial permission. -->
     <uses-permission android:name="android.permission.READ_CONTACTS" />
     <!-- Requested only when the user connects יומן המכשיר. Local Calendar Provider read/write; no Microsoft Graph. -->
     <uses-permission android:name="android.permission.READ_CALENDAR" />
@@ -22,6 +22,13 @@
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="https" android:host="wa.me" />
+        </intent>
+    </queries>
+    <!-- System dialer for an immediate voice call. Dial intent only, not a permission. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.DIAL" />
+            <data android:scheme="tel" />
         </intent>
     </queries>
     <application android:allowBackup="false" android:fullBackupContent="false" android:dataExtractionRules="@xml/data_extraction_rules"

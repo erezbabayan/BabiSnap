@@ -11,9 +11,11 @@ public class RouteMarkTest {
         assertEquals(RouteMark.Route.BABITK, RouteMark.of(TASK));
         assertEquals(RouteMark.Route.BABITK, RouteMark.of(NOTE));
         assertEquals(RouteMark.Route.WHATSAPP, RouteMark.of(WHATSAPP));
+        assertEquals(RouteMark.Route.CALL, RouteMark.of(CALL));
         assertEquals(R.drawable.ic_route_calendar, RouteMark.drawable(RouteMark.Route.CALENDAR));
         assertEquals(R.drawable.ic_route_babitk, RouteMark.drawable(RouteMark.Route.BABITK));
         assertEquals(R.drawable.ic_route_whatsapp, RouteMark.drawable(RouteMark.Route.WHATSAPP));
+        assertEquals(R.drawable.ic_route_call, RouteMark.drawable(RouteMark.Route.CALL));
         assertNotEquals(RouteMark.drawable(RouteMark.Route.CALENDAR), RouteMark.drawable(RouteMark.Route.WHATSAPP));
     }
 }

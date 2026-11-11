@@ -34,6 +34,7 @@ public class RoutingTest {
         JSONObject parsed = parse(p, spoken, false);
         boolean explicitTime = !parsed.optBoolean("timeDefaulted", true) || parsed.optBoolean("allDay", false);
         Classifier.Result c = Classifier.classify(spoken, explicitTime);
+        if (c.kind == CALL) return new Out(c.kind, c.stripped, parsed, c.stripped);
         if (c.kind == MEETING) {
             if (c.stripped.isEmpty()) {
                 parsed.put("title", "אירוע");
@@ -88,6 +89,26 @@ public class RoutingTest {
         expect(p, "אסיפת הורים ביום שלישי בתשע", MEETING, "אסיפת הורים");
         expect(p, "ראיון עבודה ביום שני", MEETING, "ראיון עבודה");
         expect(p, "שיחת וידאו עם אבי מחר", MEETING, "שיחת וידאו עם אבי");
+    }
+
+    @Test public void immediateCallIsNotAQueueItem() throws Exception {
+        HebrewParser p = parser();
+        for (String s : new String[]{"תתקשר לתמרי", "תתקשרי לדני", "להתקשר לאמא עכשיו"}) {
+            Out o = run(p, s);
+            assertEquals(s + " kind=" + o.kind, CALL, o.kind);
+            assertEquals(s, RouteGate.Dest.CALL, RouteGate.dest(o.kind));
+            assertFalse(s, RouteGate.toCalQueue(o.kind));
+            assertFalse(s, RouteGate.toBabiTk(o.kind));
+            assertTrue(s, RouteGate.toCall(o.kind));
+        }
+        assertEquals(TASK, run(p, "תתקשר לתמרי ב-16:00").kind);
+        assertEquals(TASK, run(p, "להתקשר לדני מחר בעשר").kind);
+        assertEquals(MEETING, run(p, "יומן להתקשר לדני ביום ראשון").kind);
+        assertEquals(TASK, run(p, "תזכורת להתקשר לבנק מחר").kind);
+        assertNotEquals(CALL, run(p, "הודעה לתמרי בוואטסאפ").kind);
+        Classifier.Result on = Classifier.classify("וואטסאפ לתמרי: מה קורה אני מגיע ב-16:00", true, true);
+        assertEquals(WHATSAPP, on.kind);
+        assertTrue(on.stripped.contains("16:00"));
     }
 
     @Test public void whatsAppWordStaysOnTheLiveRoute() throws Exception {
