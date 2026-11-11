@@ -17,7 +17,7 @@ import java.util.regex.Pattern;
  * {@link Action} with the label "וואטסאפ" plus a branch in VoiceActivity — not built here.
  */
 public final class CallDial {
-    public static final long CONFIRM_MS = 8000L;
+    public static final long CONFIRM_MS = 3000L;
     /** Settings switch. Default off. Auto-call also needs CALL_PHONE. */
     public static final String PREF_DIRECT = "call_direct";
     public static final String TOGGLE_TITLE = "אישור לבצע שיחות";
@@ -51,6 +51,9 @@ public final class CallDial {
     }
 
     static final Set<String> VERBS = new HashSet<>(Arrays.asList("תתקשר", "תתקשרי", "תתקשרו", "להתקשר"));
+    /** Extra listen-only forms. They shorten the recording; they do not change routing. */
+    private static final Set<String> LISTEN_VERBS = new HashSet<>(Arrays.asList(
+        "תחייג", "תחייגי", "תחייגו", "התקשר", "התקשרי", "התקשרו"));
     private static final Set<String> FILLER = new HashSet<>(Arrays.asList(
         "עכשיו", "בבקשה", "בדחיפות", "דחוף", "מיד", "מהר", "כבר", "נא", "אנא", "בטלפון", "טלפון", "לי", "לנו"));
     private static final Set<String> STOP = new HashSet<>(Arrays.asList(
@@ -76,6 +79,22 @@ public final class CallDial {
     private static final Pattern ALL_DAY = Pattern.compile("(?:^|\\s)(?:כל\\s+היום|יום\\s+שלם|יום\\s+מלא)(?=\\s|$)");
 
     public static List<Action> actions() { return Collections.singletonList(Action.DIAL); }
+
+    /**
+     * True when a live transcript opens with a call command («תתקשר ל…», «תחייג ל…», «התקשר ל…»,
+     * and the verbs this class already routes). Used only to shorten the silence wait.
+     */
+    public static boolean shortListen(String partial) {
+        String n = Classifier.normalize(partial);
+        if (n.isEmpty()) return false;
+        String first = n.split(" ")[0];
+        if (listenVerb(first)) return true;
+        return first.length() > 1 && first.charAt(0) == 'ו' && listenVerb(first.substring(1));
+    }
+
+    private static boolean listenVerb(String word) {
+        return VERBS.contains(word) || LISTEN_VERBS.contains(word);
+    }
 
     /** The switch is on for real only when the user asked and CALL_PHONE is still granted. */
     public static boolean effective(boolean toggleOn, boolean permissionGranted) {

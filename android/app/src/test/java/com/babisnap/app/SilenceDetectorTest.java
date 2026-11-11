@@ -27,6 +27,33 @@ public class SilenceDetectorTest {
         d.partial("א", 0); d.partial("א ב", 1900); assertEquals(WAIT, d.check(6000));
         assertEquals(FINISH_SILENCE, d.check(6900));
     }
+    @Test public void callCommandEndsAfterOneAndAHalfSeconds() {
+        SilenceDetector d = new SilenceDetector(0);
+        d.partial("תתקשר לתמרי", 1000);
+        assertEquals(WAIT, d.check(2499));
+        assertEquals(FINISH_SILENCE, d.check(2500));
+        for (String start : new String[]{"תתקשרי לדני", "תתקשרו לאמא", "להתקשר לאמא עכשיו", "תחייג לאמא", "התקשר לדני", "ותתקשר לתמרי"}) {
+            assertTrue(start, CallDial.shortListen(start));
+        }
+        assertFalse(CallDial.shortListen("מחר תתקשר לדני"));
+        assertFalse(CallDial.shortListen("לקנות חלב"));
+        assertFalse(CallDial.shortListen("וואטסאפ לתמרי"));
+        assertFalse(CallDial.shortListen(""));
+    }
+
+    @Test public void otherSpeechKeepsFiveSecondsAndTheCap() {
+        SilenceDetector d = new SilenceDetector(0);
+        d.partial("לקנות חלב", 1000);
+        assertEquals(WAIT, d.check(5999));
+        assertEquals(FINISH_SILENCE, d.check(6000));
+        SilenceDetector cap = new SilenceDetector(0);
+        cap.partial("תתקשר לדני", 1000);
+        assertEquals(FINISH_CAP, cap.check(60000));
+        assertEquals(60000L, SilenceDetector.HARD_CAP_MS);
+        assertEquals(5000L, SilenceDetector.SILENCE_MS);
+        assertEquals(1500L, SilenceDetector.CALL_SILENCE_MS);
+    }
+
     @Test public void hardCapAt60s() {
         SilenceDetector d = new SilenceDetector(0);
         for (int t = 0; t < 60000; t += 1000) d.partial("מילה " + t, t);
