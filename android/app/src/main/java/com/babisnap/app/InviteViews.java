@@ -3,18 +3,34 @@ package com.babisnap.app;
 import android.content.Context;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.text.Editable;
+import android.text.InputType;
 import android.text.SpannableString;
 import android.text.Spanned;
 import android.text.TextUtils;
+import android.text.TextWatcher;
 import android.text.style.StyleSpan;
 import android.view.Gravity;
+import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewGroup;
+import android.view.inputmethod.EditorInfo;
+import android.view.inputmethod.InputMethodManager;
+import android.widget.EditText;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
 
 /** Stage-2 invite views for the meeting card, drawn to match the invites mockup (colors/sizes from invites-preview.html). */
 final class InviteViews {
     interface OnPick { void picked(ContactMatcher.Match m); }
+
+    /** White icon on this green clears 4.5:1. Same family as the call chip, a step darker. */
+    static final int DIAL_GREEN = 0xFF0E7A3A;
+    /** White icon on this red clears 4.5:1. */
+    static final int CANCEL_RED = 0xFFB42318;
+    static final int CIRCLE_DP = 72;
 
     static int dp(Context c, float v) { return Math.round(v * c.getResources().getDisplayMetrics().density); }
 
@@ -81,7 +97,8 @@ final class InviteViews {
     private static View row(Context c, ContactMatcher.Match m, View.OnClickListener tap) {
         LinearLayout r = new LinearLayout(c); r.setGravity(Gravity.CENTER_VERTICAL);
         r.setMinimumHeight(dp(c, 58)); r.setPadding(dp(c, 11), dp(c, 9), dp(c, 11), dp(c, 9));
-        r.setOnClickListener(tap); r.setClickable(true);
+        r.setOnClickListener(tap);
+        armRow(r);
         r.setContentDescription(m.name);
 
         TextView av = new TextView(c);
@@ -117,37 +134,245 @@ final class InviteViews {
         return r;
     }
 
-    /** Same row chrome as the meeting invite picker: name, a second line, chevron. */
-    static View choiceList(Context c, String question, java.util.List<String> names, java.util.List<String> details,
-                           String skip, java.util.function.IntConsumer onPick) {
-        LinearLayout root = new LinearLayout(c); root.setOrientation(LinearLayout.VERTICAL); root.setLayoutParams(full(c, 4));
-        TextView qt = new TextView(c); qt.setText(question);
-        qt.setTextColor(0xFF2A1B7A); qt.setTextSize(14); qt.setTypeface(Typeface.DEFAULT_BOLD);
-        root.addView(qt, full(c, 12));
-        LinearLayout list = new LinearLayout(c); list.setOrientation(LinearLayout.VERTICAL);
-        list.setBackground(box(c, 0xFFFFFFFF, 0xFFEADFB5, 1.5f, 13)); list.setLayoutParams(full(c, 7));
-        int pad = dp(c, 1.5f); list.setPadding(pad, pad, pad, pad);
-        for (int i = 0; i < names.size(); i++) {
-            if (i > 0) { View div = new View(c); div.setBackgroundColor(0xFFF1EBD3); list.addView(div, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(c, 1))); }
-            final int index = i;
-            list.addView(choiceRow(c, names.get(i), i < details.size() ? details.get(i) : "", v -> onPick.accept(index)));
-        }
-        root.addView(list);
-        if (skip != null && !skip.isEmpty()) {
-            TextView no = new TextView(c); no.setText(skip); no.setTextColor(0xFF6A5FA8); no.setTextSize(13.5f);
-            no.setPadding(dp(c, 12), dp(c, 7), dp(c, 12), dp(c, 7)); no.setGravity(Gravity.CENTER);
-            no.setMinHeight(dp(c, 48)); no.setMinimumHeight(dp(c, 48)); no.setMinWidth(dp(c, 48)); no.setMinimumWidth(dp(c, 48));
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-            lp.topMargin = dp(c, 8); lp.gravity = Gravity.CENTER_HORIZONTAL;
-            no.setOnClickListener(v -> onPick.accept(-1));
-            root.addView(no, lp);
-        }
+    /**
+     * WhatsApp and call multi-match picker. Search filters live and does not open the keyboard
+     * until the field is tapped. «ביטול» is always on screen. No countdown.
+     */
+    static View peoplePicker(Context c, String question, String spoken,
+            java.util.List<WhatsAppRecipients.Contact> people,
+            java.util.function.Function<WhatsAppRecipients.Contact, String> detail,
+            java.util.function.Consumer<WhatsAppRecipients.Contact> onPick,
+            Runnable onCancel, String skip, Runnable onSkip) {
+        LinearLayout root = new LinearLayout(c);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setLayoutParams(full(c, 4));
+
+        EditText field = searchField(c);
+        root.addView(field, full(c, 8));
+
+        TextView qt = new TextView(c);
+        qt.setText(question == null ? "" : question);
+        qt.setTextColor(0xFF2A1B7A);
+        qt.setTextSize(14);
+        qt.setTypeface(Typeface.DEFAULT_BOLD);
+        root.addView(qt, full(c, 10));
+
+        PickerScroll scroll = new PickerScroll(c);
+        LinearLayout list = new LinearLayout(c);
+        list.setOrientation(LinearLayout.VERTICAL);
+        list.setBackground(box(c, 0xFFFFFFFF, 0xFFEADFB5, 1.5f, 13));
+        int pad = dp(c, 1.5f);
+        list.setPadding(pad, pad, pad, pad);
+        scroll.addView(list, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        root.addView(scroll, full(c, 7));
+
+        TextView empty = new TextView(c);
+        empty.setText("אין התאמה");
+        empty.setTextColor(0xFF7A7888);
+        empty.setTextSize(13);
+        empty.setGravity(Gravity.CENTER);
+        empty.setMinHeight(dp(c, 48));
+        empty.setMinimumHeight(dp(c, 48));
+        empty.setVisibility(View.GONE);
+        root.addView(empty, full(c, 6));
+
+        Runnable bind = () -> {
+            String q = field.getText() == null ? "" : field.getText().toString();
+            java.util.List<WhatsAppRecipients.Contact> shown = ContactPick.present(spoken, people, q);
+            list.removeAllViews();
+            for (int i = 0; i < shown.size(); i++) {
+                if (i > 0) {
+                    View div = new View(c);
+                    div.setBackgroundColor(0xFFF1EBD3);
+                    div.setClickable(false);
+                    list.addView(div, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(c, 1)));
+                }
+                final int index = i;
+                final java.util.List<WhatsAppRecipients.Contact> rows = shown;
+                WhatsAppRecipients.Contact person = ContactPick.picked(rows, index);
+                String line = person == null || detail == null ? "" : detail.apply(person);
+                list.addView(choiceRow(c, person == null ? "" : person.label(), line, v -> {
+                    WhatsAppRecipients.Contact chosen = ContactPick.picked(rows, index);
+                    if (chosen != null && onPick != null) onPick.accept(chosen);
+                }));
+            }
+            boolean none = shown.isEmpty();
+            empty.setVisibility(none ? View.VISIBLE : View.GONE);
+            scroll.setVisibility(none ? View.GONE : View.VISIBLE);
+        };
+        field.addTextChangedListener(new TextWatcher() {
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            public void onTextChanged(CharSequence s, int start, int before, int count) {}
+            public void afterTextChanged(Editable s) { bind.run(); }
+        });
+        bind.run();
+
+        if (skip != null && !skip.isEmpty() && onSkip != null) root.addView(textButton(c, skip, false, v -> onSkip.run()), full(c, 8));
+        root.addView(textButton(c, "ביטול", true, v -> { if (onCancel != null) onCancel.run(); }), full(c, 8));
         return root;
+    }
+
+    /** Not focusable until tapped, so the dialog does not open the keyboard by itself. */
+    private static EditText searchField(Context c) {
+        EditText field = new EditText(c);
+        field.setHint("חיפוש איש קשר");
+        field.setContentDescription("חיפוש איש קשר");
+        field.setSingleLine(true);
+        field.setTextSize(15);
+        field.setTextColor(0xFF2A1B7A);
+        field.setHintTextColor(0xFF7A7888);
+        field.setGravity(Gravity.CENTER_VERTICAL | Gravity.START);
+        field.setMinHeight(dp(c, 48));
+        field.setMinimumHeight(dp(c, 48));
+        field.setPadding(dp(c, 12), dp(c, 8), dp(c, 12), dp(c, 8));
+        field.setBackground(box(c, 0xFFFFFFFF, 0xFFEADFB5, 1.5f, 12));
+        field.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+        field.setImeOptions(EditorInfo.IME_ACTION_DONE);
+        field.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
+        field.setShowSoftInputOnFocus(true);
+        field.setClickable(true);
+        field.setFocusable(false);
+        field.setFocusableInTouchMode(false);
+        field.setOnTouchListener((v, e) -> {
+            if (v.isFocused()) return false;
+            if (e.getActionMasked() == MotionEvent.ACTION_UP) {
+                v.setFocusable(true);
+                v.setFocusableInTouchMode(true);
+                v.requestFocus();
+                InputMethodManager imm = (InputMethodManager) c.getSystemService(Context.INPUT_METHOD_SERVICE);
+                if (imm != null) imm.showSoftInput(v, InputMethodManager.SHOW_IMPLICIT);
+            }
+            return true;
+        });
+        return field;
+    }
+
+    private static TextView textButton(Context c, String label, boolean filled, View.OnClickListener tap) {
+        TextView b = new TextView(c);
+        b.setText(label);
+        b.setContentDescription(label);
+        b.setGravity(Gravity.CENTER);
+        b.setTextColor(filled ? 0xFF2A1B7A : 0xFF6A5FA8);
+        b.setTextSize(15);
+        b.setTypeface(Typeface.DEFAULT_BOLD);
+        b.setMinHeight(dp(c, 48));
+        b.setMinimumHeight(dp(c, 48));
+        b.setMinWidth(dp(c, 48));
+        b.setMinimumWidth(dp(c, 48));
+        b.setBackground(box(c, 0xFFFFFFFF, filled ? 0xFF2A1B7A : 0xFFD9D0F0, 1.5f, 12));
+        b.setOnClickListener(tap);
+        b.setClickable(true);
+        b.setFocusable(true);
+        return b;
+    }
+
+    /** Clickable and focusable, and the name text must not take the tap away from the row. */
+    private static void armRow(LinearLayout r) {
+        r.setClickable(true);
+        r.setFocusable(true);
+        r.setFocusableInTouchMode(false);
+        r.setDescendantFocusability(ViewGroup.FOCUS_BLOCK_DESCENDANTS);
+        r.setMinimumHeight(Math.max(r.getMinimumHeight(), dp(r.getContext(), 48)));
+        android.util.TypedValue tv = new android.util.TypedValue();
+        if (r.getContext().getTheme().resolveAttribute(android.R.attr.selectableItemBackground, tv, true) && tv.resourceId != 0)
+            r.setBackgroundResource(tv.resourceId);
     }
 
     private static View choiceRow(Context c, String title, String detail, View.OnClickListener tap) {
         ContactMatcher.Match m = new ContactMatcher.Match(title == null ? "" : title, detail == null ? "" : detail, null);
         return row(c, m, tap);
+    }
+
+    /**
+     * The floating dialog scrolls its whole card when the list is taller than the window,
+     * and that outer scroll eats the row tap. This scroller is height-capped and tells
+     * every parent to leave the gesture alone, so a tap reaches the row and only the list scrolls.
+     */
+    private static final class PickerScroll extends ScrollView {
+        PickerScroll(Context c) {
+            super(c);
+            setFillViewport(false);
+            setNestedScrollingEnabled(false);
+            setClickable(false);
+            setFocusable(false);
+            setOverScrollMode(OVER_SCROLL_IF_CONTENT_SCROLLS);
+        }
+
+        @Override public boolean onInterceptTouchEvent(MotionEvent e) {
+            if (e.getActionMasked() == MotionEvent.ACTION_DOWN) holdParents();
+            return super.onInterceptTouchEvent(e);
+        }
+
+        @Override public boolean onTouchEvent(MotionEvent e) {
+            if (e.getActionMasked() == MotionEvent.ACTION_DOWN) holdParents();
+            return super.onTouchEvent(e);
+        }
+
+        private void holdParents() {
+            if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
+        }
+
+        @Override protected void onMeasure(int wSpec, int hSpec) {
+            int max = maxListPx(getContext());
+            int mode = View.MeasureSpec.getMode(hSpec);
+            int size = View.MeasureSpec.getSize(hSpec);
+            int cap = (mode == View.MeasureSpec.UNSPECIFIED) ? max : Math.min(max, size);
+            super.onMeasure(wSpec, View.MeasureSpec.makeMeasureSpec(Math.max(cap, 0), View.MeasureSpec.AT_MOST));
+        }
+
+        private static int maxListPx(Context c) {
+            int screen = c.getResources().getDisplayMetrics().heightPixels;
+            int room = screen - dp(c, 420);
+            int floor = dp(c, 160);
+            int ceil = dp(c, 280);
+            if (room < floor) return floor;
+            return Math.min(room, ceil);
+        }
+    }
+
+    /**
+     * One dialer-style action: a 72dp circle, a short label under it, and the whole column as the touch target.
+     * The content description is the label, once.
+     */
+    static View roundAction(Context c, String label, int color, int icon, View.OnClickListener tap) {
+        LinearLayout col = new LinearLayout(c);
+        col.setOrientation(LinearLayout.VERTICAL);
+        col.setGravity(Gravity.CENTER_HORIZONTAL);
+        int wide = dp(c, 72);
+        col.setMinimumWidth(wide);
+        col.setPadding(dp(c, 6), dp(c, 4), dp(c, 6), dp(c, 4));
+        col.setClickable(true);
+        col.setFocusable(true);
+        col.setContentDescription(label);
+        col.setOnClickListener(tap);
+        col.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);
+
+        ImageView glyph = new ImageView(c);
+        glyph.setImageResource(icon);
+        glyph.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        glyph.setColorFilter(0xFFFFFFFF);
+        glyph.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        int box = dp(c, CIRCLE_DP);
+        int inset = dp(c, 18);
+        glyph.setPadding(inset, inset, inset, inset);
+        GradientDrawable circle = new GradientDrawable();
+        circle.setShape(GradientDrawable.OVAL);
+        circle.setColor(color);
+        glyph.setBackground(circle);
+        col.addView(glyph, new LinearLayout.LayoutParams(box, box));
+
+        TextView caption = new TextView(c);
+        caption.setText(label);
+        caption.setTextColor(0xFF2A1B7A);
+        caption.setTextSize(13);
+        caption.setTypeface(Typeface.DEFAULT_BOLD);
+        caption.setGravity(Gravity.CENTER);
+        caption.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        cp.topMargin = dp(c, 6);
+        col.addView(caption, cp);
+        return col;
     }
 
     private InviteViews() {}

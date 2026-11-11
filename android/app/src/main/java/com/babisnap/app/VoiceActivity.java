@@ -16,9 +16,7 @@ import android.speech.RecognitionListener;
 import android.speech.SpeechRecognizer;
 import android.view.View;
 import android.view.Window;
-import android.text.Editable;
-import android.text.TextWatcher;
-import android.widget.EditText;
+import android.view.WindowManager;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -640,51 +638,36 @@ public class VoiceActivity extends Activity {
         }, "babisnap-wa-contacts").start();
     }
 
+    /** Picker only: outside taps must not dismiss the dialog, and the keyboard stays down until search is tapped. */
+    private void preparePickerWindow() {
+        setFinishOnTouchOutside(false);
+        getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_HIDDEN
+            | WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+    }
+
     private void showWaChooser(List<WhatsAppRecipients.Contact> people, boolean search) {
         waConfirming = false;
         waGroup = false;
         waPerson = null;
         waCommit = null;
+        ui.removeCallbacks(waExpire);
+        if (waAnim != null) waAnim.cancel();
         paintWaCard(search ? "וואטסאפ · בחירת נמען" : "וואטסאפ · כמה אנשי קשר", "וואטסאפ",
             waBody.isEmpty() ? "אין טקסט" : waBody, false);
+        preparePickerWindow();
         LinearLayout box = findViewById(R.id.invites);
         box.removeAllViews();
-        if (search) {
-            EditText field = new EditText(this);
-            field.setHint("חיפוש איש קשר");
-            field.setSingleLine(true);
-            field.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
-            field.addTextChangedListener(new TextWatcher() {
-                @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
-                @Override public void onTextChanged(CharSequence s, int start, int before, int count) {}
-                @Override public void afterTextChanged(Editable s) {
-                    bindWaChoices(WhatsAppRecipients.search(waContacts, s == null ? "" : s.toString()), true);
-                }
-            });
-            box.addView(field);
-        }
-        bindWaChoices(people, true);
-        box.setVisibility(View.VISIBLE);
-    }
-
-    private void bindWaChoices(List<WhatsAppRecipients.Contact> people, boolean keepSearch) {
-        LinearLayout box = findViewById(R.id.invites);
-        if (box == null) return;
-        View search = keepSearch && box.getChildCount() > 0 && box.getChildAt(0) instanceof EditText ? box.getChildAt(0) : null;
-        box.removeAllViews();
-        if (search != null) box.addView(search);
-        if (search != null && checkSelfPermission(Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED)
+        findViewById(R.id.undo).setVisibility(View.GONE);
+        if (checkSelfPermission(Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED)
             box.addView(InviteViews.strip(this, false, "בלי הרשאת אנשי קשר אי אפשר למצוא נמען", null));
-        List<String> names = new ArrayList<>();
-        List<String> details = new ArrayList<>();
-        for (WhatsAppRecipients.Contact p : people) {
-            names.add(p.label());
-            details.add(p.pretty());
-        }
-        box.addView(InviteViews.choiceList(this, "למי לפתוח וואטסאפ?", names, details, "פתח וואטסאפ בלי נמען", index -> {
-            if (index < 0) showWaPlain();
-            else if (index < people.size()) showWaDirect(people.get(index), waBody);
-        }));
+        String spoken = !search && waCommand != null ? waCommand.name : "";
+        box.addView(InviteViews.peoplePicker(this, "למי לפתוח וואטסאפ?", spoken, people,
+            p -> p.pretty(),
+            person -> showWaDirect(person, waBody),
+            () -> cancelWhatsApp("בוטל – לא נשלח לוואטסאפ"),
+            "פתח וואטסאפ בלי נמען",
+            this::showWaPlain));
+        box.setVisibility(View.VISIBLE);
     }
 
     /** One contact, on the meeting card. The countdown is CardFlow.UNDO_MS, then the chat opens. */
@@ -736,6 +719,7 @@ public class VoiceActivity extends Activity {
 
     /** The saved-card used for a meeting and for a BabiTk item. Undo text stays the layout's «ביטול (Undo)». */
     private void paintWaCard(String headline, String chipText, String summary, boolean counting) {
+        setFinishOnTouchOutside(true);
         setContentView(R.layout.card_saved);
         getWindow().setBackgroundDrawableResource(android.R.color.transparent);
         ((TextView) findViewById(R.id.check)).setText("💬");
@@ -911,18 +895,18 @@ public class VoiceActivity extends Activity {
     private void showCallPicker(List<WhatsAppRecipients.Contact> people) {
         callConfirming = false;
         callPerson = null;
+        ui.removeCallbacks(callExpire);
+        if (callAnim != null) callAnim.cancel();
         paintCallCard("שיחה · כמה אנשי קשר", "שמעתי «" + callName + "»", false);
+        preparePickerWindow();
         LinearLayout box = findViewById(R.id.invites);
         box.removeAllViews();
-        List<String> names = new ArrayList<>();
-        List<String> details = new ArrayList<>();
-        for (WhatsAppRecipients.Contact p : people) {
-            names.add(p.label());
-            details.add("\u2066" + CallDial.mask(CallDial.chooseRaw(p)) + "\u2069");
-        }
-        box.addView(InviteViews.choiceList(this, CallDial.PICK, names, details, null, index -> {
-            if (index >= 0 && index < people.size()) showCallConfirm(people.get(index));
-        }));
+        findViewById(R.id.undo).setVisibility(View.GONE);
+        box.addView(InviteViews.peoplePicker(this, CallDial.PICK, callName, people,
+            p -> "\u2066" + CallDial.mask(CallDial.chooseRaw(p)) + "\u2069",
+            this::showCallConfirm,
+            () -> cancelCall(CallDial.CANCELLED),
+            null, null));
         box.setVisibility(View.VISIBLE);
     }
 
@@ -945,6 +929,7 @@ public class VoiceActivity extends Activity {
      * so a later "וואטסאפ" voice button is another entry, not a new layout.
      */
     private void paintCallCard(String headline, String summary, boolean counting) {
+        setFinishOnTouchOutside(true);
         setContentView(R.layout.card_saved);
         getWindow().setBackgroundDrawableResource(android.R.color.transparent);
         ((TextView) findViewById(R.id.check)).setText("📞");
@@ -967,23 +952,25 @@ public class VoiceActivity extends Activity {
             return;
         }
         callConfirming = true;
+        undo.setVisibility(View.GONE);
+        // Incoming-call layout: answer and hang-up on opposite sides of the card.
+        LinearLayout pair = new LinearLayout(this);
+        pair.setOrientation(LinearLayout.HORIZONTAL);
+        pair.setGravity(Gravity.CENTER_VERTICAL);
         for (CallDial.Action action : CallDial.actions()) {
-            TextView button = new TextView(this);
-            button.setText(action.label);
-            button.setTag(action.name());
-            button.setGravity(Gravity.CENTER);
-            button.setTextColor(0xFFFFFFFF);
-            button.setTextSize(15);
-            button.setTypeface(Typeface.DEFAULT_BOLD);
-            button.setMinHeight(InviteViews.dp(this, 48));
-            button.setMinimumHeight(InviteViews.dp(this, 48));
-            button.setBackgroundResource(R.drawable.pill_purple);
-            button.setOnClickListener(v -> onCallAction(action));
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-            lp.topMargin = InviteViews.dp(this, 10);
-            actions.addView(button, lp);
+            View dial = InviteViews.roundAction(this, action.label, InviteViews.DIAL_GREEN, R.drawable.ic_dial_answer,
+                v -> onCallAction(action));
+            dial.setTag(action.name());
+            pair.addView(dial);
         }
+        pair.addView(new View(this), new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f));
+        View cancel = InviteViews.roundAction(this, "ביטול", InviteViews.CANCEL_RED, R.drawable.ic_dial_hangup,
+            v -> cancelCall(CallDial.CANCELLED));
+        pair.addView(cancel);
+        LinearLayout.LayoutParams row = new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        row.topMargin = InviteViews.dp(this, 12);
+        actions.addView(pair, row);
         actions.setVisibility(View.VISIBLE);
         android.widget.ProgressBar bar = findViewById(R.id.countdown);
         bar.setVisibility(View.VISIBLE);
