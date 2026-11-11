@@ -13,18 +13,21 @@ import java.util.regex.Pattern;
  * WHATSAPP is returned only when the caller passes whatsappEnabled (the setting, default off).
  * {@link #classify(String, boolean)} passes false and never returns WHATSAPP.
  * The live path is {@link #classify(String, boolean, boolean)} with the saved setting.
+ * CALL is an immediate dial ("תתקשר לתמרי", no future date or time). It is not a task.
  */
 public final class Classifier {
-    public enum Kind { MEETING, TASK, NOTE, WHATSAPP;
+    public enum Kind { MEETING, TASK, NOTE, WHATSAPP, CALL;
         public String api() {
             if (this == TASK) return "task";
             if (this == WHATSAPP) return "whatsapp";
+            if (this == CALL) return "call";
             return "note";
         }
         public String he() {
             if (this == MEETING) return "פגישה";
             if (this == TASK) return "משימה";
             if (this == WHATSAPP) return "וואטסאפ";
+            if (this == CALL) return "שיחה";
             return "הערה";
         } }
 
@@ -125,7 +128,9 @@ public final class Classifier {
      *        When true, a channel word is the only destination and is removed from the text.
      */
     public static Result classify(String text, boolean explicitTime, boolean whatsappEnabled) {
-        String t = COMMAND.matcher(normalize(text)).replaceFirst("");
+        String normalized = normalize(text);
+        String t = COMMAND.matcher(normalized).replaceFirst("");
+        boolean commandPrefixed = t.length() != normalized.length();
         if (whatsappEnabled && WHATSAPP.matcher(t).find()) return new Result(Kind.WHATSAPP, stripWhatsApp(t));
         String s;
         // Explicit note at the start wins over everything, including "יומן".
@@ -152,6 +157,7 @@ public final class Classifier {
         String first = t.isEmpty() ? "" : t.split(" ")[0];
         boolean meetingVerb = MEETING_VERBS.contains(first);
         if (meetingVerb) return new Result(Kind.MEETING, t);
+        if (CallDial.isImmediate(t, explicitTime, commandPrefixed)) return new Result(Kind.CALL, CallDial.nameOf(t));
         if (hasAction(t)) return new Result(Kind.TASK, t);
 
         if (EVENT_NAME.matcher(t).find() || GATHERING.matcher(t).find() || WITH_PERSON.matcher(t).find())

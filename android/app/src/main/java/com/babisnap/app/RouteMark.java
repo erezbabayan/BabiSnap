@@ -8,17 +8,19 @@ import android.widget.TextView;
  * BabiTk has no logo in this repo, so that route uses a checklist glyph.
  */
 public final class RouteMark {
-    public enum Route { CALENDAR, BABITK, WHATSAPP }
+    public enum Route { CALENDAR, BABITK, WHATSAPP, CALL }
 
     public static Route of(Classifier.Kind kind) {
         if (kind == Classifier.Kind.MEETING) return Route.CALENDAR;
         if (kind == Classifier.Kind.WHATSAPP) return Route.WHATSAPP;
+        if (kind == Classifier.Kind.CALL) return Route.CALL;
         return Route.BABITK;
     }
 
     public static int drawable(Route route) {
         if (route == Route.CALENDAR) return R.drawable.ic_route_calendar;
         if (route == Route.WHATSAPP) return R.drawable.ic_route_whatsapp;
+        if (route == Route.CALL) return R.drawable.ic_route_call;
         return R.drawable.ic_route_babitk;
     }
 

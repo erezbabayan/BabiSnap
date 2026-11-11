@@ -70,6 +70,9 @@ public class WhatsAppGroupShareTest {
         String voice = text("src/main/java/com/babisnap/app/VoiceActivity.java");
         assertFalse(voice.contains("createChooser"));
         assertFalse(voice.contains("text(null"));
+        int groups = voice.indexOf("WhatsAppGroupShare.entersWhatsApp");
+        int call = voice.indexOf("RouteGate.Dest.CALL");
+        assertTrue(groups > 0 && call > groups);
     }
 
     private static String text(String path) throws Exception {

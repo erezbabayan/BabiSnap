@@ -102,7 +102,7 @@ public class MainActivity extends Activity {
         section("הרשאות");
         LinearLayout perms = card();
         permRow(perms, "🎙", "מיקרופון", null, Manifest.permission.RECORD_AUDIO, REQ_MIC);
-        permRow(perms, "👥", "אנשי קשר", "להזמנות ולוואטסאפ", Manifest.permission.READ_CONTACTS, REQ_CONTACTS);
+        permRow(perms, "👥", "אנשי קשר", "להזמנות, לשיחה ולוואטסאפ", Manifest.permission.READ_CONTACTS, REQ_CONTACTS);
         if (android.os.Build.VERSION.SDK_INT >= 33) {
             permRow(perms, "🔔", "התראות", "כששמירה ליומן נכשלת", Manifest.permission.POST_NOTIFICATIONS, REQ_NOTIF);
         }

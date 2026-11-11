@@ -22,7 +22,13 @@ import java.util.Set;
  * Nothing is stored or logged. A WhatsApp raw contact (com.whatsapp) supplies the number when it has one.
  */
 final class WhatsAppContacts {
-    static List<WhatsAppRecipients.Contact> load(Context c) {
+    static List<WhatsAppRecipients.Contact> load(Context c) { return load(c, true); }
+
+    /**
+     * @param israeliOnly WhatsApp offers only an Israeli number.
+     *        A phone call passes false and keeps every dialable number, mobile first later.
+     */
+    static List<WhatsAppRecipients.Contact> load(Context c, boolean israeliOnly) {
         ContentResolver cr = c.getContentResolver();
         Set<Long> waRaw = new HashSet<>();
         try (Cursor raw = cr.query(RawContacts.CONTENT_URI,
@@ -83,7 +89,8 @@ final class WhatsAppContacts {
         for (Draft d : byId.values()) {
             WhatsAppRecipients.Contact contact = new WhatsAppRecipients.Contact(
                 d.display, d.given, d.family, d.nickname, d.phones);
-            if (contact.digits() != null) out.add(contact);
+            boolean keep = israeliOnly ? contact.digits() != null : CallDial.hasNumber(contact);
+            if (keep) out.add(contact);
         }
         return out;
     }

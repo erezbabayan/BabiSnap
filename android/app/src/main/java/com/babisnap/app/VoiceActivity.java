@@ -4,7 +4,9 @@ import android.app.Activity;
 import android.content.ActivityNotFoundException;
 import android.content.Context;
 import android.content.Intent;
+import android.graphics.Typeface;
 import android.net.Uri;
+import android.view.Gravity;
 import android.os.Bundle;
 import android.speech.RecognizerIntent;
 import android.widget.Toast;
@@ -27,7 +29,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 /** Widget/launcher target: speech (he-IL) -> parse on device -> (optional confirm) -> durable calendar / BabiTk queue.
- *  WhatsApp is a separate opt-in destination (setting off by default) and never writes those queues. */
+ *  WhatsApp is a separate opt-in destination (setting off by default) and never writes those queues.
+ *  An immediate call ("תתקשר לתמרי", no future date or time) opens the system dialer and never writes those queues. */
 public class VoiceActivity extends Activity {
     static final int REQ_SPEECH = 1, REQ_AUTH = 2, REQ_MIC = 3, REQ_CONTACTS = 4, REQ_WA = WhatsAppShare.REQ;
     private JSONObject parsed; private String spoken; private java.util.List<String> spokenTags = new java.util.ArrayList<>();
@@ -46,6 +49,12 @@ public class VoiceActivity extends Activity {
     private Runnable waAfterContacts;
     private Uri waUri;
     private android.animation.ObjectAnimator waAnim;
+    private boolean callPending, callConfirming, callAskingContacts, callDialed;
+    private String callName = "";
+    private WhatsAppRecipients.Contact callPerson;
+    private final List<WhatsAppRecipients.Contact> callContacts = new ArrayList<>();
+    private Runnable callAfterContacts;
+    private android.animation.ObjectAnimator callAnim;
 
     @Override protected void onCreate(Bundle b) {
         super.onCreate(b);
@@ -62,8 +71,9 @@ public class VoiceActivity extends Activity {
         super.onNewIntent(intent);
         setIntent(intent);
         // Back-to-back from MainActivity/widget while Undo (or listen) is open: commit then re-listen.
-        // A WhatsApp card is not a queue item — leaving it cancels and deletes, it does not save.
-        if (waPending && !waHandedOff) cancelWhatsApp(null);
+        // A WhatsApp card and a call card are not queue items — leaving them cancels, it does not save.
+        if (callPending && !callDialed) cancelCall(null);
+        else if (waPending && !waHandedOff) cancelWhatsApp(null);
         else if ((pendingBody != null || pendingMeeting) && !committed) commitPending();
         else if (pickerMode && !cardClosed && !awaitingConsent) finishInvites();
         restartListening();
@@ -85,12 +95,15 @@ public class VoiceActivity extends Activity {
 
     /** Reset session state and open the mic again (after onNewIntent commit). */
     private void restartListening() {
-        ui.removeCallbacks(commit); ui.removeCallbacks(closeCard); ui.removeCallbacks(pickerTimeout); ui.removeCallbacks(waExpire);
+        ui.removeCallbacks(commit); ui.removeCallbacks(closeCard); ui.removeCallbacks(pickerTimeout); ui.removeCallbacks(waExpire); ui.removeCallbacks(callExpire);
         ended = true; tick.removeCallbacks(ticker); stopRec();
         if (waHandedOff) { waAudio = null; waUri = null; } else discardWa();
         waPending = false; waHandedOff = false; waLeft = false; waConfirming = false; waGroup = false; waAskingContacts = false;
         waCommit = null;
         waText = ""; waBody = ""; waGroupName = ""; waPerson = null; waCommand = null; waAfterContacts = null; waContacts.clear();
+        callPending = false; callConfirming = false; callAskingContacts = false; callDialed = false;
+        callName = ""; callPerson = null; callAfterContacts = null; callContacts.clear();
+        if (callAnim != null) callAnim.cancel();
         pendingBody = null; pendingId = null; pendingMeeting = false; committed = false;
         cardClosed = false; awaitingConsent = false; pickerMode = false;
         invitees.clear(); inviteQueries = new ArrayList<>();
@@ -104,6 +117,12 @@ public class VoiceActivity extends Activity {
         if (req == REQ_CONTACTS) {
             boolean ok = g.length > 0 && g[0] == PackageManager.PERMISSION_GRANTED;
             MainActivity.noteResult(this, Manifest.permission.READ_CONTACTS, ok);
+            if (callPending) {
+                callAskingContacts = false;
+                if (ok) loadCallContacts();
+                else { callContacts.clear(); if (callAfterContacts != null) callAfterContacts.run(); }
+                return;
+            }
             if (waPending) {
                 waAskingContacts = false;
                 if (ok) loadWaContacts();
@@ -127,7 +146,7 @@ public class VoiceActivity extends Activity {
             .putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 4000L)
             .putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 4000L)
             .putExtra(RecognizerIntent.EXTRA_PROMPT, Core.whatsAppEnabled(this)
-                ? "פגישה, משימה, הערה או וואטסאפ?" : "פגישה, משימה או הערה?");
+                ? "פגישה, משימה, שיחה, הערה או וואטסאפ?" : "פגישה, משימה, שיחה או הערה?");
     }
 
     private void systemDialog() {
@@ -230,7 +249,7 @@ public class VoiceActivity extends Activity {
 
     private void stopRec() { if (rec != null) { try { rec.destroy(); } catch (Exception ignored) {} rec = null; } }
     @Override protected void onDestroy() {
-        ended = true; tick.removeCallbacks(ticker); ui.removeCallbacks(waExpire); stopRec();
+        ended = true; tick.removeCallbacks(ticker); ui.removeCallbacks(waExpire); ui.removeCallbacks(callExpire); stopRec();
         if (!waHandedOff) discardWa();
         super.onDestroy();
     }
@@ -250,6 +269,7 @@ public class VoiceActivity extends Activity {
             c = Classifier.classify(spoken, explicitTime, false);
             dest = RouteGate.dest(c.kind);
         }
+        if (dest == RouteGate.Dest.CALL) { showCall(c); return; }
         discardWa();
         if (dest != RouteGate.Dest.CALENDAR) { showSaved(c); return; }
         // Re-parse the text after destination/command words were stripped, so "יומן" / "לקלנדר" never stay in the title.
@@ -475,13 +495,16 @@ public class VoiceActivity extends Activity {
         }
         if (pendingBody == null) return;
         if (BabiTkJson.isWhatsAppPayload(pendingBody)) { pendingBody = null; done("בוטל – לא נשלח לוואטסאפ"); return; }
+        if (BabiTkJson.isCallPayload(pendingBody)) { pendingBody = null; done(CallDial.CANCELLED); return; }
         committed = true; ui.removeCallbacks(commit);
         BabiTk.enqueue(getApplicationContext(), pendingId, pendingBody);
         done(BabiTk.hasToken(this) ? null : (BabiTk.needsRepair(this) ? "BabiTk " + BabiTk.NOT_CONNECTED : "BabiTk לא מחובר") + ": הפריט נשמר במכשיר ויישלח אחרי חיבור (BabiSnap ← הגדרות ← BabiTk)");
     }
 
     @Override protected void onStop() {
-        if (waAskingContacts) { super.onStop(); return; }
+        if (callAskingContacts || waAskingContacts) { super.onStop(); return; }
+        if (callConfirming) runCallCommit();
+        else if (callPending && !callDialed) cancelCall(CallDial.CANCELLED);
         if (waHandedOff) waLeft = true;
         else if (waConfirming) runWaCommit();
         else if (waPending) cancelWhatsApp("בוטל – לא נשלח לוואטסאפ");
@@ -496,8 +519,9 @@ public class VoiceActivity extends Activity {
     }
 
     private void done(String msg) {
-        cardClosed = true; ui.removeCallbacks(closeCard); ui.removeCallbacks(commit); ui.removeCallbacks(pickerTimeout); ui.removeCallbacks(waExpire);
+        cardClosed = true; ui.removeCallbacks(closeCard); ui.removeCallbacks(commit); ui.removeCallbacks(pickerTimeout); ui.removeCallbacks(waExpire); ui.removeCallbacks(callExpire);
         if (waAnim != null) waAnim.cancel();
+        if (callAnim != null) callAnim.cancel();
         if (!waHandedOff) discardWa();
         if (msg != null) Toast.makeText(getApplicationContext(), msg, Toast.LENGTH_LONG).show();
         if (!isFinishing()) finish();
@@ -791,5 +815,199 @@ public class VoiceActivity extends Activity {
         waLeft = false;
         discardWa();
         done(null);
+    }
+
+    private final Runnable callExpire = this::runCallCommit;
+
+    private void runCallCommit() {
+        if (!callConfirming) return;
+        dialNow();
+    }
+
+    /** Drop the call card. A null toast does not finish — onNewIntent is about to listen again. */
+    private void cancelCall(String toast) {
+        if (callDialed) return;
+        callPending = false;
+        callConfirming = false;
+        ui.removeCallbacks(callExpire);
+        if (callAnim != null) callAnim.cancel();
+        callPerson = null;
+        if (toast != null) done(toast);
+    }
+
+    /** Immediate dial. Never enqueues a meeting or a BabiTk item. */
+    private void showCall(Classifier.Result c) {
+        discardWa();
+        pendingBody = null;
+        pendingMeeting = false;
+        committed = false;
+        callName = c.stripped == null ? "" : c.stripped.trim();
+        callPerson = null;
+        callDialed = false;
+        callConfirming = false;
+        if (callName.isEmpty()) { done(CallDial.NO_NAME); return; }
+        callPending = true;
+        callAfterContacts = () -> {
+            if (isFinishing() || cardClosed) return;
+            if (checkSelfPermission(Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) {
+                done(CallDial.NO_PERMISSION);
+                return;
+            }
+            WhatsAppRecipients.Matches hits = CallDial.match(callName, callContacts);
+            if (hits.one()) showCallConfirm(hits.hits.get(0));
+            else if (hits.code == WhatsAppRecipients.MatchCode.MANY) showCallPicker(hits.hits);
+            else done(CallDial.notFound(callName));
+        };
+        ensureCallContacts();
+    }
+
+    private void ensureCallContacts() {
+        if (checkSelfPermission(Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED) {
+            loadCallContacts();
+            return;
+        }
+        if (MainActivity.isBlocked(this, Manifest.permission.READ_CONTACTS)) {
+            done(CallDial.NO_PERMISSION);
+            return;
+        }
+        showCallContactsSheet();
+    }
+
+    private void showCallContactsSheet() {
+        setContentView(R.layout.card_contacts);
+        getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+        ((TextView) findViewById(R.id.body)).setText("כדי לחייג לפי השם צריך גישה לאנשי הקשר בטלפון. המספר לא נשמר ולא נשלח, והשיחה מתחילה רק בלחיצה בחייגן.");
+        findViewById(R.id.later).setOnClickListener(v -> {
+            callContacts.clear();
+            if (callAfterContacts != null) callAfterContacts.run();
+        });
+        findViewById(R.id.allow).setOnClickListener(v -> {
+            if (MainActivity.isBlocked(this, Manifest.permission.READ_CONTACTS)) {
+                done(CallDial.NO_PERMISSION);
+                return;
+            }
+            callAskingContacts = true;
+            requestPermissions(new String[]{Manifest.permission.READ_CONTACTS}, REQ_CONTACTS);
+        });
+    }
+
+    private void loadCallContacts() {
+        final Context app = getApplicationContext();
+        new Thread(() -> {
+            List<WhatsAppRecipients.Contact> list;
+            try { list = WhatsAppContacts.load(app, false); }
+            catch (Exception e) { list = new ArrayList<>(); }
+            final List<WhatsAppRecipients.Contact> ready = list;
+            runOnUiThread(() -> {
+                if (isFinishing() || cardClosed) return;
+                callContacts.clear();
+                callContacts.addAll(ready);
+                if (callAfterContacts != null) callAfterContacts.run();
+            });
+        }, "babisnap-call-contacts").start();
+    }
+
+    private void showCallPicker(List<WhatsAppRecipients.Contact> people) {
+        callConfirming = false;
+        callPerson = null;
+        paintCallCard("שיחה · כמה אנשי קשר", "שמעתי «" + callName + "»", false);
+        LinearLayout box = findViewById(R.id.invites);
+        box.removeAllViews();
+        List<String> names = new ArrayList<>();
+        List<String> details = new ArrayList<>();
+        for (WhatsAppRecipients.Contact p : people) {
+            names.add(p.label());
+            details.add("\u2066" + CallDial.mask(CallDial.chooseRaw(p)) + "\u2069");
+        }
+        box.addView(InviteViews.choiceList(this, CallDial.PICK, names, details, null, index -> {
+            if (index >= 0 && index < people.size()) showCallConfirm(people.get(index));
+        }));
+        box.setVisibility(View.VISIBLE);
+    }
+
+    private void showCallConfirm(WhatsAppRecipients.Contact person) {
+        callPerson = person;
+        paintCallCard(CallDial.headline(person), CallDial.summary(person), true);
+        ui.removeCallbacks(callExpire);
+        ui.postDelayed(callExpire, CallDial.CONFIRM_MS);
+    }
+
+    /**
+     * The same saved card as a meeting. Actions come from {@link CallDial#actions()}
+     * so a later "וואטסאפ" voice button is another entry, not a new layout.
+     */
+    private void paintCallCard(String headline, String summary, boolean counting) {
+        setContentView(R.layout.card_saved);
+        getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+        ((TextView) findViewById(R.id.check)).setText("📞");
+        ((TextView) findViewById(R.id.headline)).setText(headline);
+        TextView chip = findViewById(R.id.chip);
+        chip.setText("שיחה");
+        chip.setBackgroundResource(R.drawable.chip_call);
+        chip.setTextColor(0xFFFFFFFF);
+        RouteMark.apply(chip, RouteMark.Route.CALL, 0xFFFFFFFF);
+        ((TextView) findViewById(R.id.summary)).setText(summary);
+        TextView undo = findViewById(R.id.undo);
+        undo.setText("ביטול");
+        undo.setOnClickListener(v -> cancelCall(CallDial.CANCELLED));
+        LinearLayout actions = findViewById(R.id.call_actions);
+        actions.removeAllViews();
+        if (!counting) {
+            callConfirming = false;
+            actions.setVisibility(View.GONE);
+            findViewById(R.id.countdown).setVisibility(View.GONE);
+            return;
+        }
+        callConfirming = true;
+        for (CallDial.Action action : CallDial.actions()) {
+            TextView button = new TextView(this);
+            button.setText(action.label);
+            button.setTag(action.name());
+            button.setGravity(Gravity.CENTER);
+            button.setTextColor(0xFFFFFFFF);
+            button.setTextSize(15);
+            button.setTypeface(Typeface.DEFAULT_BOLD);
+            button.setMinHeight(InviteViews.dp(this, 48));
+            button.setMinimumHeight(InviteViews.dp(this, 48));
+            button.setBackgroundResource(R.drawable.pill_purple);
+            button.setOnClickListener(v -> onCallAction(action));
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+            lp.topMargin = InviteViews.dp(this, 10);
+            actions.addView(button, lp);
+        }
+        actions.setVisibility(View.VISIBLE);
+        android.widget.ProgressBar bar = findViewById(R.id.countdown);
+        bar.setVisibility(View.VISIBLE);
+        bar.setMax((int) CallDial.CONFIRM_MS);
+        bar.setProgress((int) CallDial.CONFIRM_MS);
+        if (callAnim != null) callAnim.cancel();
+        callAnim = android.animation.ObjectAnimator.ofInt(bar, "progress", (int) CallDial.CONFIRM_MS, 0);
+        callAnim.setDuration(CallDial.CONFIRM_MS);
+        callAnim.start();
+    }
+
+    /** DIAL opens the handset. A later action (WhatsApp voice) gets its own branch here. */
+    private void onCallAction(CallDial.Action action) {
+        if (action == CallDial.Action.DIAL) dialNow();
+    }
+
+    /** ACTION_DIAL fills the number. The call starts only when the user taps it in the dialer. */
+    private void dialNow() {
+        if (callDialed || callPerson == null) return;
+        String tel = CallDial.tel(callPerson);
+        callConfirming = false;
+        callPending = false;
+        ui.removeCallbacks(callExpire);
+        if (callAnim != null) callAnim.cancel();
+        if (tel == null) { done(CallDial.NO_NUMBER); return; }
+        callDialed = true;
+        try {
+            startActivity(new Intent(Intent.ACTION_DIAL, Uri.parse(tel)));
+            done(null);
+        } catch (ActivityNotFoundException | SecurityException e) {
+            callDialed = false;
+            done(CallDial.NO_DIALER);
+        }
     }
 }

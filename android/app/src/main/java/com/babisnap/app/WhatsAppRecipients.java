@@ -211,13 +211,24 @@ public final class WhatsAppRecipients {
     /**
      * Best contacts for a spoken name. Prefixes ל/ש/ו are optional.
      * One tight match wins over several loose ones. A tie stays a chooser.
+     * Only contacts with an Israeli number are considered (WhatsApp).
      */
     public static Matches match(String spoken, List<Contact> contacts) {
+        return matchAmong(spoken, withNumber(contacts));
+    }
+
+    /**
+     * Same name rules as {@link #match}, against a list the caller already filtered.
+     * A phone call passes every contact with a dialable number, including numbers outside Israel.
+     */
+    public static Matches matchAmong(String spoken, List<Contact> eligible) {
+        List<Contact> list = new ArrayList<>();
+        if (eligible != null) for (Contact c : eligible) if (c != null) list.add(c);
         String raw = ContactMatcher.norm(spoken);
-        Matches direct = matchKey(raw, contacts);
+        Matches direct = matchKey(raw, list);
         String stripped = stripOnePrefix(raw);
         if (stripped.equals(raw)) return direct;
-        Matches alt = matchKey(stripped, contacts);
+        Matches alt = matchKey(stripped, list);
         if (direct.code == MatchCode.NONE) return alt;
         if (alt.code == MatchCode.NONE) return direct;
         if (alt.tier < direct.tier) return alt;
@@ -245,7 +256,8 @@ public final class WhatsAppRecipients {
         if (key == null || key.length() < 2) return none();
         List<Contact> best = new ArrayList<>();
         int bestTier = 99;
-        for (Contact c : withNumber(contacts)) {
+        for (Contact c : contacts) {
+            if (c == null) continue;
             int tier = tier(key, c);
             if (tier < 0) continue;
             if (tier < bestTier) {
