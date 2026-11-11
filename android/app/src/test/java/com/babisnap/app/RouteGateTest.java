@@ -92,10 +92,24 @@ public class RouteGateTest {
         assertTrue(gate > 0 && call > gate && cal > call && babi > call);
         assertTrue(src.contains("if (!RouteGate.toBabiTk(c.kind)) return;"));
         assertTrue(src.contains("Intent.ACTION_DIAL"));
-        assertFalse(src.contains("ACTION_CALL"));
-        assertFalse(src.contains("CALL_PHONE"));
+        assertTrue(src.contains("Intent.ACTION_CALL"));
+        assertTrue(src.contains("CallDial.place"));
+        assertTrue(src.contains("CallDial.Moment.TIMEOUT"));
+        assertFalse(src.contains("if (callConfirming) runCallCommit()"));
+        assertFalse(src.contains("requestPermissions(new String[]{Manifest.permission.CALL_PHONE}"));
         assertTrue(src.contains("CallDial.CONFIRM_MS"));
         assertTrue(src.contains("BabiTkJson.isCallPayload(pendingBody)"));
+        String settings = text("src/main/java/com/babisnap/app/MainActivity.java");
+        assertTrue(settings.contains("אישור לבצע שיחות") || settings.contains("CallDial.TOGGLE_TITLE"));
+        assertTrue(settings.contains("CallDial.TOGGLE_HINT"));
+        assertTrue(text("src/main/java/com/babisnap/app/CallDial.java").contains("בסוף הספירה השיחה תצא ישירות, בלי חייגן"));
+        assertTrue(settings.contains("R.drawable.ic_route_call"));
+        assertTrue(settings.contains("R.drawable.ic_route_calendar"));
+        assertTrue(settings.contains("R.drawable.ic_route_whatsapp"));
+        assertTrue(settings.contains("R.drawable.ic_route_babitk"));
+        assertTrue(settings.contains("setMinHeight(dp(48))"));
+        assertTrue(settings.contains("requestPermissions(new String[]{Manifest.permission.CALL_PHONE}, REQ_CALL)"));
+        assertTrue(settings.contains("setMinimumHeight(dp(48))"));
         assertTrue(src.contains("BabiTkJson.isWhatsAppPayload(pendingBody)"));
         assertFalse(src.contains("AccessibilityService"));
         assertFalse(src.contains("NotificationListener"));
@@ -119,9 +133,16 @@ public class RouteGateTest {
         assertFalse(manifest.contains("QUERY_ALL_PACKAGES"));
         assertFalse(manifest.contains("WhatsAppRecipientsActivity"));
         assertFalse(manifest.contains("android.intent.action.PICK"));
-        assertFalse(manifest.contains("CALL_PHONE"));
+        assertTrue(manifest.contains("android.permission.CALL_PHONE"));
         assertFalse(manifest.contains("READ_PHONE_STATE"));
         assertFalse(manifest.contains("READ_CALL_LOG"));
+        int callPerm = 0;
+        int at = 0;
+        while (manifest.indexOf("android.permission.CALL_PHONE", at) >= 0) {
+            callPerm++;
+            at = manifest.indexOf("android.permission.CALL_PHONE", at) + 1;
+        }
+        assertEquals(1, callPerm);
         assertTrue(manifest.contains("android.intent.action.DIAL"));
         assertTrue(manifest.contains("wa.me"));
         int contactsPerm = 0;

@@ -138,6 +138,37 @@ public class CallDialTest {
         assertFalse(CallDial.mask("+14155550199").contains("5550199"));
     }
 
+    @Test public void directCallNeedsTheToggleAndThePermission() {
+        assertEquals(CallDial.Handset.CALL, CallDial.place(CallDial.Moment.TIMEOUT, true, true, true));
+        assertEquals("android.intent.action.CALL", CallDial.intentAction(CallDial.Handset.CALL));
+        assertEquals(CallDial.Handset.DIAL, CallDial.place(CallDial.Moment.TIMEOUT, true, false, true));
+        assertEquals(CallDial.Handset.DIAL, CallDial.place(CallDial.Moment.TIMEOUT, false, true, true));
+        assertEquals(CallDial.Handset.DIAL, CallDial.place(CallDial.Moment.TIMEOUT, false, false, true));
+        assertEquals(CallDial.Handset.DIAL, CallDial.place(CallDial.Moment.TAP, false, false, true));
+        assertEquals(CallDial.Handset.CALL, CallDial.place(CallDial.Moment.TAP, true, true, true));
+        assertEquals("android.intent.action.DIAL", CallDial.intentAction(CallDial.Handset.DIAL));
+        assertEquals(CallDial.Handset.NONE, CallDial.place(CallDial.Moment.TIMEOUT, true, true, false));
+        assertEquals(CallDial.Handset.NONE, CallDial.place(CallDial.Moment.TAP, true, true, false));
+        assertEquals(CallDial.Handset.NONE, CallDial.place(CallDial.Moment.CANCEL, true, true, true));
+        assertEquals(CallDial.Handset.NONE, CallDial.place(CallDial.Moment.LEAVE, true, true, true));
+        assertNull(CallDial.intentAction(CallDial.Handset.NONE));
+        assertFalse(CallDial.effective(true, false));
+        assertFalse(CallDial.effective(false, true));
+        assertTrue(CallDial.effective(true, true));
+        assertEquals(CallDial.ToggleResult.SAVED_OFF, CallDial.onToggle(false, true, false));
+        assertEquals(CallDial.ToggleResult.SAVED_ON, CallDial.onToggle(true, true, false));
+        assertEquals(CallDial.ToggleResult.NEED_PROMPT, CallDial.onToggle(true, false, false));
+        assertEquals(CallDial.ToggleResult.NEED_SETTINGS, CallDial.onToggle(true, false, true));
+        assertEquals(8000L, CallDial.CONFIRM_MS);
+        WhatsAppRecipients.Contact tamar = person("תמר כהן", "תמר", "", mobile("0501234567"));
+        assertEquals("שיחה · מתקשר לתמר כהן", CallDial.headline(tamar, true));
+        assertEquals("שיחה · ייפתח החייגן אצל תמר כהן", CallDial.headline(tamar, false));
+        assertTrue(CallDial.summary(tamar, true).contains(CallDial.HINT_AUTO));
+        assertFalse(CallDial.summary(tamar, true).contains(CallDial.HINT));
+        assertTrue(CallDial.summary(tamar, false).contains(CallDial.HINT));
+        assertEquals(CallDial.TOGGLE_HINT, "בסוף הספירה השיחה תצא ישירות, בלי חייגן");
+    }
+
     @Test public void maskHidesTheMiddleAndKeepsAnIsraeliMobileReadable() {
         assertEquals("050-•••-4567", CallDial.mask("0501234567"));
         assertEquals("050-•••-4567", CallDial.mask("050-123-4567"));

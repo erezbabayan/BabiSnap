@@ -35,9 +35,11 @@ import org.json.JSONObject;
 /** 2.4 Settings (הגדרות), Hebrew RTL: connections, permissions, preferences, privacy, delete-all.
  *  A green ✓ is shown only when something is really connected / granted; otherwise one action button. */
 public class MainActivity extends Activity {
-    static final int REQ_AUTH = 10, REQ_MIC = 11, REQ_CONTACTS = 12, REQ_CALENDAR = 13, REQ_NOTIF = 14;
+    static final int REQ_AUTH = 10, REQ_MIC = 11, REQ_CONTACTS = 12, REQ_CALENDAR = 13, REQ_NOTIF = 14, REQ_CALL = 15;
     private static final int PURPLE = 0xFF2A1B7A, PURPLE_DARK = 0xFF1E1458, BG = 0xFFF6F5FA, GREEN = 0xFF1A8A4A,
-        MUTED = 0xFF7A7888, SECTION = 0xFF6A5FA8, RED = 0xFFB3261E, DIVIDER = 0xFFEEECF5, ICON_BG = 0xFFEFEDF8, ICON_BG_Y = 0xFFFFF1C4;
+        MUTED = 0xFF7A7888, SECTION = 0xFF6A5FA8, RED = 0xFFB3261E, DIVIDER = 0xFFEEECF5, ICON_BG = 0xFFEFEDF8, ICON_BG_Y = 0xFFFFF1C4,
+        CAL_ICON = 0xFF1A73E8, WA_ICON = 0xFF075E54, CALL_ICON = 0xFF148F4A, BABI_ICON = 0xFF2A1B7A;
+    private boolean ignoreCallToggle;
     private LinearLayout content;
 
     @Override protected void onCreate(Bundle b) {
@@ -70,13 +72,13 @@ public class MainActivity extends Activity {
         section("חיבורים");
         LinearLayout conn = card();
         String email = Core.prefs(this).getString("email", null);
-        if (email != null) row(conn, "📅", false, "Google יומן", ok("מחובר ✓", " · \u2066" + email + "\u2069"), link("התנתק", false, v -> signOut()));
-        else row(conn, "📅", false, "Google יומן", plain("לשמירת פגישות"), pill("התחבר", v -> signIn()));
+        if (email != null) markRow(conn, R.drawable.ic_route_calendar, CAL_ICON, "יומן Google", "Google יומן", ok("מחובר ✓", " · \u2066" + email + "\u2069"), link("התנתק", false, v -> signOut()));
+        else markRow(conn, R.drawable.ic_route_calendar, CAL_ICON, "יומן Google", "Google יומן", plain("לשמירת פגישות"), pill("התחבר", v -> signIn()));
         renderDeviceCalendar(conn);
         boolean btk = BabiTk.hasToken(this);
-        if (btk) row(conn, "📓", true, "BabiTk · מחברת", ok("מחובר ✓", " · משימות והערות"), link("נתק", false, v -> { BabiTk.disconnect(this);
+        if (btk) markRow(conn, R.drawable.ic_route_babitk, BABI_ICON, "BabiTk", "BabiTk · מחברת", ok("מחובר ✓", " · משימות והערות"), link("נתק", false, v -> { BabiTk.disconnect(this);
             Toast.makeText(this, "נותק – הטוקן נמחק מהמכשיר", Toast.LENGTH_SHORT).show(); render(); }));
-        else row(conn, "📓", true, "BabiTk · מחברת", plain(BabiTk.needsRepair(this) ? BabiTk.NOT_CONNECTED : "משימות והערות"), pill("חבר", v -> openBabiTk()));
+        else markRow(conn, R.drawable.ic_route_babitk, BABI_ICON, "BabiTk", "BabiTk · מחברת", plain(BabiTk.needsRepair(this) ? BabiTk.NOT_CONNECTED : "משימות והערות"), pill("חבר", v -> openBabiTk()));
         if (BabiTk.showDiagnostics(this)) {
             int pending = BabiTk.pending(this), failed = BabiTk.failed(this);
             String t = pending > 0 ? pending + " ממתינים לשליחה" : failed > 0 ? failed + " פריטים נדחו" : "בעיה בשליחה";
@@ -125,12 +127,22 @@ public class MainActivity extends Activity {
             Core.prefs(this).edit().putBoolean(WhatsAppLogic.PREF_ENABLED, on).apply();
             render();
         });
-        row(prefs, "💬", false, "שליחה לוואטסאפ", plain("כבוי כברירת מחדל. השם נלקח מאנשי הקשר"), wa);
+        markRow(prefs, R.drawable.ic_route_whatsapp, WA_ICON, "וואטסאפ", "שליחה לוואטסאפ", plain("כבוי כברירת מחדל. השם נלקח מאנשי הקשר"), wa);
         if (waOn) {
             WhatsAppLogic.Mode mode = Core.whatsAppMode(this);
             row(prefs, "📤", false, "מה נשלח לוואטסאפ", plain(WhatsAppLogic.modeHint(mode)),
                 link(WhatsAppLogic.modeLabel(mode) + " ▾", false, v -> pickWhatsAppMode()));
         }
+        boolean callGranted = checkSelfPermission(Manifest.permission.CALL_PHONE) == PackageManager.PERMISSION_GRANTED;
+        boolean callPref = Core.prefs(this).getBoolean(CallDial.PREF_DIRECT, false);
+        Switch callSw = new Switch(this);
+        callSw.setChecked(CallDial.effective(callPref, callGranted));
+        callSw.setContentDescription(CallDial.TOGGLE_TITLE);
+        callSw.setMinHeight(dp(48));
+        callSw.setMinimumHeight(dp(48));
+        callSw.setOnCheckedChangeListener(this::onCallToggle);
+        markRow(prefs, R.drawable.ic_route_call, CALL_ICON, CallDial.TOGGLE_TITLE, CallDial.TOGGLE_TITLE,
+            plain(CallDial.TOGGLE_HINT), callSw);
         row(prefs, "➕", true, "כפתור במסך הבית", null, link("הוסף", false, v -> addWidget()));
 
         footer();
@@ -160,24 +172,24 @@ public class MainActivity extends Activity {
         boolean destDevice = DeviceCalendarLogic.DEVICE.equals(Core.prefs(this).getString(DeviceCalendar.PREF_DEST, DeviceCalendarLogic.GOOGLE));
         if (on) {
             String name = DeviceCalendar.savedName(this);
-            row(conn, "📱", false, "יומן המכשיר", ok("מחובר ✓", " · " + name), link("נתק", false, v -> disconnectDeviceCalendar()));
-            row(conn, "🗓️", false, "יומן", null, link(name + " ▾", false, v -> pickDeviceCalendar()));
+            markRow(conn, R.drawable.ic_route_calendar, CAL_ICON, "יומן המכשיר", "יומן המכשיר", ok("מחובר ✓", " · " + name), link("נתק", false, v -> disconnectDeviceCalendar()));
+            markRow(conn, R.drawable.ic_route_calendar, CAL_ICON, "יומן המכשיר", "יומן", null, link(name + " ▾", false, v -> pickDeviceCalendar()));
         } else if (saved) {
-            row(conn, "📱", false, "יומן המכשיר", plain("היומן שנבחר לא זמין"), link("נתק", false, v -> disconnectDeviceCalendar()));
-            row(conn, "🗓️", false, "יומן", null, link("בחרו ▾", false, v -> pickDeviceCalendar()));
+            markRow(conn, R.drawable.ic_route_calendar, CAL_ICON, "יומן המכשיר", "יומן המכשיר", plain("היומן שנבחר לא זמין"), link("נתק", false, v -> disconnectDeviceCalendar()));
+            markRow(conn, R.drawable.ic_route_calendar, CAL_ICON, "יומן המכשיר", "יומן", null, link("בחרו ▾", false, v -> pickDeviceCalendar()));
         } else if (blocked) {
-            row(conn, "📱", false, "יומן המכשיר", plain("נחסם – אפשר לאשר בהגדרות המערכת"), pill("אשר", v -> {
+            markRow(conn, R.drawable.ic_route_calendar, CAL_ICON, "יומן המכשיר", "יומן המכשיר", plain("נחסם – אפשר לאשר בהגדרות המערכת"), pill("אשר", v -> {
                 Toast.makeText(this, "הרשאות ← יומן ← אפשר", Toast.LENGTH_LONG).show(); openAppInfo();
             }));
         } else {
-            row(conn, "📱", false, "יומן המכשיר", plain("לשמירה ביומן שבטלפון"), pill("חבר", v -> connectDeviceCalendar()));
+            markRow(conn, R.drawable.ic_route_calendar, CAL_ICON, "יומן המכשיר", "יומן המכשיר", plain("לשמירה ביומן שבטלפון"), pill("חבר", v -> connectDeviceCalendar()));
         }
         if (on || destDevice) {
             String cur = destDevice ? "יומן המכשיר" : "Google יומן";
             String sub = destDevice
                 ? (on ? "פגישות נשמרות ביומן המכשיר" : "אין יומן זמין – בחרו יומן או חזרו ל-Google")
                 : "פגישות נשמרות ב-Google";
-            row(conn, "📌", false, "יעד לפגישות", plain(sub), link(cur + " ▾", false, v -> pickDestination(on)));
+            markRow(conn, R.drawable.ic_route_calendar, CAL_ICON, "יעד ליומן", "יעד לפגישות", plain(sub), link(cur + " ▾", false, v -> pickDestination(on)));
         }
     }
 
@@ -346,10 +358,54 @@ public class MainActivity extends Activity {
             else render();
             return;
         }
+        if (req == REQ_CALL && p.length > 0) {
+            boolean ok = g.length > 0 && g[0] == PackageManager.PERMISSION_GRANTED;
+            noteResult(this, p[0], ok);
+            if (ok) Core.prefs(this).edit().putBoolean(CallDial.PREF_DIRECT, true).apply();
+            else {
+                Core.prefs(this).edit().putBoolean(CallDial.PREF_DIRECT, false).apply();
+                if (isBlocked(this, Manifest.permission.CALL_PHONE)) {
+                    Toast.makeText(this, CallDial.BLOCKED_MSG, Toast.LENGTH_LONG).show();
+                    openAppInfo();
+                } else Toast.makeText(this, CallDial.DENIED_MSG, Toast.LENGTH_LONG).show();
+            }
+            render();
+            return;
+        }
         if ((req == REQ_MIC || req == REQ_CONTACTS || req == REQ_NOTIF) && p.length > 0) {
             noteResult(this, p[0], g.length > 0 && g[0] == PackageManager.PERMISSION_GRANTED);
             render();
         }
+    }
+
+    /** «אישור לבצע שיחות» asks for CALL_PHONE only here. A denial puts the switch back to off. */
+    private void onCallToggle(CompoundButton source, boolean on) {
+        if (ignoreCallToggle) return;
+        boolean granted = checkSelfPermission(Manifest.permission.CALL_PHONE) == PackageManager.PERMISSION_GRANTED;
+        switch (CallDial.onToggle(on, granted, isBlocked(this, Manifest.permission.CALL_PHONE))) {
+            case SAVED_OFF:
+                Core.prefs(this).edit().putBoolean(CallDial.PREF_DIRECT, false).apply();
+                break;
+            case SAVED_ON:
+                Core.prefs(this).edit().putBoolean(CallDial.PREF_DIRECT, true).apply();
+                break;
+            case NEED_PROMPT:
+                setCallChecked(source, false);
+                requestPermissions(new String[]{Manifest.permission.CALL_PHONE}, REQ_CALL);
+                break;
+            case NEED_SETTINGS:
+                setCallChecked(source, false);
+                Core.prefs(this).edit().putBoolean(CallDial.PREF_DIRECT, false).apply();
+                Toast.makeText(this, CallDial.BLOCKED_MSG, Toast.LENGTH_LONG).show();
+                openAppInfo();
+                break;
+        }
+    }
+
+    private void setCallChecked(CompoundButton source, boolean on) {
+        ignoreCallToggle = true;
+        source.setChecked(on);
+        ignoreCallToggle = false;
     }
 
     private void openAppInfo() { openAppInfo(this); }
@@ -422,6 +478,7 @@ public class MainActivity extends Activity {
         "• משימות והערות נשלחות רק ללוח \"מחברת\" ב-BabiTk שלך. מפתח החיבור נשמר מוצפן בטלפון.\n\n" +
         "• אנשי קשר נקראים בטלפון בלבד ולא נשלחים לשום מקום (אימייל מוזמן עובר ל-Google רק אם ביקשת לשלוח הזמנה, ומספר נמען נפתח בוואטסאפ רק אם ביקשת).\n\n" +
         "• שליחה לוואטסאפ כבויה כברירת מחדל. כשהיא דלוקה ואומרים «וואטסאפ», השם נבדק מול אנשי הקשר בטלפון ונפתחת שיחה פרטית עם הטקסט מוכן. לקבוצה נפתח השיתוף של וואטסאפ ובוחרים את הקבוצה שם. השליחה רק בלחיצה שלך. אין רשימת כינויים ואין שרת.\n\n" +
+        "• שיחה מיידית נפתחת כחייגן, אלא אם הפעלתם «אישור לבצע שיחות» ואושרה הרשאת הטלפון. אז השיחה יוצאת בסוף 8 השניות. ההרשאה משמשת רק לחיוג שביקשתם. אין יומן שיחות ואין הקלטה.\n\n" +
         "• האימייל של חשבון Google שחיברתם, יחד עם מזהה התקנה אקראי (לא IMEI), גרסה ושם דגם, נשמרים לניהול הגישה בלבד. לא נשלחים הקלטות, תמלילים, תוכן יומן או טוקן Google.\n\n" +
         "• אין פרסומות ואין מעקב תוכן. \"מחק את כל הנתונים מהמכשיר\" מוחק את נתוני האפליקציה מהטלפון ומסמן את ההתקנה כמנותקת.\n\n" +
         "• מדיניות הפרטיות המלאה זמינה בקישור \"מדיניות מלאה\".";
@@ -513,16 +570,36 @@ public class MainActivity extends Activity {
         return c;
     }
 
+    /** Generic glyph in the route colors. Not a third-party logo. 24dp art, 48dp row. */
+    private void markRow(LinearLayout card, int iconRes, int bg, String description, String title, CharSequence sub, View action) {
+        FrameLayout box = new FrameLayout(this);
+        box.setBackground(round(bg, dp(10)));
+        ImageView iv = new ImageView(this);
+        Drawable raw = getDrawable(iconRes);
+        if (raw != null) {
+            Drawable icon = raw.mutate();
+            icon.setTint(0xFFFFFFFF);
+            iv.setImageDrawable(icon);
+        }
+        iv.setContentDescription(description);
+        box.addView(iv, new FrameLayout.LayoutParams(dp(24), dp(24), Gravity.CENTER));
+        finishRow(card, box, title, sub, action);
+    }
+
     private void row(LinearLayout card, String icon, boolean yellow, String title, CharSequence sub, View action) {
+        TextView ic = new TextView(this); ic.setText(icon); ic.setTextSize(16); ic.setGravity(Gravity.CENTER);
+        ic.setBackground(round(yellow ? ICON_BG_Y : ICON_BG, dp(10)));
+        finishRow(card, ic, title, sub, action);
+    }
+
+    private void finishRow(LinearLayout card, View icon, String title, CharSequence sub, View action) {
         if (card.getChildCount() > 0) {
             View div = new View(this); div.setBackgroundColor(DIVIDER); card.addView(div, new LinearLayout.LayoutParams(-1, 1));
         }
         LinearLayout r = new LinearLayout(this); r.setOrientation(LinearLayout.HORIZONTAL); r.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
-        r.setGravity(Gravity.CENTER_VERTICAL); r.setMinimumHeight(dp(56)); r.setPadding(dp(14), dp(10), dp(14), dp(10));
-        TextView ic = new TextView(this); ic.setText(icon); ic.setTextSize(16); ic.setGravity(Gravity.CENTER);
-        ic.setBackground(round(yellow ? ICON_BG_Y : ICON_BG, dp(10)));
+        r.setGravity(Gravity.CENTER_VERTICAL); r.setMinimumHeight(dp(48)); r.setPadding(dp(14), dp(10), dp(14), dp(10));
         LinearLayout.LayoutParams ilp = new LinearLayout.LayoutParams(dp(34), dp(34)); ilp.setMarginEnd(dp(12));
-        r.addView(ic, ilp);
+        r.addView(icon, ilp);
         LinearLayout tx = new LinearLayout(this); tx.setOrientation(LinearLayout.VERTICAL);
         TextView t = new TextView(this); t.setText(title); t.setTextSize(15.5f); t.setTextColor(0xFF1D1B26);
         t.setTextAlignment(View.TEXT_ALIGNMENT_VIEW_START); tx.addView(t);
