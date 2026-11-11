@@ -33,6 +33,19 @@ final class WhatsAppShare {
         return new Intent(Intent.ACTION_SEND).setPackage(pkg).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text);
     }
 
+    /**
+     * WhatsApp's own forward picker (recent chats and groups, with its search).
+     * Consumer app, else Business. Null when neither is installed — never the system sheet.
+     */
+    static Intent groupPicker(Context c, String text) {
+        WhatsAppGroupShare.Spec spec = WhatsAppGroupShare.spec(
+            installed(c.getPackageManager(), WhatsAppLogic.PKG),
+            installed(c.getPackageManager(), WhatsAppLogic.PKG_BUSINESS),
+            text);
+        if (!spec.opensWhatsAppPicker()) return null;
+        return new Intent(spec.action).setPackage(spec.pkg).setType(spec.type).putExtra(Intent.EXTRA_TEXT, spec.text);
+    }
+
     /** Private chat with the text already in the box. The user taps Send in WhatsApp. */
     static Intent textToJid(String pkg, String jid, String text) {
         return text(pkg, text == null ? "" : text).putExtra("jid", jid);
