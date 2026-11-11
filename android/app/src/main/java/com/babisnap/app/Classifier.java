@@ -10,11 +10,22 @@ import java.util.regex.Pattern;
  * MEETING -> Google Calendar only (existing flow). TASK / NOTE -> BabiTk "notebook" board.
  * Task vs note is decided by CONTENT (something to do vs information), never by presence of a date.
  * Exception: an explicit date+time with no action verb and no destination word is a calendar item.
+ * WHATSAPP is returned only when the caller passes whatsappEnabled (the setting, default off).
+ * {@link #classify(String, boolean)} is the live path and never returns WHATSAPP.
  */
 public final class Classifier {
-    public enum Kind { MEETING, TASK, NOTE;
-        public String api() { return this == TASK ? "task" : "note"; }
-        public String he() { return this == MEETING ? "פגישה" : this == TASK ? "משימה" : "הערה"; } }
+    public enum Kind { MEETING, TASK, NOTE, WHATSAPP;
+        public String api() {
+            if (this == TASK) return "task";
+            if (this == WHATSAPP) return "whatsapp";
+            return "note";
+        }
+        public String he() {
+            if (this == MEETING) return "פגישה";
+            if (this == TASK) return "משימה";
+            if (this == WHATSAPP) return "וואטסאפ";
+            return "הערה";
+        } }
 
     public static final class Result {
         public final Kind kind; public final String stripped;
@@ -45,6 +56,17 @@ public final class Classifier {
     static final Pattern INVITE_TO_MEETING = Pattern.compile("^ו?(?:תזמין|תזמיני|תזמינו|הזמן|הזמיני|הזמינו|לזמן|תזמן|תזמני|תזמנו|זמן|זמני)\\s+(?:גם\\s+)?את\\s.*(?:^|\\s)ל?(?:פגישה|פגישת|ישיבה|ישיבת|מפגש)(?:\\s|$)");
     /** "יומן" family (any variation, with ו/ב/ל/ה/מ prefixes) = calendar destination; stripped from the title. */
     static final Pattern CALENDAR = Pattern.compile("(^|\\s)(?:ו?[בלהמ]?(?:יומן|יומנים|יומני|יומנך|יומנו|היומן|לוח שנה|לוח השנה|קלנדר|קלנדאר|גוגל קלנדר|יומן גוגל)|calendar|google calendar)(?=\\s|$)", Pattern.CASE_INSENSITIVE);
+    /**
+     * WhatsApp channel word, whole token only. Listed forms plus the same ו/ב/ל/ה/מ prefix
+     * the calendar words use ("לוואטסאפ", "בוואטסאפ"). Removed from the message, not from other routes.
+     */
+    static final Pattern WHATSAPP = Pattern.compile(
+        "(?<=^|\\s)(?:ובוואטסאפ|לוואטסאפ|בוואטסאפ|הוואטסאפ|מוואטסאפ|ווואטסאפ|וואטסאפ"
+            + "|ובווטסאפ|לווטסאפ|בווטסאפ|הווטסאפ|מווטסאפ|וווטסאפ|ווטסאפ"
+            + "|ובואטסאפ|לבואטסאפ|בואטסאפ"
+            + "|ל-וואטסאפ|ב-וואטסאפ|ל-ווטסאפ|ב-ווטסאפ"
+            + "|whatsapp)(?=\\s|$)",
+        Pattern.CASE_INSENSITIVE);
     /** Event names that go to the calendar and stay in the title; with no clock time the parser marks them all-day. */
     static final Pattern EVENT_NAME = Pattern.compile("(^|\\s)(?:ו?[הל]?(?:מילואים|חתונה|חוג|אסיפה|אסיפת|כנס|מסיבה|ראיון)|יום הולדת|ארוחה|ארוחת)(?:\\s|$)");
     static final String[] EXPLICIT_NOTE = {"תרשום הערה", "תרשמי הערה", "רשום הערה", "תרשום פתק", "תרשמי פתק", "תכתוב הערה", "הערה חדשה", "להערה", "הערה", "פתק"};
@@ -92,7 +114,16 @@ public final class Classifier {
 
     /** @param explicitTime true when the user said a time of day (parser timeDefaulted == false). */
     public static Result classify(String text, boolean explicitTime) {
+        return classify(text, explicitTime, false);
+    }
+
+    /**
+     * @param whatsappEnabled setting, default off. When false the result matches {@link #classify(String, boolean)}.
+     *        When true, a channel word is the only destination and is removed from the text.
+     */
+    public static Result classify(String text, boolean explicitTime, boolean whatsappEnabled) {
         String t = COMMAND.matcher(normalize(text)).replaceFirst("");
+        if (whatsappEnabled && WHATSAPP.matcher(t).find()) return new Result(Kind.WHATSAPP, stripWhatsApp(t));
         String s;
         // Explicit note at the start wins over everything, including "יומן".
         if ((s = strip(t, EXPLICIT_NOTE)) != null) return new Result(Kind.NOTE, s);
@@ -175,6 +206,12 @@ public final class Classifier {
 
     static boolean isInfinitive(String w) {
         return w.length() >= 4 && w.charAt(0) == 'ל' && !NOT_VERBS.contains(w);
+    }
+
+    /** Drop every channel word. The rest of the utterance is the message, including "פגישה" or "למשימה" if spoken. */
+    static String stripWhatsApp(String t) {
+        String c = WHATSAPP.matcher(t).replaceAll(" ").replaceAll("\\s+", " ").trim();
+        return stripConnectorShin(c);
     }
 
     /** Returns the text after a matching leading trigger (whole-word / prefix-ל match), or null. */

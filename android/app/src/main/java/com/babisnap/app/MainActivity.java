@@ -117,6 +117,20 @@ public class MainActivity extends Activity {
         inv.setContentDescription("שליחת הזמנות");
         inv.setOnCheckedChangeListener((s, on) -> Core.prefs(this).edit().putBoolean("send_invites", on).apply());
         row(prefs, "✉️", false, "שליחת הזמנות", plain("כשמזכירים איש קשר בפגישה"), inv);
+        boolean waOn = Core.whatsAppEnabled(this);
+        Switch wa = new Switch(this);
+        wa.setChecked(waOn);
+        wa.setContentDescription("שליחה לוואטסאפ");
+        wa.setOnCheckedChangeListener((s, on) -> {
+            Core.prefs(this).edit().putBoolean(WhatsAppLogic.PREF_ENABLED, on).apply();
+            render();
+        });
+        row(prefs, "💬", false, "שליחה לוואטסאפ", plain("כבוי כברירת מחדל. רק כשאומרים וואטסאפ"), wa);
+        if (waOn) {
+            WhatsAppLogic.Mode mode = Core.whatsAppMode(this);
+            row(prefs, "📤", false, "מה נשלח לוואטסאפ", plain(WhatsAppLogic.modeHint(mode)),
+                link(WhatsAppLogic.modeLabel(mode) + " ▾", false, v -> pickWhatsAppMode()));
+        }
         row(prefs, "➕", true, "כפתור במסך הבית", null, link("הוסף", false, v -> addWidget()));
 
         footer();
@@ -351,6 +365,15 @@ public class MainActivity extends Activity {
     }
 
     // ---- preferences ----
+    private void pickWhatsAppMode() {
+        WhatsAppLogic.Mode cur = Core.whatsAppMode(this);
+        rtl(new AlertDialog.Builder(this).setTitle("מה נשלח לוואטסאפ")
+            .setSingleChoiceItems(WhatsAppLogic.MODE_LABELS, WhatsAppLogic.modeIndex(cur), (d, i) -> {
+                Core.prefs(this).edit().putString(WhatsAppLogic.PREF_MODE, WhatsAppLogic.MODE_VALUES[i]).apply();
+                d.dismiss(); render();
+            }).setNegativeButton("ביטול", null).show());
+    }
+
     private void pickDuration() {
         rtl(new AlertDialog.Builder(this).setTitle("משך פגישה")
             .setSingleChoiceItems(SettingsLogic.DURATION_LABELS, SettingsLogic.durationIndex(Core.defaultDuration(this)), (d, i) -> {
@@ -398,6 +421,7 @@ public class MainActivity extends Activity {
         "• אם בחרתם יעד \"יומן המכשיר\", הפגישה נכתבת ליומן שבטלפון בלבד. BabiSnap לא שולח את האירוע לשרת. אם היומן מסונכרן באפליקציה אחרת, הסנכרון הוא שלה. זימון במייל נשלח רק מיומן Google.\n\n" +
         "• משימות והערות נשלחות רק ללוח \"מחברת\" ב-BabiTk שלך. מפתח החיבור נשמר מוצפן בטלפון.\n\n" +
         "• אנשי קשר נקראים בטלפון בלבד ולא נשלחים לשום מקום (אימייל מוזמן עובר ל-Google רק אם ביקשת לשלוח הזמנה).\n\n" +
+        "• שליחה לוואטסאפ כבויה כברירת מחדל. כשהיא דלוקה ואומרים «וואטסאפ», נפתח שיתוף באפליקציית וואטסאפ שבטלפון (קול או תמלול, אחד מהם). אין שרת ואין ממשק עסקי; הקובץ הזמני נמחק.\n\n" +
         "• האימייל של חשבון Google שחיברתם, יחד עם מזהה התקנה אקראי (לא IMEI), גרסה ושם דגם, נשמרים לניהול הגישה בלבד. לא נשלחים הקלטות, תמלילים, תוכן יומן או טוקן Google.\n\n" +
         "• אין פרסומות ואין מעקב תוכן. \"מחק את כל הנתונים מהמכשיר\" מוחק את נתוני האפליקציה מהטלפון ומסמן את ההתקנה כמנותקת.\n\n" +
         "• מדיניות הפרטיות המלאה זמינה בקישור \"מדיניות מלאה\".";
@@ -416,7 +440,7 @@ public class MainActivity extends Activity {
 
     private void confirmDeleteAll() {
         AlertDialog d = new AlertDialog.Builder(this).setTitle("למחוק את כל הנתונים מהמכשיר?")
-            .setMessage("ינותקו Google יומן (כולל ביטול הגישה) ו-BabiTk, יישכח יומן המכשיר שנבחר, יימחקו פריטים שעוד לא נשלחו וכל ההעדפות, והאימייל ברישום הגישה יסומן כמנותק.\nהפגישות ביומן (Google או יומן המכשיר) וההערות ב-BabiTk לא נמחקות.")
+            .setMessage("ינותקו Google יומן (כולל ביטול הגישה) ו-BabiTk, יישכח יומן המכשיר שנבחר, יימחקו פריטים שעוד לא נשלחו, קבצי קול זמניים לוואטסאפ וכל ההעדפות, והאימייל ברישום הגישה יסומן כמנותק.\nהפגישות ביומן (Google או יומן המכשיר) וההערות ב-BabiTk לא נמחקות.")
             .setPositiveButton("מחק", (x, w) -> deleteAll()).setNegativeButton("ביטול", null).show();
         rtl(d);
         d.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(RED);
@@ -429,6 +453,7 @@ public class MainActivity extends Activity {
         reportGoogleDisconnect(false);
         BabiTk.wipeAll(getApplicationContext());
         CalQueue.wipeAll(getApplicationContext());
+        WhatsAppCapture.deleteAll(getApplicationContext());
         Core.prefs(this).edit().clear().commit();
         Core.prefs(this).edit().putString(SnapInstall.PREF, installId).commit(); // same install, data gone
         render();

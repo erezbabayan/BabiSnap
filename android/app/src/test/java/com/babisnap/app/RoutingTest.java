@@ -90,6 +90,16 @@ public class RoutingTest {
         expect(p, "שיחת וידאו עם אבי מחר", MEETING, "שיחת וידאו עם אבי");
     }
 
+    @Test public void whatsAppWordStaysOnTheLiveRoute() throws Exception {
+        Out o = run(parser(), "וואטסאפ פגישה עם דני מחר בעשר");
+        assertEquals(MEETING, o.kind);
+        assertNotEquals(WHATSAPP, o.kind);
+        assertTrue(o.stripped.contains("וואטסאפ"));
+        Classifier.Result on = Classifier.classify("וואטסאפ פגישה עם דני מחר בעשר", true, true);
+        assertEquals(WHATSAPP, on.kind);
+        assertEquals("פגישה עם דני מחר בעשר", on.stripped);
+    }
+
     @Test public void eventNamesWithoutClockAreAllDay() throws Exception {
         HebrewParser p = parser();
         Out o = run(p, "יום הולדת לדני");
