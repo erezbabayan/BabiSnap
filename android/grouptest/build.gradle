@@ -25,6 +25,7 @@ android {
             targetSdk = 34
             versionName = 'k0'
             buildConfigField 'boolean', 'LITE', 'false'
+            buildConfigField 'boolean', 'AUTO', 'false'
         }
         lite {
             dimension 'probe'
@@ -32,6 +33,15 @@ android {
             targetSdk = 35
             versionName = 'k0-lite'
             buildConfigField 'boolean', 'LITE', 'true'
+            buildConfigField 'boolean', 'AUTO', 'false'
+        }
+        auto {
+            dimension 'probe'
+            applicationId = 'com.babisnap.grouptest.auto'
+            targetSdk = 35
+            versionName = 'k1-private'
+            buildConfigField 'boolean', 'LITE', 'false'
+            buildConfigField 'boolean', 'AUTO', 'true'
         }
     }
     buildTypes {

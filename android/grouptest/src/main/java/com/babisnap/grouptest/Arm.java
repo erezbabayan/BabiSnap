@@ -12,6 +12,8 @@ final class Arm {
         volatile boolean cancelled;
         volatile boolean consumed;
         volatile boolean counting;
+        /** Elapsed realtime after which a silent press must not happen. 0 means no limit. */
+        volatile long deadlineMs;
 
         Payload(String expectedTitle, String kind, String alias, String name, String transcript, boolean checked) {
             this.expectedTitle = expectedTitle == null ? "" : expectedTitle;

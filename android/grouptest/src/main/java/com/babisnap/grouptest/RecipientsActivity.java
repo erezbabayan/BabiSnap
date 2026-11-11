@@ -236,10 +236,14 @@ public class RecipientsActivity extends Activity {
         if (name == null || name.trim().isEmpty()) name = e164;
         else name = name.trim();
         String alias = "";
+        boolean checked = !BuildConfig.AUTO;
         for (Store.ContactSel saved : store.contacts()) {
-            if (digits.equals(saved.e164)) alias = saved.alias;
+            if (digits.equals(saved.e164)) {
+                alias = saved.alias;
+                checked = saved.checked;
+            }
         }
-        store.saveContact("", digits, name, alias, true);
+        store.saveContact("", digits, name, alias, checked);
         return true;
     }
 
@@ -430,6 +434,7 @@ public class RecipientsActivity extends Activity {
             detail.setText(row.detail);
             view.setBackgroundColor(row.target ? 0xFFE4F2EA : 0xFFFFFFFF);
             check.setOnCheckedChangeListener(null);
+            check.setText(BuildConfig.AUTO ? "בלי מגע" : "");
             check.setChecked(row.checked);
             check.setOnCheckedChangeListener((button, on) -> {
                 row.checked = on;
@@ -448,6 +453,7 @@ public class RecipientsActivity extends Activity {
             };
             alias.addTextChangedListener(watcher);
             alias.setTag(watcher);
+            target.setVisibility(BuildConfig.AUTO ? View.GONE : View.VISIBLE);
             target.setText(row.target ? R.string.target_on : R.string.make_target);
             target.setOnClickListener(v -> {
                 store.setTarget(row.id);

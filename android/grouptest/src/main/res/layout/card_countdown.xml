@@ -9,6 +9,16 @@
     android:orientation="vertical"
     android:padding="16dp">
 
+    <ProgressBar
+        android:id="@+id/card_progress"
+        style="@android:style/Widget.ProgressBar.Horizontal"
+        android:layout_width="match_parent"
+        android:layout_height="6dp"
+        android:layout_marginBottom="8dp"
+        android:max="8000"
+        android:progress="8000"
+        android:visibility="gone" />
+
     <TextView
         android:id="@+id/card_seconds"
         android:layout_width="match_parent"

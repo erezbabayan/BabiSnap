@@ -145,6 +145,21 @@ public final class ProbeLogic {
         return e164Digits + "@s.whatsapp.net";
     }
 
+    public static boolean idIsEntry(String viewId) {
+        if (viewId == null) return false;
+        String id = viewId.toLowerCase(Locale.US);
+        int slash = id.lastIndexOf('/');
+        String leaf = slash >= 0 ? id.substring(slash + 1) : id;
+        return leaf.equals("entry") || leaf.equals("conversation_entry") || leaf.equals("input_text");
+    }
+
+    /** The compose box must contain the expected message. Whitespace is collapsed first. */
+    public static boolean textContains(String field, String expected) {
+        String hay = normalizeTitle(field);
+        String needle = normalizeTitle(expected);
+        return !needle.isEmpty() && hay.contains(needle);
+    }
+
     public static boolean idIsTitle(String viewId) {
         if (viewId == null) return false;
         String id = viewId.toLowerCase(Locale.US);
@@ -226,6 +241,8 @@ public final class ProbeLogic {
         if ("NO_BUTTON".equals(code)) return "לא נמצא כפתור שלח – לא נשלח";
         if ("SEND_UNCONFIRMED".equals(code)) return "נמצא כפתור בלי הכיתוב «שלח» – לא נלחץ";
         if ("NO_TITLE".equals(code)) return "לא נמצאה כותרת הצ׳אט – לא נשלח";
+        if ("TEXT_MISMATCH".equals(code)) return "הטקסט בתיבה לא תואם";
+        if ("TIMEOUT".equals(code)) return "חלון הלחיצה נגמר";
         if ("CLICK_FAILED".equals(code)) return "הכפתור נמצא אבל הלחיצה נכשלה – לא נשלח";
         if ("CANCELLED".equals(code)) return "בוטל";
         if ("NOT_CHECKED".equals(code)) return "הנמען לא מסומן ברשימה – לא נשלח";
@@ -285,6 +302,7 @@ public final class ProbeLogic {
         public String sendLabel;
         public String autoResult;
         public String variant;
+        public String command;
 
         public String format() {
             StringBuilder sb = new StringBuilder();
@@ -312,6 +330,7 @@ public final class ProbeLogic {
             line(sb, "כיתוב כפתור (SEND_LABEL)", sanitizeCode(sendLabel, "NONE"));
             line(sb, "תוצאת לחיצה (AUTO_RESULT)", sanitizeCode(autoResult, "NONE"));
             line(sb, "מסלול (VARIANT)", sanitizeCode(variant, "FULL"));
+            line(sb, "פקודה (COMMAND)", sanitizeCode(command, "NONE"));
             return sb.toString();
         }
 
