@@ -3,6 +3,7 @@ package com.babisnap.app;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.regex.Matcher;
@@ -60,13 +61,24 @@ public final class WhatsAppRecipients {
         public final String family;
         public final String nickname;
         public final List<Phone> phones;
+        /** How often this contact was used. 0 when the device does not provide it. Order only, never a selection. */
+        public final int timesContacted;
+        /** Last time the contact was used, milliseconds. 0 when unavailable. Order only. */
+        public final long lastTimeContacted;
 
         public Contact(String displayName, String given, String family, String nickname, List<Phone> phones) {
+            this(displayName, given, family, nickname, phones, 0, 0L);
+        }
+
+        public Contact(String displayName, String given, String family, String nickname, List<Phone> phones,
+                       int timesContacted, long lastTimeContacted) {
             this.displayName = displayName == null ? "" : displayName;
             this.given = given == null ? "" : given;
             this.family = family == null ? "" : family;
             this.nickname = nickname == null ? "" : nickname;
             this.phones = phones == null ? new ArrayList<>() : phones;
+            this.timesContacted = Math.max(0, timesContacted);
+            this.lastTimeContacted = Math.max(0L, lastTimeContacted);
         }
 
         public String digits() { return chooseNumber(this); }
@@ -209,12 +221,49 @@ public final class WhatsAppRecipients {
     }
 
     /**
-     * Best contacts for a spoken name. Prefixes ל/ש/ו are optional.
-     * One tight match wins over several loose ones. A tie stays a chooser.
+     * Best contacts for a spoken name. Prefixes ל/ש/ו/אל are optional.
+     * A confirm card is only a unique exact token with no near neighbor.
+     * A prefix, a diminutive, or one edit (רני/רוני) is a picker, never an automatic open.
      * Only contacts with an Israeli number are considered (WhatsApp).
      */
     public static Matches match(String spoken, List<Contact> contacts) {
         return matchAmong(spoken, withNumber(contacts));
+    }
+
+    /**
+     * Several speech hypotheses. One shared exact contact can confirm.
+     * Different contacts, or any near hit, stay a picker. An empty name is skipped.
+     */
+    public static Matches matchNames(List<String> names, List<Contact> contacts) {
+        return matchNamesAmong(names, withNumber(contacts));
+    }
+
+    /** {@link #matchNames} against a list the caller already filtered. */
+    public static Matches matchNamesAmong(List<String> names, List<Contact> contacts) {
+        List<String> keys = new ArrayList<>();
+        if (names != null) for (String n : names) {
+            if (n == null || n.trim().isEmpty()) continue;
+            String t = n.trim();
+            if (!keys.contains(t)) keys.add(t);
+        }
+        if (keys.isEmpty()) return none();
+        Matches firstAuto = null;
+        List<Contact> union = new ArrayList<>();
+        boolean auto = true;
+        for (String key : keys) {
+            Matches m = matchAmong(key, contacts);
+            if (m.code == MatchCode.NONE) continue;
+            if (!m.one()) auto = false;
+            for (Contact c : m.hits) {
+                if (!union.contains(c)) union.add(c);
+                else auto = auto && m.one();
+            }
+            if (union.size() != 1) auto = false;
+            if (firstAuto == null && m.one()) firstAuto = m;
+        }
+        if (union.isEmpty()) return none();
+        if (auto && firstAuto != null && union.size() == 1) return firstAuto;
+        return new Matches(MatchCode.MANY, orderHits(keys.get(0), union), 1);
     }
 
     /**
@@ -253,77 +302,231 @@ public final class WhatsAppRecipients {
     }
 
     private static Matches matchKey(String key, List<Contact> contacts) {
-        if (key == null || key.length() < 2) return none();
-        List<Contact> best = new ArrayList<>();
-        int bestTier = 99;
+        if (key == null || fold(key).length() < 2) return none();
+        String[] parts = key.split(" ");
+        if (parts.length >= 2) return matchFull(key, parts[0], contacts);
+        return matchSingle(key, contacts);
+    }
+
+    /** One spoken token. Exact with no near neighbor confirms. Anything near is a picker. */
+    private static Matches matchSingle(String key, List<Contact> contacts) {
+        List<Contact> exact = new ArrayList<>();
+        List<Contact> near = new ArrayList<>();
         for (Contact c : contacts) {
             if (c == null) continue;
-            int tier = tier(key, c);
-            if (tier < 0) continue;
-            if (tier < bestTier) {
-                best.clear();
-                bestTier = tier;
-                best.add(c);
-            } else if (tier == bestTier) best.add(c);
+            int rel = tokenRelation(key, c);
+            if (rel == 0) exact.add(c);
+            else if (rel == 1) near.add(c);
         }
-        if (best.isEmpty()) return none();
-        if (best.size() == 1) return new Matches(MatchCode.ONE, best, bestTier);
-        return new Matches(MatchCode.MANY, best, bestTier);
+        byUse(exact);
+        byUse(near);
+        if (exact.size() == 1 && near.isEmpty()) return new Matches(MatchCode.ONE, exact, 0);
+        List<Contact> hits = new ArrayList<>();
+        hits.addAll(exact);
+        hits.addAll(near);
+        if (hits.isEmpty()) return none();
+        return new Matches(MatchCode.MANY, hits, exact.isEmpty() ? 1 : 0);
     }
 
-    private static int tier(String key, Contact c) {
-        List<String> forms = forms(c);
-        for (String f : forms) if (f.equals(key)) return 0;
-        List<String> words = words(key);
-        if (!words.isEmpty() && allWholeWords(words, forms)) return 1;
-        if (loose(key, forms)) return 2;
-        return -1;
-    }
-
-    private static boolean allWholeWords(List<String> words, List<String> forms) {
-        for (String w : words) {
-            boolean found = false;
-            for (String f : forms) for (String t : f.split(" ")) if (t.equals(w)) found = true;
-            if (!found) return false;
-        }
-        return true;
-    }
-
-    private static boolean loose(String key, List<String> forms) {
-        for (String f : forms) {
-            for (String t : f.split(" ")) {
-                if (t.length() < 2) continue;
-                if (key.length() >= 3 && t.startsWith(key) && !t.equals(key)) return true;
-                if (key.startsWith(t) && key.length() > t.length()) {
-                    String tail = key.substring(t.length());
-                    for (String shortTail : SHORT_TAIL) if (shortTail.equals(tail)) return true;
-                }
+    /**
+     * "רוני כהן" confirms when that full name is unique, even if another רוני exists.
+     * A full name that only hits a bare first name is a picker, not a miss.
+     */
+    private static Matches matchFull(String key, String first, List<Contact> contacts) {
+        List<Contact> exact = new ArrayList<>();
+        for (Contact c : contacts) if (c != null && exactFull(key, c)) exact.add(c);
+        byUse(exact);
+        if (exact.size() == 1 && !fullBlocked(key, first, exact.get(0), contacts))
+            return new Matches(MatchCode.ONE, exact, 0);
+        if (!exact.isEmpty()) {
+            List<Contact> hits = new ArrayList<>(exact);
+            for (Contact c : contacts) {
+                if (c == null || hits.contains(c)) continue;
+                if (fullBlocked(key, first, exact.get(0), Collections.singletonList(c))) hits.add(c);
             }
+            byUse(hits);
+            // exact contacts stay ahead of the neighbors that were appended
+            List<Contact> ordered = new ArrayList<>();
+            for (Contact c : exact) if (hits.contains(c)) ordered.add(c);
+            for (Contact c : hits) if (!ordered.contains(c)) ordered.add(c);
+            return new Matches(MatchCode.MANY, ordered, 0);
+        }
+        Matches firstName = matchSingle(first, contacts);
+        if (firstName.code == MatchCode.NONE) return none();
+        return new Matches(MatchCode.MANY, firstName.hits, 1);
+    }
+
+    private static boolean fullBlocked(String key, String first, Contact hit, List<Contact> contacts) {
+        for (Contact c : contacts) {
+            if (c == null || c == hit) continue;
+            if (blocksFull(key, first, c)) return true;
         }
         return false;
     }
 
-    private static List<String> forms(Contact c) {
+    /** Another רוני with a different family does not block "רוני כהן". A near family does. */
+    private static boolean blocksFull(String key, String first, Contact other) {
+        String display = ContactMatcher.norm(other.displayName);
+        String both = ContactMatcher.norm((other.given + " " + other.family).trim());
+        if (display.equals(key) || both.equals(key) || fold(display).equals(fold(key)) || fold(both).equals(fold(key)))
+            return false;
+        if (prefixEither(fold(key), fold(display)) || prefixEither(fold(key), fold(both))) return true;
+        if (edits(fold(key), fold(display)) == 1 || edits(fold(key), fold(both)) == 1) return true;
+        String oFirst = fold(firstName(other));
+        String spokenFirst = fold(first);
+        String oFamily = fold(other.family);
+        String spokenFamily = familyFold(key);
+        if (oFirst.equals(spokenFirst)) {
+            if (oFamily.isEmpty() || spokenFamily.isEmpty()) return false;
+            return nearTokens(oFamily, spokenFamily);
+        }
+        return nearTokens(oFirst, spokenFirst) && !spokenFamily.isEmpty() && !oFamily.isEmpty()
+            && (oFamily.equals(spokenFamily) || nearTokens(oFamily, spokenFamily));
+    }
+
+    /** 0 exact, 1 near, 2 neither. Picker order uses this. Exact is a whole token, never a prefix. */
+    static int closeness(String spoken, Contact c) {
+        if (c == null) return 2;
+        String key = ContactMatcher.norm(spoken);
+        String stripped = stripOnePrefix(key);
+        if (!stripped.equals(key)) {
+            int alt = closenessKey(stripped, c);
+            int direct = closenessKey(key, c);
+            return Math.min(direct, alt);
+        }
+        return closenessKey(key, c);
+    }
+
+    private static int closenessKey(String key, Contact c) {
+        if (c == null || key == null || fold(key).length() < 2) return 2;
+        if (exactFull(key, c)) return 0;
+        int rel = tokenRelation(fold(key), c);
+        return rel < 0 ? 2 : rel;
+    }
+
+    /** 0 exact token, 1 near, -1 none. A stored nickname that equals the key is exact. */
+    private static int tokenRelation(String key, Contact c) {
+        String want = fold(key);
+        if (want.length() < 2) return -1;
+        boolean near = false;
+        for (String token : tokens(c)) {
+            String got = fold(token);
+            if (got.length() < 2) continue;
+            if (got.equals(want)) return 0;
+            if (nearTokens(want, got)) near = true;
+        }
+        return near ? 1 : -1;
+    }
+
+    private static boolean exactFull(String key, Contact c) {
+        String want = ContactMatcher.norm(key);
+        String folded = fold(key);
+        if (folded.length() < 2) return false;
+        for (String form : new String[]{
+            c.displayName, (c.given + " " + c.family).trim(), c.nickname
+        }) {
+            String n = ContactMatcher.norm(form);
+            if (n.equals(want) || fold(form).equals(folded)) return true;
+        }
+        return false;
+    }
+
+    private static List<String> tokens(Contact c) {
         List<String> out = new ArrayList<>();
-        addForm(out, c.displayName);
-        addForm(out, c.given);
-        addForm(out, c.family);
-        addForm(out, c.nickname);
-        String both = (c.given + " " + c.family).trim();
-        addForm(out, both);
+        addToken(out, c.given);
+        addToken(out, c.family);
+        addToken(out, c.nickname);
+        addToken(out, c.displayName);
+        if (c.displayName != null) for (String w : c.displayName.split(" ")) addToken(out, w);
         return out;
     }
 
-    private static void addForm(List<String> out, String raw) {
-        String n = ContactMatcher.norm(raw);
-        if (n.length() >= 2 && !out.contains(n)) out.add(n);
+    private static void addToken(List<String> out, String raw) {
+        if (raw == null || raw.trim().isEmpty() || out.contains(raw)) return;
+        out.add(raw.trim());
     }
 
-    private static List<String> words(String key) {
-        List<String> w = new ArrayList<>();
-        for (String t : key.split(" ")) if (!t.isEmpty()) w.add(t);
-        return w;
+    private static boolean nearTokens(String a, String b) {
+        if (a == null || b == null) return false;
+        if (a.equals(b) || a.length() < 2 || b.length() < 2) return false;
+        if (prefixEither(a, b) || diminutive(a, b)) return true;
+        return edits(a, b) == 1;
     }
+
+    /** Prefix either way. Equality is not a prefix, and a prefix is never an automatic confirm. */
+    private static boolean prefixEither(String a, String b) {
+        if (a.equals(b) || a.length() < 2 || b.length() < 2) return false;
+        return a.startsWith(b) || b.startsWith(a);
+    }
+
+    private static boolean diminutive(String a, String b) {
+        return shortTail(a, b) || shortTail(b, a);
+    }
+
+    private static boolean shortTail(String longer, String shorter) {
+        if (shorter.length() < 2 || !longer.startsWith(shorter) || longer.length() == shorter.length()) return false;
+        String extra = longer.substring(shorter.length());
+        for (String tail : SHORT_TAIL) if (tail.equals(extra)) return true;
+        return false;
+    }
+
+    /** One insert, delete, or substitution. Longer differences are not near. */
+    private static int edits(String a, String b) {
+        if (a.equals(b)) return 0;
+        int n = a.length(), m = b.length();
+        if (Math.abs(n - m) > 1) return 2;
+        if (n > m) return edits(b, a);
+        int i = 0, j = 0, edits = 0;
+        while (i < n && j < m) {
+            if (a.charAt(i) == b.charAt(j)) { i++; j++; continue; }
+            if (++edits > 1) return 2;
+            if (n == m) i++;
+            j++;
+        }
+        if (i < n || j < m) edits++;
+        return edits;
+    }
+
+    private static String firstName(Contact c) {
+        if (c.given != null && !c.given.trim().isEmpty()) return c.given.trim().split(" ")[0];
+        if (c.displayName == null) return "";
+        String d = c.displayName.trim();
+        if (d.isEmpty()) return "";
+        return d.split(" ")[0];
+    }
+
+    private static String familyFold(String key) {
+        String n = ContactMatcher.norm(key);
+        int sp = n.indexOf(' ');
+        return sp < 0 ? "" : fold(n.substring(sp + 1));
+    }
+
+    private static List<Contact> orderHits(String spoken, List<Contact> hits) {
+        List<Contact> exact = new ArrayList<>();
+        List<Contact> near = new ArrayList<>();
+        List<Contact> rest = new ArrayList<>();
+        for (Contact c : hits) {
+            int band = closeness(spoken, c);
+            if (band == 0) exact.add(c);
+            else if (band == 1) near.add(c);
+            else rest.add(c);
+        }
+        byUse(exact); byUse(near); byUse(rest);
+        List<Contact> out = new ArrayList<>();
+        out.addAll(exact); out.addAll(near); out.addAll(rest);
+        return out;
+    }
+
+    private static void byUse(List<Contact> list) {
+        list.sort((a, b) -> {
+            int times = Integer.compare(b.timesContacted, a.timesContacted);
+            if (times != 0) return times;
+            return Long.compare(b.lastTimeContacted, a.lastTimeContacted);
+        });
+    }
+
+    /** Niqqud and final letters folded. Spaces removed so "תָּמָ ר" matches "תמר". No ו/י deletion. */
+    static String fold(String s) { return ContactMatcher.norm(s).replace(" ", ""); }
 
     private static String stripOnePrefix(String n) {
         if (n.startsWith("אל ") && n.length() > 3) return n.substring(3).trim();

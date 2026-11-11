@@ -32,6 +32,8 @@ import java.util.List;
 public class VoiceActivity extends Activity {
     static final int REQ_SPEECH = 1, REQ_AUTH = 2, REQ_MIC = 3, REQ_CONTACTS = 4, REQ_WA = WhatsAppShare.REQ;
     private JSONObject parsed; private String spoken; private java.util.List<String> spokenTags = new java.util.ArrayList<>();
+    /** Speech hypotheses, primary first. Contact matching unions them; routing uses the first. */
+    private final List<String> heard = new ArrayList<>();
 
     private SpeechRecognizer rec; private View logo, halo; private TextView status, partial;
     private int listenRetries;
@@ -108,6 +110,7 @@ public class VoiceActivity extends Activity {
         draftId = null; parsed = null; spoken = null; spokenTags = new ArrayList<>();
         jobClientId = null;
         listenRetries = 0; waCaptureGaveUp = false;
+        heard.clear();
         beginListenUi();
     }
 
@@ -145,6 +148,7 @@ public class VoiceActivity extends Activity {
             // SilenceDetector ends a call command after 1.5s of unchanged partials instead.
             .putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 4000L)
             .putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 4000L)
+            .putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 5)
             .putExtra(RecognizerIntent.EXTRA_PROMPT, Core.whatsAppEnabled(this)
                 ? "פגישה, משימה, שיחה, הערה או וואטסאפ?" : "פגישה, משימה, שיחה או הערה?");
     }
@@ -183,7 +187,11 @@ public class VoiceActivity extends Activity {
         if (rec != null) { try { rec.stopListening(); } catch (Exception ignored) {} }
         stopRec();
         stopWaCapture();
-        if (text != null && !text.isEmpty()) { partial.setText(text); handleSpoken(text); }
+        if (text != null && !text.isEmpty()) {
+            if (heard.isEmpty()) heard.add(text);
+            partial.setText(text);
+            handleSpoken(text);
+        }
     }
 
     private void listen(boolean isRetry) {
@@ -235,10 +243,12 @@ public class VoiceActivity extends Activity {
                 ArrayList<String> a = r.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
                 if (ended || a == null || a.isEmpty()) return;
                 partial.setText(a.get(0)); silence.partial(a.get(0), android.os.SystemClock.elapsedRealtime());
+                remember(SilenceDetector.hypotheses(a, silence.lastText()));
             }
             public void onResults(Bundle r) {
                 ArrayList<String> a = r.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
                 if (ended) return;
+                remember(SilenceDetector.hypotheses(a, silence.lastText()));
                 String t = SilenceDetector.pick(a, silence.lastText());
                 if (t.isEmpty()) { endRecording(null); done(null); } else endRecording(t);
             }
@@ -248,6 +258,11 @@ public class VoiceActivity extends Activity {
     }
 
     private void stopRec() { if (rec != null) { try { rec.destroy(); } catch (Exception ignored) {} rec = null; } }
+
+    private void remember(List<String> list) {
+        heard.clear();
+        if (list != null) heard.addAll(list);
+    }
     @Override protected void onDestroy() {
         ended = true; tick.removeCallbacks(ticker); ui.removeCallbacks(waExpire); ui.removeCallbacks(callExpire); stopRec();
         if (!waHandedOff) discardWa();
@@ -308,6 +323,7 @@ public class VoiceActivity extends Activity {
         if (req == REQ_SPEECH) {
             ArrayList<String> r = data == null ? null : data.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS);
             if (res != RESULT_OK || r == null || r.isEmpty()) { done(null); return; }
+            remember(SilenceDetector.hypotheses(r, ""));
             handleSpoken(r.get(0));
         } else if (req == REQ_AUTH) {
             // Legacy consent path no longer inserts directly — CalQueue waits for Settings sign-in.
@@ -578,7 +594,7 @@ public class VoiceActivity extends Activity {
                 showWaChooser(WhatsAppRecipients.search(waContacts, ""), true);
                 return;
             }
-            WhatsAppRecipients.Matches hits = WhatsAppRecipients.match(waCommand.name, waContacts);
+            WhatsAppRecipients.Matches hits = WhatsAppRecipients.matchNames(waNames(), waContacts);
             if (hits.one()) showWaDirect(hits.hits.get(0), waBody);
             else if (hits.code == WhatsAppRecipients.MatchCode.MANY) showWaChooser(hits.hits, false);
             else showWaChooser(WhatsAppRecipients.search(waContacts, ""), true);
@@ -838,10 +854,10 @@ public class VoiceActivity extends Activity {
                 done(CallDial.NO_PERMISSION);
                 return;
             }
-            WhatsAppRecipients.Matches hits = CallDial.match(callName, callContacts);
+            WhatsAppRecipients.Matches hits = CallDial.matchNames(callNames(), callContacts);
             if (hits.one()) showCallConfirm(hits.hits.get(0));
-            else if (hits.code == WhatsAppRecipients.MatchCode.MANY) showCallPicker(hits.hits);
-            else done(CallDial.notFound(callName));
+            else if (hits.code == WhatsAppRecipients.MatchCode.MANY) showCallPicker(hits.hits, false);
+            else showCallPicker(new ArrayList<>(callContacts), true);
         };
         ensureCallContacts();
     }
@@ -892,17 +908,38 @@ public class VoiceActivity extends Activity {
         }, "babisnap-call-contacts").start();
     }
 
-    private void showCallPicker(List<WhatsAppRecipients.Contact> people) {
+    private List<String> waNames() {
+        List<String> names = new ArrayList<>();
+        for (String h : heard) {
+            WhatsAppRecipients.Command cmd = WhatsAppRecipients.parse(h);
+            if (cmd.target == WhatsAppRecipients.Target.PERSON && !cmd.name.isEmpty() && !names.contains(cmd.name))
+                names.add(cmd.name);
+        }
+        if (names.isEmpty() && waCommand != null && !waCommand.name.isEmpty()) names.add(waCommand.name);
+        return names;
+    }
+
+    private List<String> callNames() {
+        List<String> names = new ArrayList<>();
+        for (String h : heard) {
+            String n = CallDial.nameOf(Classifier.normalize(h));
+            if (!n.isEmpty() && !names.contains(n)) names.add(n);
+        }
+        if (names.isEmpty() && callName != null && !callName.isEmpty()) names.add(callName);
+        return names;
+    }
+
+    private void showCallPicker(List<WhatsAppRecipients.Contact> people, boolean search) {
         callConfirming = false;
         callPerson = null;
         ui.removeCallbacks(callExpire);
         if (callAnim != null) callAnim.cancel();
-        paintCallCard("שיחה · כמה אנשי קשר", "שמעתי «" + callName + "»", false);
+        paintCallCard(search ? "שיחה · בחירת איש קשר" : "שיחה · כמה אנשי קשר", "שמעתי «" + callName + "»", false);
         preparePickerWindow();
         LinearLayout box = findViewById(R.id.invites);
         box.removeAllViews();
         findViewById(R.id.undo).setVisibility(View.GONE);
-        box.addView(InviteViews.peoplePicker(this, CallDial.PICK, callName, people,
+        box.addView(InviteViews.peoplePicker(this, CallDial.PICK, search ? "" : callName, people,
             p -> "\u2066" + CallDial.mask(CallDial.chooseRaw(p)) + "\u2069",
             this::showCallConfirm,
             () -> cancelCall(CallDial.CANCELLED),

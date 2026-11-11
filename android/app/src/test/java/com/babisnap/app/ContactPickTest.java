@@ -26,14 +26,14 @@ public class ContactPickTest {
 
     @Test public void exactFirstOrFullNameThenPrefixThenTheRest() {
         List<WhatsAppRecipients.Contact> shown = ContactPick.present("תמר", book, "");
-        assertEquals(Arrays.asList(tamarDavid, tamar, tamara, rivi, ohad), shown);
+        assertEquals(Arrays.asList(rivi, ohad, tamarDavid, tamar, tamara), shown);
     }
 
     @Test public void niqqudAndSpacesStillCountAsTheSpokenName() {
         List<WhatsAppRecipients.Contact> shown = ContactPick.present("תָּמָ ר", book, "");
-        assertSame(tamarDavid, shown.get(0));
-        assertSame(tamar, shown.get(1));
-        assertSame(tamara, shown.get(2));
+        assertTrue(shown.indexOf(tamarDavid) < shown.indexOf(tamara));
+        assertTrue(shown.indexOf(tamar) < shown.indexOf(tamara));
+        assertSame(rivi, shown.get(0));
     }
 
     @Test public void searchFiltersByNameOrNumberWithoutDroppingWeakerNames() {
@@ -107,6 +107,25 @@ public class ContactPickTest {
         assertTrue(views.contains("setContentDescription(label)"));
         String waCard = voice.substring(voice.indexOf("private void paintWaCard"), voice.indexOf("private void openGroupShare"));
         assertFalse(waCard.contains("roundAction"));
+        assertTrue(voice.contains("EXTRA_MAX_RESULTS"));
+        assertTrue(voice.contains("SilenceDetector.hypotheses"));
+        assertTrue(voice.contains("CallDial.matchNames"));
+        assertTrue(voice.contains("שיחה · בחירת איש קשר"));
+    }
+
+    @Test public void nearNamesSortAfterTheExactOneAndUseIsOnlyOrder() {
+        WhatsAppRecipients.Contact roni = person("רוני", "רוני", "0522222222");
+        WhatsAppRecipients.Contact rani = person("רני", "רני", "0501111111");
+        WhatsAppRecipients.Contact yossi = person("יוסי", "יוסי", "0533333333");
+        List<WhatsAppRecipients.Contact> shown = ContactPick.present("רני", Arrays.asList(yossi, roni, rani), "");
+        assertEquals(Arrays.asList(rani, roni, yossi), shown);
+        WhatsAppRecipients.Contact often = new WhatsAppRecipients.Contact("רוני", "רוני", "", "",
+            Arrays.asList(new WhatsAppRecipients.Phone("0501234567", false, true)), 9, 50L);
+        WhatsAppRecipients.Contact rare = new WhatsAppRecipients.Contact("רוני לוי", "רוני", "לוי", "",
+            Arrays.asList(new WhatsAppRecipients.Phone("0521111111", false, true)), 1, 10L);
+        List<WhatsAppRecipients.Contact> used = ContactPick.present("רוני", Arrays.asList(rare, often), "");
+        assertSame(often, used.get(0));
+        assertFalse(ContactPick.autoActs());
     }
 
     private static int count(String hay, String needle) {

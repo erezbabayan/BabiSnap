@@ -85,10 +85,28 @@ final class WhatsAppContacts {
             }
         } catch (Exception ignored) { /* names are optional; the display name from the phone row still matches */ }
 
+        // Order only. Missing columns or a denied read leave zeros; nothing is auto-selected from this.
+        try (Cursor usage = cr.query(ContactsContract.Contacts.CONTENT_URI,
+                new String[]{ContactsContract.Contacts._ID, ContactsContract.Contacts.TIMES_CONTACTED,
+                    ContactsContract.Contacts.LAST_TIME_CONTACTED},
+                null, null, null)) {
+            if (usage != null) {
+                int idCol = usage.getColumnIndex(ContactsContract.Contacts._ID);
+                int timesCol = usage.getColumnIndex(ContactsContract.Contacts.TIMES_CONTACTED);
+                int lastCol = usage.getColumnIndex(ContactsContract.Contacts.LAST_TIME_CONTACTED);
+                while (idCol >= 0 && usage.moveToNext()) {
+                    Draft d = byId.get(usage.getLong(idCol));
+                    if (d == null) continue;
+                    if (timesCol >= 0) d.times = usage.getInt(timesCol);
+                    if (lastCol >= 0) d.last = usage.getLong(lastCol);
+                }
+            }
+        } catch (Exception ignored) { /* frequency is optional */ }
+
         List<WhatsAppRecipients.Contact> out = new ArrayList<>();
         for (Draft d : byId.values()) {
             WhatsAppRecipients.Contact contact = new WhatsAppRecipients.Contact(
-                d.display, d.given, d.family, d.nickname, d.phones);
+                d.display, d.given, d.family, d.nickname, d.phones, d.times, d.last);
             boolean keep = israeliOnly ? contact.digits() != null : CallDial.hasNumber(contact);
             if (keep) out.add(contact);
         }
@@ -103,6 +121,8 @@ final class WhatsAppContacts {
         String family = "";
         String nickname = "";
         final List<WhatsAppRecipients.Phone> phones = new ArrayList<>();
+        int times;
+        long last;
     }
 
     private WhatsAppContacts() {}

@@ -64,5 +64,6 @@ public class SilenceDetectorTest {
         assertEquals("חלקי", SilenceDetector.pick(Collections.emptyList(), "חלקי"));
         assertEquals("חלקי", SilenceDetector.pick(null, "חלקי"));
         assertEquals("חלקי", SilenceDetector.pick(Arrays.asList(" "), "חלקי"));
+        assertEquals(Arrays.asList("רני", "רוני"), SilenceDetector.hypotheses(Arrays.asList("רני", "רוני", "רני"), ""));
     }
 }
