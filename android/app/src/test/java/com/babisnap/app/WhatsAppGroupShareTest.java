@@ -9,6 +9,18 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 public class WhatsAppGroupShareTest {
+    @Test public void groupPhrasesDoNotEnterWhatsAppWhileDeferred() {
+        assertFalse(WhatsAppGroupShare.GROUPS_ENABLED);
+        String phrase = "הודעה לקבוצת משפחה בוואטסאפ אני בדרך";
+        assertEquals(WhatsAppRecipients.Target.GROUP, WhatsAppRecipients.parse(phrase).target);
+        assertFalse(WhatsAppGroupShare.entersWhatsApp(WhatsAppRecipients.Target.GROUP));
+        assertTrue(WhatsAppGroupShare.entersWhatsApp(WhatsAppRecipients.Target.PERSON));
+        assertTrue(WhatsAppGroupShare.entersWhatsApp(WhatsAppRecipients.Target.NONE));
+        assertEquals(Classifier.Kind.WHATSAPP, Classifier.classify("וואטסאפ לתמרי מה קורה", false, true).kind);
+        assertTrue(WhatsAppGroupShare.entersWhatsApp(WhatsAppRecipients.parse("וואטסאפ לתמרי מה קורה").target));
+        assertNotEquals(Classifier.Kind.WHATSAPP, Classifier.classify(phrase, false, false).kind);
+    }
+
     @Test public void groupIntentIsWhatsAppsOwnPicker() {
         WhatsAppGroupShare.Spec consumer = WhatsAppGroupShare.spec(true, true, "מה קורה");
         assertEquals(WhatsAppGroupShare.ACTION, consumer.action);

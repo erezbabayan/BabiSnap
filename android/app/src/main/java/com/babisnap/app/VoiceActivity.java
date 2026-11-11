@@ -242,7 +242,14 @@ public class VoiceActivity extends Activity {
         boolean explicitTime = !parsed.optBoolean("timeDefaulted", true) || parsed.optBoolean("allDay", false);
         Classifier.Result c = Classifier.classify(spoken, explicitTime, Core.whatsAppEnabled(this));
         RouteGate.Dest dest = RouteGate.dest(c.kind);
-        if (dest == RouteGate.Dest.WHATSAPP) { showWhatsApp(c); return; }
+        if (dest == RouteGate.Dest.WHATSAPP
+                && WhatsAppGroupShare.entersWhatsApp(WhatsAppRecipients.parse(spoken == null ? "" : spoken).target)) {
+            showWhatsApp(c); return;
+        }
+        if (dest == RouteGate.Dest.WHATSAPP) {
+            c = Classifier.classify(spoken, explicitTime, false);
+            dest = RouteGate.dest(c.kind);
+        }
         discardWa();
         if (dest != RouteGate.Dest.CALENDAR) { showSaved(c); return; }
         // Re-parse the text after destination/command words were stripped, so "יומן" / "לקלנדר" never stay in the title.

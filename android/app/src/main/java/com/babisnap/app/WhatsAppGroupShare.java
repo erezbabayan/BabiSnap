@@ -5,6 +5,9 @@ package com.babisnap.app;
  * No system share sheet, no chooser, no phone, no jid.
  */
 public final class WhatsAppGroupShare {
+    /** Groups are deferred. The picker code stays, but a group phrase does not open it. */
+    public static final boolean GROUPS_ENABLED = false;
+
     public static final String ACTION = "android.intent.action.SEND";
     public static final String TYPE = "text/plain";
 
@@ -31,6 +34,11 @@ public final class WhatsAppGroupShare {
                 && (WhatsAppLogic.PKG.equals(pkg) || WhatsAppLogic.PKG_BUSINESS.equals(pkg))
                 && !includeJid && !systemChooser;
         }
+    }
+
+    /** False for a group phrase while {@link #GROUPS_ENABLED} is off. Private chats stay allowed. */
+    public static boolean entersWhatsApp(WhatsAppRecipients.Target target) {
+        return target != WhatsAppRecipients.Target.GROUP || GROUPS_ENABLED;
     }
 
     /** Consumer app first. Never a chooser and never a jid. */
