@@ -19,6 +19,40 @@ public class WhatsAppRecipientsTest {
         return new WhatsAppRecipients.Contact(display, given, "", nick, Arrays.asList(phones));
     }
 
+    @Test public void erezPhraseKeepsTheSpokenMessageNotTheClockLeftover() throws Exception {
+        String message = "מה קורה אני מגיע בארבע";
+        String[] triggers = {"וואצאפ", "וואטסאפ", "ווטסאפ", "WhatsApp"};
+        for (String trigger : triggers) {
+            WhatsAppRecipients.Command plain = WhatsAppRecipients.parse(trigger + " לתמרי " + message);
+            assertEquals(trigger, WhatsAppRecipients.Target.PERSON, plain.target);
+            assertEquals(trigger, "תמרי", plain.name);
+            assertEquals(trigger, message, plain.body);
+            assertEquals(trigger, message, WhatsAppRecipients.shownText(plain));
+
+            WhatsAppRecipients.Command colon = WhatsAppRecipients.parse(trigger + " לתמרי: " + message);
+            assertEquals(trigger, "תמרי", colon.name);
+            assertEquals(trigger, message, colon.body);
+        }
+        assertEquals("מה קורה אני מגיע ב-16:00",
+            WhatsAppRecipients.parse("וואטסאפ לתמרי מה קורה אני מגיע ב-16:00").body);
+        assertEquals("מה קורה אני מגיע ב-16:00",
+            WhatsAppRecipients.parse("וואצאפ לתמרי: מה קורה אני מגיע ב-16:00").body);
+        assertEquals("מה קורה אני מגיע 16:00",
+            WhatsAppRecipients.parse("וואטסאפ לתמרי מה קורה אני מגיע 16:00").body);
+        assertEquals("מחר בשמונה אגיע",
+            WhatsAppRecipients.parse("וואטסאפ לתמרי מחר בשמונה אגיע").body);
+        assertEquals("מחר בשמונה ב-16:00 נתראה",
+            WhatsAppRecipients.parse("ווטסאפ לתמרי: מחר בשמונה ב-16:00 נתראה").body);
+
+        HebrewParser p = new HebrewParser(ParserTest.r("Code.gs"));
+        String title = new org.json.JSONObject(p.parseJson(
+            "וואטסאפ לתמרי מה קורה אני מגיע ב-16:00", 2026, 11, 11, 3, 60, 10, 0)).optString("title");
+        String body = WhatsAppRecipients.parse("וואטסאפ לתמרי מה קורה אני מגיע ב-16:00").body;
+        assertEquals("מה קורה אני מגיע ב-16:00", body);
+        assertFalse(body.equals(title));
+        assertFalse("00".equals(body));
+    }
+
     @Test public void privatePhrasesKeepTheNameAndDropTheRoute() {
         WhatsAppRecipients.Command a = WhatsAppRecipients.parse("הודעה לתמרי בוואטסאפ אני בדרך");
         assertEquals(WhatsAppRecipients.Target.PERSON, a.target);

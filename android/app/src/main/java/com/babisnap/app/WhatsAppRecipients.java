@@ -177,6 +177,11 @@ public final class WhatsAppRecipients {
 
     public static String plainCardHeadline() { return "וואטסאפ · ייפתח בלי נמען"; }
 
+    /** The draft on the card and in the WhatsApp compose box. Not a calendar title. */
+    public static String shownText(Command command) {
+        return command == null || command.body == null ? "" : command.body;
+    }
+
     public static String plainBody(String utterance) {
         return cleanBody(stripChannel(side(utterance)));
     }
@@ -333,10 +338,28 @@ public final class WhatsAppRecipients {
 
     private static Matches none() { return new Matches(MatchCode.NONE, new ArrayList<>(), 99); }
 
+    /**
+     * A colon after the name starts the message («וואטסאפ לתמרי: היי»).
+     * A colon inside a clock («16:00», «16 : 00») stays in the message.
+     */
     private static String prep(String raw) {
         if (raw == null) return "";
-        String t = raw.replace(':', '¦').replace('：', '¦');
-        return t;
+        StringBuilder b = new StringBuilder(raw.length());
+        for (int i = 0; i < raw.length(); i++) {
+            char c = raw.charAt(i);
+            if (c == ':' || c == '：') b.append(clockColon(raw, i) ? ':' : '¦');
+            else b.append(c);
+        }
+        return b.toString();
+    }
+
+    private static boolean clockColon(String raw, int i) {
+        int p = i - 1;
+        while (p >= 0 && raw.charAt(p) == ' ') p--;
+        int n = i + 1;
+        while (n < raw.length() && raw.charAt(n) == ' ') n++;
+        return p >= 0 && n < raw.length()
+            && Character.isDigit(raw.charAt(p)) && Character.isDigit(raw.charAt(n));
     }
 
     private static String side(String raw) { return Classifier.normalize(raw); }

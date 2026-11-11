@@ -534,7 +534,7 @@ public class VoiceActivity extends Activity {
         waPending = true; waHandedOff = false; waLeft = false; waConfirming = false; waGroup = false; waPerson = null; waCommit = null;
         pendingBody = null; pendingMeeting = false; committed = false;
         waCommand = WhatsAppRecipients.parse(spoken == null ? "" : spoken);
-        waBody = waCommand.body;
+        waBody = WhatsAppRecipients.shownText(waCommand);
         if (waCommand.target == WhatsAppRecipients.Target.GROUP) {
             showWaGroup(waCommand.name, waCommand.body);
             return;
