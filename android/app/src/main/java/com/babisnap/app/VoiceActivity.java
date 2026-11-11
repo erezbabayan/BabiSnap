@@ -503,8 +503,7 @@ public class VoiceActivity extends Activity {
 
     @Override protected void onStop() {
         if (callAskingContacts || waAskingContacts) { super.onStop(); return; }
-        if (callConfirming) runCallCommit();
-        else if (callPending && !callDialed) cancelCall(CallDial.CANCELLED);
+        if ((callConfirming || callPending) && !callDialed) cancelCall(CallDial.CANCELLED);
         if (waHandedOff) waLeft = true;
         else if (waConfirming) runWaCommit();
         else if (waPending) cancelWhatsApp("בוטל – לא נשלח לוואטסאפ");
@@ -821,7 +820,7 @@ public class VoiceActivity extends Activity {
 
     private void runCallCommit() {
         if (!callConfirming) return;
-        dialNow();
+        placeCall(CallDial.Moment.TIMEOUT);
     }
 
     /** Drop the call card. A null toast does not finish — onNewIntent is about to listen again. */
@@ -876,7 +875,7 @@ public class VoiceActivity extends Activity {
     private void showCallContactsSheet() {
         setContentView(R.layout.card_contacts);
         getWindow().setBackgroundDrawableResource(android.R.color.transparent);
-        ((TextView) findViewById(R.id.body)).setText("כדי לחייג לפי השם צריך גישה לאנשי הקשר בטלפון. המספר לא נשמר ולא נשלח, והשיחה מתחילה רק בלחיצה בחייגן.");
+        ((TextView) findViewById(R.id.body)).setText("כדי לחייג לפי השם צריך גישה לאנשי הקשר בטלפון. המספר לא נשמר ולא נשלח.");
         findViewById(R.id.later).setOnClickListener(v -> {
             callContacts.clear();
             if (callAfterContacts != null) callAfterContacts.run();
@@ -927,9 +926,16 @@ public class VoiceActivity extends Activity {
 
     private void showCallConfirm(WhatsAppRecipients.Contact person) {
         callPerson = person;
-        paintCallCard(CallDial.headline(person), CallDial.summary(person), true);
+        boolean direct = CallDial.effective(directPref(), callPhoneGranted());
+        paintCallCard(CallDial.headline(person, direct), CallDial.summary(person, direct), true);
         ui.removeCallbacks(callExpire);
         ui.postDelayed(callExpire, CallDial.CONFIRM_MS);
+    }
+
+    private boolean directPref() { return Core.prefs(this).getBoolean(CallDial.PREF_DIRECT, false); }
+
+    private boolean callPhoneGranted() {
+        return checkSelfPermission(Manifest.permission.CALL_PHONE) == PackageManager.PERMISSION_GRANTED;
     }
 
     /**
@@ -987,27 +993,50 @@ public class VoiceActivity extends Activity {
         callAnim.start();
     }
 
-    /** DIAL opens the handset. A later action (WhatsApp voice) gets its own branch here. */
+    /** «חייג» uses the same decision as the countdown. A later WhatsApp voice action gets its own branch. */
     private void onCallAction(CallDial.Action action) {
-        if (action == CallDial.Action.DIAL) dialNow();
+        if (action == CallDial.Action.DIAL) placeCall(CallDial.Moment.TAP);
     }
 
-    /** ACTION_DIAL fills the number. The call starts only when the user taps it in the dialer. */
-    private void dialNow() {
+    /**
+     * Timeout or «חייג». ACTION_CALL only when the settings switch is on and CALL_PHONE is granted.
+     * Otherwise the dialer. The permission is never requested from this card.
+     */
+    private void placeCall(CallDial.Moment moment) {
         if (callDialed || callPerson == null) return;
         String tel = CallDial.tel(callPerson);
+        CallDial.Handset how = CallDial.place(moment, directPref(), callPhoneGranted(), tel != null);
         callConfirming = false;
         callPending = false;
         ui.removeCallbacks(callExpire);
         if (callAnim != null) callAnim.cancel();
-        if (tel == null) { done(CallDial.NO_NUMBER); return; }
+        if (how == CallDial.Handset.NONE || tel == null) {
+            done(tel == null ? CallDial.NO_NUMBER : CallDial.CANCELLED);
+            return;
+        }
         callDialed = true;
+        String action = how == CallDial.Handset.CALL ? Intent.ACTION_CALL : Intent.ACTION_DIAL;
+        try {
+            startActivity(new Intent(action, Uri.parse(tel)));
+            done(null);
+        } catch (SecurityException e) {
+            if (how == CallDial.Handset.CALL && openDialer(tel)) return;
+            callDialed = false;
+            done(CallDial.NO_DIALER);
+        } catch (ActivityNotFoundException e) {
+            if (how == CallDial.Handset.CALL && openDialer(tel)) return;
+            callDialed = false;
+            done(CallDial.NO_DIALER);
+        }
+    }
+
+    private boolean openDialer(String tel) {
         try {
             startActivity(new Intent(Intent.ACTION_DIAL, Uri.parse(tel)));
             done(null);
+            return true;
         } catch (ActivityNotFoundException | SecurityException e) {
-            callDialed = false;
-            done(CallDial.NO_DIALER);
+            return false;
         }
     }
 }

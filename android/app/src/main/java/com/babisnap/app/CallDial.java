@@ -18,13 +18,29 @@ import java.util.regex.Pattern;
  */
 public final class CallDial {
     public static final long CONFIRM_MS = 8000L;
+    /** Settings switch. Default off. Auto-call also needs CALL_PHONE. */
+    public static final String PREF_DIRECT = "call_direct";
+    public static final String TOGGLE_TITLE = "אישור לבצע שיחות";
+    public static final String TOGGLE_HINT = "בסוף הספירה השיחה תצא ישירות, בלי חייגן";
     public static final String HINT = "המספר מולא מראש. הלחיצה בחייגן היא זו שמתחילה את השיחה.";
+    public static final String HINT_AUTO = "השיחה תצא אוטומטית בסוף הספירה";
     public static final String NO_NAME = "לא שמעתי למי להתקשר";
     public static final String NO_PERMISSION = "אין גישה לאנשי הקשר, אז אי אפשר לחייג";
     public static final String NO_DIALER = "אין אפליקציית חייגן בטלפון";
     public static final String NO_NUMBER = "אין מספר לחייג";
     public static final String CANCELLED = "בוטל – לא בוצעה שיחה";
     public static final String PICK = "למי לחייג?";
+    public static final String DENIED_MSG = "בלי אישור לשיחות החיוג נשאר דרך החייגן";
+    public static final String BLOCKED_MSG = "האישור לשיחות חסום. הרשאות ← טלפון ← אפשר";
+
+    /** Where a single resolved number goes. NONE places nothing. */
+    public enum Handset { CALL, DIAL, NONE }
+
+    /** TIMEOUT and TAP can dial. CANCEL and LEAVE never do. */
+    public enum Moment { TIMEOUT, TAP, CANCEL, LEAVE }
+
+    /** Settings switch when the user flips «אישור לבצע שיחות». */
+    public enum ToggleResult { SAVED_OFF, SAVED_ON, NEED_PROMPT, NEED_SETTINGS }
 
     /** Buttons on the confirm card, in order. Only the dialer button exists today. */
     public enum Action {
@@ -60,6 +76,35 @@ public final class CallDial {
     private static final Pattern ALL_DAY = Pattern.compile("(?:^|\\s)(?:כל\\s+היום|יום\\s+שלם|יום\\s+מלא)(?=\\s|$)");
 
     public static List<Action> actions() { return Collections.singletonList(Action.DIAL); }
+
+    /** The switch is on for real only when the user asked and CALL_PHONE is still granted. */
+    public static boolean effective(boolean toggleOn, boolean permissionGranted) {
+        return toggleOn && permissionGranted;
+    }
+
+    /**
+     * Timeout and «חייג» place the call directly only for one resolved number when the switch is on
+     * and CALL_PHONE is granted. Otherwise they open the dialer. Cancel, leaving the card, and a
+     * picker (no single number) place nothing.
+     */
+    public static Handset place(Moment moment, boolean toggleOn, boolean permissionGranted, boolean singleResolvedNumber) {
+        if (moment != Moment.TIMEOUT && moment != Moment.TAP) return Handset.NONE;
+        if (!singleResolvedNumber) return Handset.NONE;
+        return effective(toggleOn, permissionGranted) ? Handset.CALL : Handset.DIAL;
+    }
+
+    public static String intentAction(Handset handset) {
+        if (handset == Handset.CALL) return "android.intent.action.CALL";
+        if (handset == Handset.DIAL) return "android.intent.action.DIAL";
+        return null;
+    }
+
+    public static ToggleResult onToggle(boolean wantOn, boolean permissionGranted, boolean permanentlyDenied) {
+        if (!wantOn) return ToggleResult.SAVED_OFF;
+        if (permissionGranted) return ToggleResult.SAVED_ON;
+        if (permanentlyDenied) return ToggleResult.NEED_SETTINGS;
+        return ToggleResult.NEED_PROMPT;
+    }
 
     /**
      * @param normalized text after {@link Classifier#normalize} and the leading command strip
@@ -233,15 +278,19 @@ public final class CallDial {
         return (plus ? "+" : "") + d.substring(0, head) + "-•••-" + d.substring(n - tail);
     }
 
-    public static String headline(WhatsAppRecipients.Contact contact) {
+    public static String headline(WhatsAppRecipients.Contact contact) { return headline(contact, false); }
+
+    public static String headline(WhatsAppRecipients.Contact contact, boolean direct) {
         String who = contact == null || contact.label().isEmpty() ? "איש הקשר" : contact.label();
-        return "שיחה · ייפתח החייגן אצל " + who;
+        return direct ? "שיחה · מתקשר ל" + who : "שיחה · ייפתח החייגן אצל " + who;
     }
 
-    public static String summary(WhatsAppRecipients.Contact contact) {
+    public static String summary(WhatsAppRecipients.Contact contact) { return summary(contact, false); }
+
+    public static String summary(WhatsAppRecipients.Contact contact, boolean direct) {
         String who = contact == null ? "" : contact.label();
         String hidden = mask(chooseRaw(contact));
-        return who + "\n\u2066" + hidden + "\u2069\n" + HINT;
+        return who + "\n\u2066" + hidden + "\u2069\n" + (direct ? HINT_AUTO : HINT);
     }
 
     private CallDial() {}
