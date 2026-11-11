@@ -117,5 +117,38 @@ final class InviteViews {
         return r;
     }
 
+    /** Same row chrome as the meeting invite picker: name, a second line, chevron. */
+    static View choiceList(Context c, String question, java.util.List<String> names, java.util.List<String> details,
+                           String skip, java.util.function.IntConsumer onPick) {
+        LinearLayout root = new LinearLayout(c); root.setOrientation(LinearLayout.VERTICAL); root.setLayoutParams(full(c, 4));
+        TextView qt = new TextView(c); qt.setText(question);
+        qt.setTextColor(0xFF2A1B7A); qt.setTextSize(14); qt.setTypeface(Typeface.DEFAULT_BOLD);
+        root.addView(qt, full(c, 12));
+        LinearLayout list = new LinearLayout(c); list.setOrientation(LinearLayout.VERTICAL);
+        list.setBackground(box(c, 0xFFFFFFFF, 0xFFEADFB5, 1.5f, 13)); list.setLayoutParams(full(c, 7));
+        int pad = dp(c, 1.5f); list.setPadding(pad, pad, pad, pad);
+        for (int i = 0; i < names.size(); i++) {
+            if (i > 0) { View div = new View(c); div.setBackgroundColor(0xFFF1EBD3); list.addView(div, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(c, 1))); }
+            final int index = i;
+            list.addView(choiceRow(c, names.get(i), i < details.size() ? details.get(i) : "", v -> onPick.accept(index)));
+        }
+        root.addView(list);
+        if (skip != null && !skip.isEmpty()) {
+            TextView no = new TextView(c); no.setText(skip); no.setTextColor(0xFF6A5FA8); no.setTextSize(13.5f);
+            no.setPadding(dp(c, 12), dp(c, 7), dp(c, 12), dp(c, 7)); no.setGravity(Gravity.CENTER);
+            no.setMinHeight(dp(c, 48)); no.setMinimumHeight(dp(c, 48)); no.setMinWidth(dp(c, 48)); no.setMinimumWidth(dp(c, 48));
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+            lp.topMargin = dp(c, 8); lp.gravity = Gravity.CENTER_HORIZONTAL;
+            no.setOnClickListener(v -> onPick.accept(-1));
+            root.addView(no, lp);
+        }
+        return root;
+    }
+
+    private static View choiceRow(Context c, String title, String detail, View.OnClickListener tap) {
+        ContactMatcher.Match m = new ContactMatcher.Match(title == null ? "" : title, detail == null ? "" : detail, null);
+        return row(c, m, tap);
+    }
+
     private InviteViews() {}
 }

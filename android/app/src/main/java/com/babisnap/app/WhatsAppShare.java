@@ -33,6 +33,33 @@ final class WhatsAppShare {
         return new Intent(Intent.ACTION_SEND).setPackage(pkg).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text);
     }
 
+    /**
+     * WhatsApp's own forward picker (recent chats and groups, with its search).
+     * Consumer app, else Business. Null when neither is installed — never the system sheet.
+     */
+    static Intent groupPicker(Context c, String text) {
+        WhatsAppGroupShare.Spec spec = WhatsAppGroupShare.spec(
+            installed(c.getPackageManager(), WhatsAppLogic.PKG),
+            installed(c.getPackageManager(), WhatsAppLogic.PKG_BUSINESS),
+            text);
+        if (!spec.opensWhatsAppPicker()) return null;
+        return new Intent(spec.action).setPackage(spec.pkg).setType(spec.type).putExtra(Intent.EXTRA_TEXT, spec.text);
+    }
+
+    /** Private chat with the text already in the box. The user taps Send in WhatsApp. */
+    static Intent textToJid(String pkg, String jid, String text) {
+        return text(pkg, text == null ? "" : text).putExtra("jid", jid);
+    }
+
+    /** wa.me fallback. pkg may be null when the package-targeted view did not resolve. */
+    static Intent waMe(String pkg, String e164Digits, String text) {
+        String digits = e164Digits == null ? "" : (e164Digits.startsWith("+") ? e164Digits.substring(1) : e164Digits);
+        Uri uri = Uri.parse(WhatsAppRecipients.waMeUrl(digits, text));
+        Intent view = new Intent(Intent.ACTION_VIEW, uri);
+        if (pkg != null) view.setPackage(pkg);
+        return view;
+    }
+
     /** Cache file via FileProvider. Caller grants read to the target package only. */
     static Intent voice(Context c, String pkg, File file, String mime) {
         Uri uri = FileProvider.getUriForFile(c, c.getPackageName() + AUTHORITY_SUFFIX, file);

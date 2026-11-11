@@ -11,7 +11,8 @@ import java.util.regex.Pattern;
  * Task vs note is decided by CONTENT (something to do vs information), never by presence of a date.
  * Exception: an explicit date+time with no action verb and no destination word is a calendar item.
  * WHATSAPP is returned only when the caller passes whatsappEnabled (the setting, default off).
- * {@link #classify(String, boolean)} is the live path and never returns WHATSAPP.
+ * {@link #classify(String, boolean)} passes false and never returns WHATSAPP.
+ * The live path is {@link #classify(String, boolean, boolean)} with the saved setting.
  */
 public final class Classifier {
     public enum Kind { MEETING, TASK, NOTE, WHATSAPP;
@@ -63,8 +64,10 @@ public final class Classifier {
     static final Pattern WHATSAPP = Pattern.compile(
         "(?<=^|\\s)(?:ובוואטסאפ|לוואטסאפ|בוואטסאפ|הוואטסאפ|מוואטסאפ|ווואטסאפ|וואטסאפ"
             + "|ובווטסאפ|לווטסאפ|בווטסאפ|הווטסאפ|מווטסאפ|וווטסאפ|ווטסאפ"
+            + "|ובוואצאפ|לוואצאפ|בוואצאפ|הוואצאפ|מוואצאפ|ווואצאפ|וואצאפ"
+            + "|ובווצאפ|לווצאפ|בווצאפ|הווצאפ|מווצאפ|וווצאפ|ווצאפ"
             + "|ובואטסאפ|לבואטסאפ|בואטסאפ"
-            + "|ל-וואטסאפ|ב-וואטסאפ|ל-ווטסאפ|ב-ווטסאפ"
+            + "|ל-וואטסאפ|ב-וואטסאפ|ל-ווטסאפ|ב-ווטסאפ|ל-וואצאפ|ב-וואצאפ|ל-ווצאפ|ב-ווצאפ"
             + "|whatsapp)(?=\\s|$)",
         Pattern.CASE_INSENSITIVE);
     /** Event names that go to the calendar and stay in the title; with no clock time the parser marks them all-day. */

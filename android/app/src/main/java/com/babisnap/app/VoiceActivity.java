@@ -14,6 +14,9 @@ import android.speech.RecognitionListener;
 import android.speech.SpeechRecognizer;
 import android.view.View;
 import android.view.Window;
+import android.text.Editable;
+import android.text.TextWatcher;
+import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -32,8 +35,15 @@ public class VoiceActivity extends Activity {
     private SpeechRecognizer rec; private View logo, halo; private TextView status, partial;
     private int listenRetries;
     private WhatsAppCapture waAudio;
-    private boolean waPending, waHandedOff, waLeft, waCaptureGaveUp;
+    private boolean waPending, waHandedOff, waLeft, waCaptureGaveUp, waConfirming, waGroup, waAskingContacts;
+    private Runnable waCommit;
     private String waText = "";
+    private String waBody = "";
+    private String waGroupName = "";
+    private WhatsAppRecipients.Contact waPerson;
+    private WhatsAppRecipients.Command waCommand;
+    private final List<WhatsAppRecipients.Contact> waContacts = new ArrayList<>();
+    private Runnable waAfterContacts;
     private Uri waUri;
     private android.animation.ObjectAnimator waAnim;
 
@@ -78,7 +88,9 @@ public class VoiceActivity extends Activity {
         ui.removeCallbacks(commit); ui.removeCallbacks(closeCard); ui.removeCallbacks(pickerTimeout); ui.removeCallbacks(waExpire);
         ended = true; tick.removeCallbacks(ticker); stopRec();
         if (waHandedOff) { waAudio = null; waUri = null; } else discardWa();
-        waPending = false; waHandedOff = false; waLeft = false; waText = "";
+        waPending = false; waHandedOff = false; waLeft = false; waConfirming = false; waGroup = false; waAskingContacts = false;
+        waCommit = null;
+        waText = ""; waBody = ""; waGroupName = ""; waPerson = null; waCommand = null; waAfterContacts = null; waContacts.clear();
         pendingBody = null; pendingId = null; pendingMeeting = false; committed = false;
         cardClosed = false; awaitingConsent = false; pickerMode = false;
         invitees.clear(); inviteQueries = new ArrayList<>();
@@ -92,6 +104,12 @@ public class VoiceActivity extends Activity {
         if (req == REQ_CONTACTS) {
             boolean ok = g.length > 0 && g[0] == PackageManager.PERMISSION_GRANTED;
             MainActivity.noteResult(this, Manifest.permission.READ_CONTACTS, ok);
+            if (waPending) {
+                waAskingContacts = false;
+                if (ok) loadWaContacts();
+                else { waContacts.clear(); if (waAfterContacts != null) waAfterContacts.run(); }
+                return;
+            }
             if (ok) resolveInvites(); else noPermission();
             return;
         }
@@ -223,9 +241,10 @@ public class VoiceActivity extends Activity {
         try { parsed = Core.parse(this, spoken); } catch (Exception e) { done("שגיאת פענוח: " + e.getMessage()); return; }
         boolean explicitTime = !parsed.optBoolean("timeDefaulted", true) || parsed.optBoolean("allDay", false);
         Classifier.Result c = Classifier.classify(spoken, explicitTime, Core.whatsAppEnabled(this));
-        if (c.kind == Classifier.Kind.WHATSAPP) { showWhatsApp(c); return; }
+        RouteGate.Dest dest = RouteGate.dest(c.kind);
+        if (dest == RouteGate.Dest.WHATSAPP) { showWhatsApp(c); return; }
         discardWa();
-        if (c.kind != Classifier.Kind.MEETING) { showSaved(c); return; }
+        if (dest != RouteGate.Dest.CALENDAR) { showSaved(c); return; }
         // Re-parse the text after destination/command words were stripped, so "יומן" / "לקלנדר" never stay in the title.
         try {
             if (c.stripped.isEmpty()) {
@@ -343,6 +362,7 @@ public class VoiceActivity extends Activity {
             CalQueueLogic.cardHeadline(meetingRoute == DeviceCalendarLogic.Route.DEVICE));
         TextView chip = findViewById(R.id.chip); chip.setText("פגישה");
         chip.setBackgroundResource(R.drawable.chip_meeting); chip.setTextColor(0xFFFFFFFF);
+        RouteMark.apply(chip, RouteMark.Route.CALENDAR, 0xFFFFFFFF);
         ((TextView) findViewById(R.id.summary)).setText(CardText.meeting(p.optString("title"), p.optInt("d"), p.optInt("m"), p.optInt("y"),
             p.optInt("hour"), p.optInt("minute"), p.optBoolean("timeDefaulted"), p.optBoolean("allDay"), p.optString("location", "")));
         if (InviteFlow.needsPicker(invitees)) { startPickers(); return; }
@@ -410,7 +430,7 @@ public class VoiceActivity extends Activity {
     private final Runnable commit = this::commitPending;
 
     private void showSaved(Classifier.Result c) {
-        if (c.kind == Classifier.Kind.WHATSAPP) { showWhatsApp(c); return; }
+        if (!RouteGate.toBabiTk(c.kind)) return;
         JSONObject p = parsed;
         try { if (!c.stripped.isEmpty() && !c.stripped.equals(Classifier.normalize(spoken))) p = Core.parse(this, c.stripped, true); }
         catch (Exception ignored) {}
@@ -428,6 +448,7 @@ public class VoiceActivity extends Activity {
             : "נשמר במכשיר · " + c.kind.he() + "\n" + (BabiTk.needsRepair(this) ? "BabiTk " + BabiTk.NOT_CONNECTED : "BabiTk לא מחובר") + " – פתחו את BabiSnap ← הגדרות ← BabiTk");
         TextView chip = findViewById(R.id.chip); chip.setText(c.kind.he() + (spokenTags.isEmpty() ? "" : " · #" + String.join(" #", spokenTags)));
         if (c.kind == Classifier.Kind.NOTE) { chip.setBackgroundResource(R.drawable.chip_note); chip.setTextColor(0xFF2A1B7A); }
+        RouteMark.apply(chip, RouteMark.Route.BABITK, chip.getCurrentTextColor());
         ((TextView) findViewById(R.id.summary)).setText(CardText.saved(title, date != null, p.optInt("d"), p.optInt("m"), p.optInt("y"), time, p.optString("location", "")));
         android.widget.ProgressBar bar = findViewById(R.id.countdown);
         android.animation.ObjectAnimator.ofInt(bar, "progress", (int) UNDO_MS, 0).setDuration(UNDO_MS).start();
@@ -446,13 +467,16 @@ public class VoiceActivity extends Activity {
             return;
         }
         if (pendingBody == null) return;
+        if (BabiTkJson.isWhatsAppPayload(pendingBody)) { pendingBody = null; done("בוטל – לא נשלח לוואטסאפ"); return; }
         committed = true; ui.removeCallbacks(commit);
         BabiTk.enqueue(getApplicationContext(), pendingId, pendingBody);
         done(BabiTk.hasToken(this) ? null : (BabiTk.needsRepair(this) ? "BabiTk " + BabiTk.NOT_CONNECTED : "BabiTk לא מחובר") + ": הפריט נשמר במכשיר ויישלח אחרי חיבור (BabiSnap ← הגדרות ← BabiTk)");
     }
 
     @Override protected void onStop() {
+        if (waAskingContacts) { super.onStop(); return; }
         if (waHandedOff) waLeft = true;
+        else if (waConfirming) runWaCommit();
         else if (waPending) cancelWhatsApp("בוטל – לא נשלח לוואטסאפ");
         if ((pendingBody != null || pendingMeeting) && !committed) commitPending();
         else if (pickerMode && !cardClosed && !awaitingConsent) finishInvites();
@@ -472,14 +496,8 @@ public class VoiceActivity extends Activity {
         if (!isFinishing()) finish();
     }
 
-    /** Record only while the setting is on and the mode can send a voice message. Failure leaves transcript-only. */
-    private void startWaCaptureIfWanted() {
-        if (waCaptureGaveUp || waAudio != null) return;
-        if (!Core.whatsAppEnabled(this)) return;
-        if (!WhatsAppLogic.wantsVoice(Core.whatsAppMode(this))) return;
-        WhatsAppCapture cap = new WhatsAppCapture();
-        if (cap.start(this)) waAudio = cap;
-    }
+    /** The chat gets the transcript. A second recorder is not started beside the recognizer. */
+    private void startWaCaptureIfWanted() {}
 
     private void stopWaCapture() { if (waAudio != null) waAudio.stop(); }
 
@@ -492,7 +510,17 @@ public class VoiceActivity extends Activity {
         if (waAudio != null) { waAudio.delete(); waAudio = null; }
     }
 
-    private final Runnable waExpire = () -> cancelWhatsApp("בוטל – לא נשלח לוואטסאפ");
+    private final Runnable waExpire = this::runWaCommit;
+
+    private void runWaCommit() {
+        if (!waConfirming || waCommit == null) return;
+        Runnable go = waCommit;
+        waConfirming = false;
+        waCommit = null;
+        ui.removeCallbacks(waExpire);
+        if (waAnim != null) waAnim.cancel();
+        go.run();
+    }
 
     private void cancelWhatsApp(String toast) {
         if (waHandedOff) return;
@@ -506,84 +534,247 @@ public class VoiceActivity extends Activity {
     private void showWhatsApp(Classifier.Result c) {
         stopWaCapture();
         waText = c.stripped == null ? "" : c.stripped.trim();
-        waPending = true; waHandedOff = false; waLeft = false;
+        waPending = true; waHandedOff = false; waLeft = false; waConfirming = false; waGroup = false; waPerson = null; waCommit = null;
         pendingBody = null; pendingMeeting = false; committed = false;
-        WhatsAppLogic.Mode mode = Core.whatsAppMode(this);
-        boolean hasVoice = waAudio != null && waAudio.ready();
-        boolean hasText = !waText.isEmpty();
-        WhatsAppLogic.Buttons buttons = WhatsAppLogic.buttons(mode, hasVoice, hasText);
-        setContentView(R.layout.card_whatsapp);
-        getWindow().setBackgroundDrawableResource(android.R.color.transparent);
-        ((TextView) findViewById(R.id.summary)).setText(WhatsAppLogic.preview(waText));
-        if (WhatsAppLogic.wantsVoice(mode) && !hasVoice && buttons.transcript)
-            ((TextView) findViewById(R.id.wa_hint)).setText("לא נשמרה הקלטה. אפשר לשלוח את התמלול, או לבטל.");
-        else if (!buttons.voice && !buttons.transcript)
-            ((TextView) findViewById(R.id.wa_hint)).setText("אין מה לשלוח. ההודעה תימחק.");
-        View voiceBtn = findViewById(R.id.send_voice);
-        View textBtn = findViewById(R.id.send_text);
-        voiceBtn.setVisibility(buttons.voice ? View.VISIBLE : View.GONE);
-        textBtn.setVisibility(buttons.transcript ? View.VISIBLE : View.GONE);
-        voiceBtn.setOnClickListener(v -> sendWhatsApp(true));
-        textBtn.setOnClickListener(v -> sendWhatsApp(false));
-        findViewById(R.id.cancel_wa).setOnClickListener(v -> cancelWhatsApp("בוטל – לא נשלח לוואטסאפ"));
-        armWaTimer();
-    }
-
-    private void armWaTimer() {
-        ui.removeCallbacks(waExpire);
-        if (waAnim != null) waAnim.cancel();
-        long ms = WhatsAppLogic.confirmMs(waText);
-        android.widget.ProgressBar bar = findViewById(R.id.countdown);
-        if (bar != null) {
-            bar.setMax((int) ms);
-            bar.setProgress((int) ms);
-            waAnim = android.animation.ObjectAnimator.ofInt(bar, "progress", (int) ms, 0).setDuration(ms);
-            waAnim.start();
+        waCommand = WhatsAppRecipients.parse(spoken == null ? "" : spoken);
+        waBody = WhatsAppRecipients.shownText(waCommand);
+        if (waCommand.target == WhatsAppRecipients.Target.GROUP) {
+            showWaGroup(waCommand.name, waCommand.body);
+            return;
         }
-        ui.postDelayed(waExpire, ms);
+        waAfterContacts = () -> {
+            if (isFinishing() || cardClosed) return;
+            if (waCommand.target != WhatsAppRecipients.Target.PERSON || waCommand.name.isEmpty()) {
+                showWaChooser(WhatsAppRecipients.search(waContacts, ""), true);
+                return;
+            }
+            WhatsAppRecipients.Matches hits = WhatsAppRecipients.match(waCommand.name, waContacts);
+            if (hits.one()) showWaDirect(hits.hits.get(0), waBody);
+            else if (hits.code == WhatsAppRecipients.MatchCode.MANY) showWaChooser(hits.hits, false);
+            else showWaChooser(WhatsAppRecipients.search(waContacts, ""), true);
+        };
+        ensureWaContacts();
     }
 
-    /** One payload: voice or transcript. The other file/text is not attached. */
-    private void sendWhatsApp(boolean voice) {
+    /** READ_CONTACTS is already in the manifest for invites. Ask only when it is still missing. */
+    private void ensureWaContacts() {
+        if (checkSelfPermission(Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED) {
+            loadWaContacts();
+            return;
+        }
+        if (MainActivity.isBlocked(this, Manifest.permission.READ_CONTACTS)) {
+            MainActivity.openAppInfo(this);
+            waContacts.clear();
+            if (waAfterContacts != null) waAfterContacts.run();
+            return;
+        }
+        showWaContactsSheet();
+    }
+
+    /** Same permission card the meeting invite uses. */
+    private void showWaContactsSheet() {
+        setContentView(R.layout.card_contacts);
+        getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+        ((TextView) findViewById(R.id.body)).setText("כדי למצוא את הנמען בוואטסאפ צריך גישה לאנשי הקשר בטלפון. המספר לא נשמר ולא נשלח.");
+        findViewById(R.id.later).setOnClickListener(v -> {
+            waContacts.clear();
+            if (waAfterContacts != null) waAfterContacts.run();
+        });
+        findViewById(R.id.allow).setOnClickListener(v -> {
+            if (MainActivity.isBlocked(this, Manifest.permission.READ_CONTACTS)) {
+                MainActivity.openAppInfo(this);
+                waContacts.clear();
+                if (waAfterContacts != null) waAfterContacts.run();
+                return;
+            }
+            waAskingContacts = true;
+            requestPermissions(new String[]{Manifest.permission.READ_CONTACTS}, REQ_CONTACTS);
+        });
+    }
+
+    private void loadWaContacts() {
+        final Context app = getApplicationContext();
+        new Thread(() -> {
+            List<WhatsAppRecipients.Contact> list;
+            try { list = WhatsAppContacts.load(app); }
+            catch (Exception e) { list = new ArrayList<>(); }
+            final List<WhatsAppRecipients.Contact> ready = list;
+            runOnUiThread(() -> {
+                if (isFinishing() || cardClosed) return;
+                waContacts.clear();
+                waContacts.addAll(ready);
+                if (waAfterContacts != null) waAfterContacts.run();
+            });
+        }, "babisnap-wa-contacts").start();
+    }
+
+    private void showWaChooser(List<WhatsAppRecipients.Contact> people, boolean search) {
+        waConfirming = false;
+        waGroup = false;
+        waPerson = null;
+        waCommit = null;
+        paintWaCard(search ? "וואטסאפ · בחירת נמען" : "וואטסאפ · כמה אנשי קשר", "וואטסאפ",
+            waBody.isEmpty() ? "אין טקסט" : waBody, false);
+        LinearLayout box = findViewById(R.id.invites);
+        box.removeAllViews();
+        if (search) {
+            EditText field = new EditText(this);
+            field.setHint("חיפוש איש קשר");
+            field.setSingleLine(true);
+            field.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
+            field.addTextChangedListener(new TextWatcher() {
+                @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+                @Override public void onTextChanged(CharSequence s, int start, int before, int count) {}
+                @Override public void afterTextChanged(Editable s) {
+                    bindWaChoices(WhatsAppRecipients.search(waContacts, s == null ? "" : s.toString()), true);
+                }
+            });
+            box.addView(field);
+        }
+        bindWaChoices(people, true);
+        box.setVisibility(View.VISIBLE);
+    }
+
+    private void bindWaChoices(List<WhatsAppRecipients.Contact> people, boolean keepSearch) {
+        LinearLayout box = findViewById(R.id.invites);
+        if (box == null) return;
+        View search = keepSearch && box.getChildCount() > 0 && box.getChildAt(0) instanceof EditText ? box.getChildAt(0) : null;
+        box.removeAllViews();
+        if (search != null) box.addView(search);
+        if (search != null && checkSelfPermission(Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED)
+            box.addView(InviteViews.strip(this, false, "בלי הרשאת אנשי קשר אי אפשר למצוא נמען", null));
+        List<String> names = new ArrayList<>();
+        List<String> details = new ArrayList<>();
+        for (WhatsAppRecipients.Contact p : people) {
+            names.add(p.label());
+            details.add(p.pretty());
+        }
+        box.addView(InviteViews.choiceList(this, "למי לפתוח וואטסאפ?", names, details, "פתח וואטסאפ בלי נמען", index -> {
+            if (index < 0) showWaPlain();
+            else if (index < people.size()) showWaDirect(people.get(index), waBody);
+        }));
+    }
+
+    /** One contact, on the meeting card. The countdown is CardFlow.UNDO_MS, then the chat opens. */
+    private void showWaDirect(WhatsAppRecipients.Contact person, String body) {
+        waGroup = false;
+        waPerson = person;
+        waGroupName = "";
+        waBody = body == null ? "" : body;
+        waText = waBody;
+        paintWaCard(WhatsAppRecipients.cardHeadline(person), person.pretty().isEmpty() ? "וואטסאפ" : person.pretty(),
+            waBody.isEmpty() ? "אין טקסט" : waBody, true);
+        waCommit = this::openDirectChat;
+    }
+
+    /** Group name on the meeting card. WhatsApp's own forward picker is where the group is searched. */
+    private void showWaGroup(String name, String body) {
+        waGroup = true;
+        waPerson = null;
+        waGroupName = name == null ? "" : name.trim();
+        waBody = body == null ? "" : body;
+        waText = waBody;
+        paintWaCard(WhatsAppRecipients.groupCardHeadline(waGroupName), waGroupName.isEmpty() ? "קבוצה" : waGroupName,
+            waBody.isEmpty() ? "אין טקסט" : waBody, true);
+        if (!waGroupName.isEmpty()) {
+            copyGroupName(waGroupName);
+            LinearLayout box = findViewById(R.id.invites);
+            box.removeAllViews();
+            box.addView(InviteViews.strip(this, true, "«" + waGroupName + "» הועתק. הדביקו בחיפוש של וואטסאפ", waGroupName));
+            box.setVisibility(View.VISIBLE);
+        }
+        waCommit = this::openGroupShare;
+    }
+
+    private void showWaPlain() {
+        waGroup = true;
+        waPerson = null;
+        waGroupName = "";
+        paintWaCard(WhatsAppRecipients.plainCardHeadline(), "וואטסאפ", waBody.isEmpty() ? "אין טקסט" : waBody, true);
+        waCommit = this::openGroupShare;
+    }
+
+    private void copyGroupName(String name) {
+        if (name == null || name.trim().isEmpty()) return;
+        try {
+            android.content.ClipboardManager clips = (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+            if (clips != null) clips.setPrimaryClip(android.content.ClipData.newPlainText("קבוצה", name.trim()));
+        } catch (RuntimeException ignored) {}
+    }
+
+    /** The saved-card used for a meeting and for a BabiTk item. Undo text stays the layout's «ביטול (Undo)». */
+    private void paintWaCard(String headline, String chipText, String summary, boolean counting) {
+        setContentView(R.layout.card_saved);
+        getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+        ((TextView) findViewById(R.id.check)).setText("💬");
+        ((TextView) findViewById(R.id.headline)).setText(headline);
+        TextView chip = findViewById(R.id.chip);
+        chip.setText(chipText);
+        chip.setBackgroundResource(R.drawable.chip_whatsapp);
+        chip.setTextColor(0xFFFFFFFF);
+        RouteMark.apply(chip, RouteMark.Route.WHATSAPP, 0xFFFFFFFF);
+        ((TextView) findViewById(R.id.summary)).setText(summary);
+        findViewById(R.id.undo).setOnClickListener(v -> cancelWhatsApp("בוטל – לא נשלח לוואטסאפ"));
+        if (!counting) {
+            waConfirming = false;
+            findViewById(R.id.countdown).setVisibility(View.GONE);
+            return;
+        }
+        waConfirming = true;
+        android.widget.ProgressBar bar = findViewById(R.id.countdown);
+        bar.setMax((int) UNDO_MS);
+        bar.setProgress((int) UNDO_MS);
+        if (waAnim != null) waAnim.cancel();
+        waAnim = android.animation.ObjectAnimator.ofInt(bar, "progress", (int) UNDO_MS, 0).setDuration(UNDO_MS);
+        waAnim.start();
+        ui.removeCallbacks(waExpire);
+        ui.postDelayed(waExpire, UNDO_MS);
+    }
+
+    /** WhatsApp's own forward picker. The group name is already on the clipboard for its search. */
+    private void openGroupShare() {
         if (!waPending || waHandedOff) return;
         ui.removeCallbacks(waExpire);
         if (waAnim != null) waAnim.cancel();
+        copyGroupName(waGroupName);
+        String text = waBody == null ? "" : waBody;
+        Intent intent = WhatsAppShare.groupPicker(this, text);
+        if (intent != null && startWa(intent)) { discardWa(); return; }
+        Toast.makeText(this, "וואטסאפ לא מותקן במכשיר", Toast.LENGTH_LONG).show();
+    }
+
+    /** Open the private chat with the text filled in. WhatsApp sends only after the user taps Send. */
+    private void openDirectChat() {
+        if (!waPending || waHandedOff || waPerson == null) return;
+        ui.removeCallbacks(waExpire);
+        if (waAnim != null) waAnim.cancel();
         String pkg = WhatsAppShare.resolvePackage(this);
-        if (pkg == null) {
-            Toast.makeText(this, "וואטסאפ לא מותקן במכשיר", Toast.LENGTH_LONG).show();
-            armWaTimer();
+        String digits = waPerson.digits();
+        String jid = WhatsAppRecipients.contactJid(digits);
+        String text = waBody == null ? "" : waBody;
+        if (pkg != null && jid != null && startWa(WhatsAppShare.textToJid(pkg, jid, text))) {
+            discardWa();
             return;
         }
-        Intent intent;
-        if (voice) {
-            if (waAudio == null || !waAudio.ready()) {
-                Toast.makeText(this, "אין הקלטה לשליחה", Toast.LENGTH_SHORT).show();
-                armWaTimer();
-                return;
-            }
-            intent = WhatsAppShare.voice(this, pkg, waAudio.file(), waAudio.mime());
-            waUri = intent.getClipData() != null && intent.getClipData().getItemCount() > 0
-                ? intent.getClipData().getItemAt(0).getUri() : null;
-            if (waUri != null) grantUriPermission(pkg, waUri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
-        } else {
-            if (waText.isEmpty()) {
-                Toast.makeText(this, "אין תמלול לשליחה", Toast.LENGTH_SHORT).show();
-                armWaTimer();
-                return;
-            }
-            intent = WhatsAppShare.text(pkg, waText);
+        if (digits != null && !digits.isEmpty()
+                && (startWa(WhatsAppShare.waMe(pkg, digits, text)) || startWa(WhatsAppShare.waMe(null, digits, text)))) {
+            discardWa();
+            return;
         }
-        // Set before startActivity: onStop can run inside that call, and must not cancel the share.
+        Toast.makeText(this, pkg == null ? "וואטסאפ לא מותקן במכשיר" : "וואטסאפ לא נפתח", Toast.LENGTH_LONG).show();
+    }
+
+    private boolean startWa(Intent intent) {
         waHandedOff = true;
         waPending = false;
         try {
             startActivityForResult(intent, REQ_WA);
-            if (!voice) discardWa();
-        } catch (ActivityNotFoundException e) {
+            Toast.makeText(getApplicationContext(), "נפתח בוואטסאפ", Toast.LENGTH_LONG).show();
+            return true;
+        } catch (ActivityNotFoundException | SecurityException e) {
             waHandedOff = false;
             waPending = true;
-            Toast.makeText(this, "וואטסאפ לא מותקן במכשיר", Toast.LENGTH_LONG).show();
-            armWaTimer();
+            return false;
         }
     }
 

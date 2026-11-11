@@ -205,7 +205,8 @@ public class ClassifierTest {
         "וואטסאפ", "WhatsApp", "whatsapp", "WHATSAPP", "ווטסאפ", "בואטסאפ", "בוואטסאפ",
         "לוואטסאפ", "לווטסאפ", "בווטסאפ", "הוואטסאפ", "מוואטסאפ", "ובוואטסאפ", "ובואטסאפ", "לבואטסאפ",
         "ובווטסאפ", "הווטסאפ", "מווטסאפ", "ווואטסאפ", "וווטסאפ",
-        "ל-וואטסאפ", "ב-וואטסאפ", "ל-ווטסאפ", "ב-ווטסאפ"
+        "ל-וואטסאפ", "ב-וואטסאפ", "ל-ווטסאפ", "ב-ווטסאפ",
+        "וואצאפ", "ווצאפ", "בוואצאפ", "לוואצאפ", "בווצאפ", "לווצאפ"
     };
 
     @Test public void channelWordIsNotADestinationUntilEnabled() {
@@ -243,6 +244,8 @@ public class ClassifierTest {
             assertFalse(c.stripped.contains("וואטסאפ"));
             assertFalse(c.stripped.contains("ווטסאפ"));
             assertFalse(c.stripped.contains("בואטסאפ"));
+            assertFalse(c.stripped.contains("וואצאפ"));
+            assertFalse(c.stripped.contains("ווצאפ"));
             assertFalse(c.stripped.contains("בוואטסאפ"));
         }
         assertEquals("פגישה עם דני מחר בעשר", Classifier.classify("וואטסאפ פגישה עם דני מחר בעשר", true, true).stripped);

@@ -49,9 +49,10 @@ public final class CalQueue {
         enqueue(c, clientId, route, parsed, spoken, emails, true);
     }
 
-    /** attendeesReady=false: insert now, patch invites later (contact picker). */
+    /** attendeesReady=false: insert now, patch invites later (contact picker). Meetings only — not WhatsApp. */
     public static void enqueue(Context c, String clientId, String route, JSONObject parsed, String spoken, List<String> emails, boolean attendeesReady) {
         if (clientId == null || clientId.isEmpty() || parsed == null) return;
+        if (parsed.optBoolean("whatsapp", false) || "whatsapp".equals(parsed.optString("type"))) return;
         if (alreadySent(c, clientId)) { note(c, "אין"); return; }
         try {
             JSONObject o = new JSONObject();

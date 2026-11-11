@@ -39,6 +39,9 @@ android {
         targetSdk = 34
         versionCode = 37
         versionName = '2.26'
+        // Product default is off. The watest build type (side-by-side test APK) overrides this to true.
+        buildConfigField "boolean", "WHATSAPP_DEFAULT_ON", "false"
+        manifestPlaceholders = [pairScheme: "babisnap"]
         // Live snap_users endpoint. Bearer value is the client key injected above — never the admin key.
         buildConfigField "String", "SNAP_REGISTRY_URL", '"https://ghibfuinantybqidwadj.supabase.co/functions/v1/snap-users"'
         buildConfigField "String", "SNAP_REGISTRY_CLIENT_KEY", quoteJavaString(snapKey)
@@ -57,6 +60,14 @@ android {
             minifyEnabled = true; shrinkResources = true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             signingConfig = signingConfigs.release
+        }
+        // Sideload next to the live app. Not a release, not the Play listing.
+        watest {
+            initWith debug
+            applicationIdSuffix ".watest"
+            debuggable true
+            buildConfigField "boolean", "WHATSAPP_DEFAULT_ON", "true"
+            manifestPlaceholders = [pairScheme: "babisnapwatest"]
         }
     }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
