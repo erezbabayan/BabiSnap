@@ -1,6 +1,5 @@
 <resources>
     <string name="app_name">BabiSnap</string>
-    <string name="wa_recipients">נמעני וואטסאפ</string>
     <string name="widget_hint">הקש ודבר · פגישה, משימה או הערה</string>
     <string name="widget_desc">BabiSnap – הקלטת פגישה ביומן בהקשה אחת</string>
     <string name="widget_button_label">BabiSnap – כפתור</string>

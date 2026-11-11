@@ -14,6 +14,9 @@ import android.speech.RecognitionListener;
 import android.speech.SpeechRecognizer;
 import android.view.View;
 import android.view.Window;
+import android.text.Editable;
+import android.text.TextWatcher;
+import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -32,10 +35,14 @@ public class VoiceActivity extends Activity {
     private SpeechRecognizer rec; private View logo, halo; private TextView status, partial;
     private int listenRetries;
     private WhatsAppCapture waAudio;
-    private boolean waPending, waHandedOff, waLeft, waCaptureGaveUp, waDirect;
+    private boolean waPending, waHandedOff, waLeft, waCaptureGaveUp, waConfirming, waGroup, waAskingContacts;
+    private Runnable waCommit;
     private String waText = "";
     private String waBody = "";
-    private WhatsAppRecipients.Person waPerson;
+    private WhatsAppRecipients.Contact waPerson;
+    private WhatsAppRecipients.Command waCommand;
+    private final List<WhatsAppRecipients.Contact> waContacts = new ArrayList<>();
+    private Runnable waAfterContacts;
     private Uri waUri;
     private android.animation.ObjectAnimator waAnim;
 
@@ -80,7 +87,9 @@ public class VoiceActivity extends Activity {
         ui.removeCallbacks(commit); ui.removeCallbacks(closeCard); ui.removeCallbacks(pickerTimeout); ui.removeCallbacks(waExpire);
         ended = true; tick.removeCallbacks(ticker); stopRec();
         if (waHandedOff) { waAudio = null; waUri = null; } else discardWa();
-        waPending = false; waHandedOff = false; waLeft = false; waDirect = false; waText = ""; waBody = ""; waPerson = null;
+        waPending = false; waHandedOff = false; waLeft = false; waConfirming = false; waGroup = false; waAskingContacts = false;
+        waCommit = null;
+        waText = ""; waBody = ""; waPerson = null; waCommand = null; waAfterContacts = null; waContacts.clear();
         pendingBody = null; pendingId = null; pendingMeeting = false; committed = false;
         cardClosed = false; awaitingConsent = false; pickerMode = false;
         invitees.clear(); inviteQueries = new ArrayList<>();
@@ -94,6 +103,12 @@ public class VoiceActivity extends Activity {
         if (req == REQ_CONTACTS) {
             boolean ok = g.length > 0 && g[0] == PackageManager.PERMISSION_GRANTED;
             MainActivity.noteResult(this, Manifest.permission.READ_CONTACTS, ok);
+            if (waPending) {
+                waAskingContacts = false;
+                if (ok) loadWaContacts();
+                else { waContacts.clear(); if (waAfterContacts != null) waAfterContacts.run(); }
+                return;
+            }
             if (ok) resolveInvites(); else noPermission();
             return;
         }
@@ -456,7 +471,9 @@ public class VoiceActivity extends Activity {
     }
 
     @Override protected void onStop() {
+        if (waAskingContacts) { super.onStop(); return; }
         if (waHandedOff) waLeft = true;
+        else if (waConfirming) runWaCommit();
         else if (waPending) cancelWhatsApp("בוטל – לא נשלח לוואטסאפ");
         if ((pendingBody != null || pendingMeeting) && !committed) commitPending();
         else if (pickerMode && !cardClosed && !awaitingConsent) finishInvites();
@@ -476,16 +493,8 @@ public class VoiceActivity extends Activity {
         if (!isFinishing()) finish();
     }
 
-    /** Record only while the setting is on and the mode can send a voice message. Failure leaves transcript-only. */
-    private void startWaCaptureIfWanted() {
-        if (waCaptureGaveUp || waAudio != null) return;
-        if (!Core.whatsAppEnabled(this)) return;
-        if (!WhatsAppLogic.wantsVoice(Core.whatsAppMode(this))) return;
-        // TODO: mode "both" starts a second MediaRecorder beside SpeechRecognizer and can take the mic.
-        // Left in place: the voice-share button needs this file, and the recognizer does not return the audio.
-        WhatsAppCapture cap = new WhatsAppCapture();
-        if (cap.start(this)) waAudio = cap;
-    }
+    /** The chat gets the transcript. A second recorder is not started beside the recognizer. */
+    private void startWaCaptureIfWanted() {}
 
     private void stopWaCapture() { if (waAudio != null) waAudio.stop(); }
 
@@ -498,10 +507,17 @@ public class VoiceActivity extends Activity {
         if (waAudio != null) { waAudio.delete(); waAudio = null; }
     }
 
-    private final Runnable waExpire = () -> {
-        if (waDirect && waPerson != null) openDirectChat();
-        else cancelWhatsApp("בוטל – לא נשלח לוואטסאפ");
-    };
+    private final Runnable waExpire = this::runWaCommit;
+
+    private void runWaCommit() {
+        if (!waConfirming || waCommit == null) return;
+        Runnable go = waCommit;
+        waConfirming = false;
+        waCommit = null;
+        ui.removeCallbacks(waExpire);
+        if (waAnim != null) waAnim.cancel();
+        go.run();
+    }
 
     private void cancelWhatsApp(String toast) {
         if (waHandedOff) return;
@@ -515,102 +531,194 @@ public class VoiceActivity extends Activity {
     private void showWhatsApp(Classifier.Result c) {
         stopWaCapture();
         waText = c.stripped == null ? "" : c.stripped.trim();
-        waPending = true; waHandedOff = false; waLeft = false; waDirect = false; waPerson = null;
+        waPending = true; waHandedOff = false; waLeft = false; waConfirming = false; waGroup = false; waPerson = null; waCommit = null;
         pendingBody = null; pendingMeeting = false; committed = false;
-        java.util.List<WhatsAppRecipients.Person> people = WhatsAppDirectory.load(this);
-        WhatsAppRecipients.Resolved resolved = WhatsAppRecipients.resolve(spoken == null ? "" : spoken, people);
-        waBody = resolved.body;
-        if (resolved.unique()) showWaDirect(resolved.person, resolved.body);
-        else showWaChooser(people, resolved.body);
-    }
-
-    private void showWaChooser(java.util.List<WhatsAppRecipients.Person> people, String body) {
-        waDirect = false;
-        waPerson = null;
-        waBody = body == null ? "" : body;
-        setContentView(R.layout.card_wa_choose);
-        getWindow().setBackgroundDrawableResource(android.R.color.transparent);
-        ((TextView) findViewById(R.id.headline)).setText(people.isEmpty() ? "אין נמען שמור" : "למי לפתוח וואטסאפ?");
-        ((TextView) findViewById(R.id.summary)).setText(waBody.isEmpty() ? "אין טקסט" : waBody);
-        LinearLayout choices = findViewById(R.id.choices);
-        choices.removeAllViews();
-        for (WhatsAppRecipients.Person p : people) {
-            TextView row = new TextView(this);
-            String alias = p.alias.trim().isEmpty() ? p.spokenName() : p.alias.trim();
-            row.setText(alias + (p.detail().isEmpty() ? "" : "\n" + p.detail()));
-            row.setTextColor(0xFF2A1B7A);
-            row.setTextSize(16f);
-            row.setGravity(android.view.Gravity.CENTER);
-            row.setMinHeight((int) (48 * getResources().getDisplayMetrics().density));
-            row.setPadding(12, 16, 12, 16);
-            row.setOnClickListener(v -> {
-                String text = WhatsAppRecipients.bodyFor(p, spoken == null ? "" : spoken);
-                showWaDirect(p, text);
-            });
-            choices.addView(row);
-            View line = new View(this);
-            line.setBackgroundColor(0xFFEEECF5);
-            choices.addView(line, new LinearLayout.LayoutParams(-1, 1));
+        waCommand = WhatsAppRecipients.parse(spoken == null ? "" : spoken);
+        waBody = waCommand.body;
+        if (waCommand.target == WhatsAppRecipients.Target.GROUP) {
+            showWaGroup(waCommand.name, waCommand.body);
+            return;
         }
-        findViewById(R.id.open_plain).setOnClickListener(v -> showWaShare());
-        findViewById(R.id.cancel_wa).setOnClickListener(v -> cancelWhatsApp("בוטל – לא נשלח לוואטסאפ"));
+        waAfterContacts = () -> {
+            if (isFinishing() || cardClosed) return;
+            if (waCommand.target != WhatsAppRecipients.Target.PERSON || waCommand.name.isEmpty()) {
+                showWaChooser(WhatsAppRecipients.search(waContacts, ""), true);
+                return;
+            }
+            WhatsAppRecipients.Matches hits = WhatsAppRecipients.match(waCommand.name, waContacts);
+            if (hits.one()) showWaDirect(hits.hits.get(0), waBody);
+            else if (hits.code == WhatsAppRecipients.MatchCode.MANY) showWaChooser(hits.hits, false);
+            else showWaChooser(WhatsAppRecipients.search(waContacts, ""), true);
+        };
+        ensureWaContacts();
     }
 
-    /** Recipient is known. 8s then the private chat opens, unless the user cancels. Nothing is sent. */
-    private void showWaDirect(WhatsAppRecipients.Person person, String body) {
-        waDirect = true;
+    /** READ_CONTACTS is already in the manifest for invites. Ask only when it is still missing. */
+    private void ensureWaContacts() {
+        if (checkSelfPermission(Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED) {
+            loadWaContacts();
+            return;
+        }
+        if (MainActivity.isBlocked(this, Manifest.permission.READ_CONTACTS)) {
+            MainActivity.openAppInfo(this);
+            waContacts.clear();
+            if (waAfterContacts != null) waAfterContacts.run();
+            return;
+        }
+        showWaContactsSheet();
+    }
+
+    /** Same permission card the meeting invite uses. */
+    private void showWaContactsSheet() {
+        setContentView(R.layout.card_contacts);
+        getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+        ((TextView) findViewById(R.id.body)).setText("כדי למצוא את הנמען בוואטסאפ צריך גישה לאנשי הקשר בטלפון. המספר לא נשמר ולא נשלח.");
+        findViewById(R.id.later).setOnClickListener(v -> {
+            waContacts.clear();
+            if (waAfterContacts != null) waAfterContacts.run();
+        });
+        findViewById(R.id.allow).setOnClickListener(v -> {
+            if (MainActivity.isBlocked(this, Manifest.permission.READ_CONTACTS)) {
+                MainActivity.openAppInfo(this);
+                waContacts.clear();
+                if (waAfterContacts != null) waAfterContacts.run();
+                return;
+            }
+            waAskingContacts = true;
+            requestPermissions(new String[]{Manifest.permission.READ_CONTACTS}, REQ_CONTACTS);
+        });
+    }
+
+    private void loadWaContacts() {
+        final Context app = getApplicationContext();
+        new Thread(() -> {
+            List<WhatsAppRecipients.Contact> list;
+            try { list = WhatsAppContacts.load(app); }
+            catch (Exception e) { list = new ArrayList<>(); }
+            final List<WhatsAppRecipients.Contact> ready = list;
+            runOnUiThread(() -> {
+                if (isFinishing() || cardClosed) return;
+                waContacts.clear();
+                waContacts.addAll(ready);
+                if (waAfterContacts != null) waAfterContacts.run();
+            });
+        }, "babisnap-wa-contacts").start();
+    }
+
+    private void showWaChooser(List<WhatsAppRecipients.Contact> people, boolean search) {
+        waConfirming = false;
+        waGroup = false;
+        waPerson = null;
+        waCommit = null;
+        paintWaCard(search ? "וואטסאפ · בחירת נמען" : "וואטסאפ · כמה אנשי קשר", "וואטסאפ",
+            waBody.isEmpty() ? "אין טקסט" : waBody, false);
+        LinearLayout box = findViewById(R.id.invites);
+        box.removeAllViews();
+        if (search) {
+            EditText field = new EditText(this);
+            field.setHint("חיפוש איש קשר");
+            field.setSingleLine(true);
+            field.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
+            field.addTextChangedListener(new TextWatcher() {
+                @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+                @Override public void onTextChanged(CharSequence s, int start, int before, int count) {}
+                @Override public void afterTextChanged(Editable s) {
+                    bindWaChoices(WhatsAppRecipients.search(waContacts, s == null ? "" : s.toString()), true);
+                }
+            });
+            box.addView(field);
+        }
+        bindWaChoices(people, true);
+        box.setVisibility(View.VISIBLE);
+    }
+
+    private void bindWaChoices(List<WhatsAppRecipients.Contact> people, boolean keepSearch) {
+        LinearLayout box = findViewById(R.id.invites);
+        if (box == null) return;
+        View search = keepSearch && box.getChildCount() > 0 && box.getChildAt(0) instanceof EditText ? box.getChildAt(0) : null;
+        box.removeAllViews();
+        if (search != null) box.addView(search);
+        if (search != null && checkSelfPermission(Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED)
+            box.addView(InviteViews.strip(this, false, "בלי הרשאת אנשי קשר אי אפשר למצוא נמען", null));
+        List<String> names = new ArrayList<>();
+        List<String> details = new ArrayList<>();
+        for (WhatsAppRecipients.Contact p : people) {
+            names.add(p.label());
+            details.add(p.pretty());
+        }
+        box.addView(InviteViews.choiceList(this, "למי לפתוח וואטסאפ?", names, details, "פתח וואטסאפ בלי נמען", index -> {
+            if (index < 0) showWaPlain();
+            else if (index < people.size()) showWaDirect(people.get(index), waBody);
+        }));
+    }
+
+    /** One contact, on the meeting card. The countdown is CardFlow.UNDO_MS, then the chat opens. */
+    private void showWaDirect(WhatsAppRecipients.Contact person, String body) {
+        waGroup = false;
         waPerson = person;
         waBody = body == null ? "" : body;
         waText = waBody;
-        setContentView(R.layout.card_wa_open);
-        getWindow().setBackgroundDrawableResource(android.R.color.transparent);
-        ((TextView) findViewById(R.id.headline)).setText(WhatsAppRecipients.headline(person));
-        String detail = person.detail();
-        TextView chip = findViewById(R.id.chip);
-        chip.setText(detail.isEmpty() ? "וואטסאפ" : detail);
-        ((TextView) findViewById(R.id.summary)).setText(waBody.isEmpty() ? "אין טקסט — אפשר להקליד בוואטסאפ" : waBody);
-        findViewById(R.id.open_wa).setOnClickListener(v -> openDirectChat());
-        findViewById(R.id.cancel_wa).setOnClickListener(v -> cancelWhatsApp("בוטל – לא נשלח לוואטסאפ"));
-        armWaTimer();
+        paintWaCard(WhatsAppRecipients.cardHeadline(person), person.pretty().isEmpty() ? "וואטסאפ" : person.pretty(),
+            waBody.isEmpty() ? "אין טקסט" : waBody, true);
+        waCommit = this::openDirectChat;
     }
 
-    private void showWaShare() {
-        waDirect = false;
+    /** Group name on the meeting card. WhatsApp's own share list is where the group is picked. */
+    private void showWaGroup(String name, String body) {
+        waGroup = true;
         waPerson = null;
-        if (waBody != null && !waBody.isEmpty()) waText = waBody;
-        WhatsAppLogic.Mode mode = Core.whatsAppMode(this);
-        boolean hasVoice = waAudio != null && waAudio.ready();
-        boolean hasText = !waText.isEmpty();
-        WhatsAppLogic.Buttons buttons = WhatsAppLogic.buttons(mode, hasVoice, hasText);
-        setContentView(R.layout.card_whatsapp);
-        getWindow().setBackgroundDrawableResource(android.R.color.transparent);
-        ((TextView) findViewById(R.id.summary)).setText(WhatsAppLogic.preview(waText));
-        if (WhatsAppLogic.wantsVoice(mode) && !hasVoice && buttons.transcript)
-            ((TextView) findViewById(R.id.wa_hint)).setText("לא נשמרה הקלטה. אפשר לשלוח את התמלול, או לבטל.");
-        else if (!buttons.voice && !buttons.transcript)
-            ((TextView) findViewById(R.id.wa_hint)).setText("אין מה לשלוח. ההודעה תימחק.");
-        View voiceBtn = findViewById(R.id.send_voice);
-        View textBtn = findViewById(R.id.send_text);
-        voiceBtn.setVisibility(buttons.voice ? View.VISIBLE : View.GONE);
-        textBtn.setVisibility(buttons.transcript ? View.VISIBLE : View.GONE);
-        voiceBtn.setOnClickListener(v -> sendWhatsApp(true));
-        textBtn.setOnClickListener(v -> sendWhatsApp(false));
-        findViewById(R.id.cancel_wa).setOnClickListener(v -> cancelWhatsApp("בוטל – לא נשלח לוואטסאפ"));
-        armWaTimer();
+        waBody = body == null ? "" : body;
+        waText = waBody;
+        paintWaCard(WhatsAppRecipients.groupCardHeadline(name), name == null || name.isEmpty() ? "קבוצה" : name,
+            waBody.isEmpty() ? "אין טקסט" : waBody, true);
+        waCommit = this::openGroupShare;
     }
 
-    private void armWaTimer() {
+    private void showWaPlain() {
+        waGroup = true;
+        waPerson = null;
+        paintWaCard(WhatsAppRecipients.plainCardHeadline(), "וואטסאפ", waBody.isEmpty() ? "אין טקסט" : waBody, true);
+        waCommit = this::openGroupShare;
+    }
+
+    /** The saved-card used for a meeting and for a BabiTk item. Undo text stays the layout's «ביטול (Undo)». */
+    private void paintWaCard(String headline, String chipText, String summary, boolean counting) {
+        setContentView(R.layout.card_saved);
+        getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+        ((TextView) findViewById(R.id.check)).setText("💬");
+        ((TextView) findViewById(R.id.headline)).setText(headline);
+        TextView chip = findViewById(R.id.chip);
+        chip.setText(chipText);
+        chip.setBackgroundResource(R.drawable.chip_whatsapp);
+        chip.setTextColor(0xFFFFFFFF);
+        ((TextView) findViewById(R.id.summary)).setText(summary);
+        findViewById(R.id.undo).setOnClickListener(v -> cancelWhatsApp("בוטל – לא נשלח לוואטסאפ"));
+        if (!counting) {
+            waConfirming = false;
+            findViewById(R.id.countdown).setVisibility(View.GONE);
+            return;
+        }
+        waConfirming = true;
+        android.widget.ProgressBar bar = findViewById(R.id.countdown);
+        bar.setMax((int) UNDO_MS);
+        bar.setProgress((int) UNDO_MS);
+        if (waAnim != null) waAnim.cancel();
+        waAnim = android.animation.ObjectAnimator.ofInt(bar, "progress", (int) UNDO_MS, 0).setDuration(UNDO_MS);
+        waAnim.start();
+        ui.removeCallbacks(waExpire);
+        ui.postDelayed(waExpire, UNDO_MS);
+    }
+
+    /** WhatsApp's share screen, transcript filled in, so the group can be searched there. */
+    private void openGroupShare() {
+        if (!waPending || waHandedOff) return;
         ui.removeCallbacks(waExpire);
         if (waAnim != null) waAnim.cancel();
-        long ms = waDirect ? WhatsAppRecipients.OPEN_MS : WhatsAppLogic.confirmMs(waText);
-        android.widget.ProgressBar bar = findViewById(R.id.countdown);
-        if (bar != null) {
-            bar.setMax((int) ms);
-            bar.setProgress((int) ms);
-            waAnim = android.animation.ObjectAnimator.ofInt(bar, "progress", (int) ms, 0).setDuration(ms);
-            waAnim.start();
-        }
-        ui.postDelayed(waExpire, ms);
+        String pkg = WhatsAppShare.resolvePackage(this);
+        String text = waBody == null ? "" : waBody;
+        if (pkg != null && startWa(WhatsAppShare.text(pkg, text))) { discardWa(); return; }
+        if (startWa(WhatsAppShare.text(null, text))) { discardWa(); return; }
+        Toast.makeText(this, "וואטסאפ לא נפתח", Toast.LENGTH_LONG).show();
     }
 
     /** Open the private chat with the text filled in. WhatsApp sends only after the user taps Send. */
@@ -619,7 +727,7 @@ public class VoiceActivity extends Activity {
         ui.removeCallbacks(waExpire);
         if (waAnim != null) waAnim.cancel();
         String pkg = WhatsAppShare.resolvePackage(this);
-        String digits = waPerson.e164;
+        String digits = waPerson.digits();
         String jid = WhatsAppRecipients.contactJid(digits);
         String text = waBody == null ? "" : waBody;
         if (pkg != null && jid != null && startWa(WhatsAppShare.textToJid(pkg, jid, text))) {
@@ -639,55 +747,12 @@ public class VoiceActivity extends Activity {
         waPending = false;
         try {
             startActivityForResult(intent, REQ_WA);
+            Toast.makeText(getApplicationContext(), "נפתח בוואטסאפ", Toast.LENGTH_LONG).show();
             return true;
         } catch (ActivityNotFoundException | SecurityException e) {
             waHandedOff = false;
             waPending = true;
             return false;
-        }
-    }
-
-    /** One payload: voice or transcript. The other file/text is not attached. */
-    private void sendWhatsApp(boolean voice) {
-        if (!waPending || waHandedOff) return;
-        ui.removeCallbacks(waExpire);
-        if (waAnim != null) waAnim.cancel();
-        String pkg = WhatsAppShare.resolvePackage(this);
-        if (pkg == null) {
-            Toast.makeText(this, "וואטסאפ לא מותקן במכשיר", Toast.LENGTH_LONG).show();
-            armWaTimer();
-            return;
-        }
-        Intent intent;
-        if (voice) {
-            if (waAudio == null || !waAudio.ready()) {
-                Toast.makeText(this, "אין הקלטה לשליחה", Toast.LENGTH_SHORT).show();
-                armWaTimer();
-                return;
-            }
-            intent = WhatsAppShare.voice(this, pkg, waAudio.file(), waAudio.mime());
-            waUri = intent.getClipData() != null && intent.getClipData().getItemCount() > 0
-                ? intent.getClipData().getItemAt(0).getUri() : null;
-            if (waUri != null) grantUriPermission(pkg, waUri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
-        } else {
-            if (waText.isEmpty()) {
-                Toast.makeText(this, "אין תמלול לשליחה", Toast.LENGTH_SHORT).show();
-                armWaTimer();
-                return;
-            }
-            intent = WhatsAppShare.text(pkg, waText);
-        }
-        // Set before startActivity: onStop can run inside that call, and must not cancel the share.
-        waHandedOff = true;
-        waPending = false;
-        try {
-            startActivityForResult(intent, REQ_WA);
-            if (!voice) discardWa();
-        } catch (ActivityNotFoundException e) {
-            waHandedOff = false;
-            waPending = true;
-            Toast.makeText(this, "וואטסאפ לא מותקן במכשיר", Toast.LENGTH_LONG).show();
-            armWaTimer();
         }
     }
 

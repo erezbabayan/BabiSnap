@@ -2,7 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
-    <!-- 2.4: requested only from Settings ▸ הרשאות for now; stage 2 uses it to find invitees' emails, on-device only. -->
+    <!-- Invites, and WhatsApp name lookup. On-device only. No extra permission beyond this one. -->
     <uses-permission android:name="android.permission.READ_CONTACTS" />
     <!-- Requested only when the user connects יומן המכשיר. Local Calendar Provider read/write; no Microsoft Graph. -->
     <uses-permission android:name="android.permission.READ_CALENDAR" />
@@ -16,13 +16,6 @@
     <queries>
         <package android:name="com.whatsapp" />
         <package android:name="com.whatsapp.w4b" />
-    </queries>
-    <!-- System contact picker. The result is one chosen row; this is not READ_CONTACTS. -->
-    <queries>
-        <intent>
-            <action android:name="android.intent.action.PICK" />
-            <data android:mimeType="vnd.android.cursor.dir/phone_v2" />
-        </intent>
     </queries>
     <!-- wa.me opens the private chat when the jid share does not. Not a permission. -->
     <queries>
@@ -50,7 +43,6 @@
             </intent-filter>
         </activity>
         <!-- Opened only from our own widgets (explicit PendingIntent) and MainActivity: not exported. -->
-        <activity android:name=".WhatsAppRecipientsActivity" android:exported="false" android:label="@string/wa_recipients" />
         <activity android:name=".VoiceActivity" android:exported="false" android:excludeFromRecents="true"
             android:taskAffinity="com.babisnap.app.voice" android:launchMode="singleTask"
             android:theme="@android:style/Theme.DeviceDefault.Light.Dialog.NoActionBar" />

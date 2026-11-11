@@ -29,6 +29,7 @@ public final class Core {
         SharedPreferences p = c.getSharedPreferences("babisnap", Context.MODE_PRIVATE);
         if (p.contains("tok")) p.edit().remove("tok").apply(); // 2.1 kept a Google access token here; 2.2 never stores Google tokens
         if (p.contains("preview")) p.edit().remove("preview").apply(); // 2.4: unused 'preview' setting removed
+        if (p.contains("wa_recipients")) p.edit().remove("wa_recipients").apply(); // alias list removed; contacts are read live
         return p;
     }
     public static int defaultDuration(Context c) { return prefs(c).getInt("dur", 60); }

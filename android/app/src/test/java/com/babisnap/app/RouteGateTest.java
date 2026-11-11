@@ -80,11 +80,16 @@ public class RouteGateTest {
         assertTrue(src.contains("BabiTkJson.isWhatsAppPayload(pendingBody)"));
         assertFalse(src.contains("AccessibilityService"));
         assertFalse(src.contains("NotificationListener"));
-        String recipients = text("src/main/java/com/babisnap/app/WhatsAppRecipientsActivity.java");
-        assertFalse(recipients.contains("READ_CONTACTS"));
-        assertFalse(recipients.contains("AccessibilityService"));
-        assertTrue(recipients.contains("ACTION_PICK"));
-        assertTrue(recipients.contains("בחר מאנשי קשר"));
+        assertTrue(src.contains("WhatsAppContacts.load"));
+        assertTrue(src.contains("R.layout.card_saved"));
+        assertTrue(src.contains("UNDO_MS"));
+        assertFalse(src.contains("card_wa_open"));
+        assertFalse(src.contains("card_wa_choose"));
+        assertFalse(src.contains("WhatsAppDirectory"));
+        assertFalse(java.nio.file.Files.exists(Path.of("src/main/java/com/babisnap/app/WhatsAppRecipientsActivity.java")));
+        String contacts = text("src/main/java/com/babisnap/app/WhatsAppContacts.java");
+        assertFalse(contacts.contains("AccessibilityService"));
+        assertFalse(contacts.contains("NotificationListener"));
     }
 
     @Test public void manifestAndTestBuildAddNoSensitivePermission() throws Exception {
@@ -93,8 +98,16 @@ public class RouteGateTest {
         assertFalse(manifest.contains("BIND_ACCESSIBILITY_SERVICE"));
         assertFalse(manifest.contains("BIND_NOTIFICATION_LISTENER_SERVICE"));
         assertFalse(manifest.contains("QUERY_ALL_PACKAGES"));
-        assertTrue(manifest.contains("android.intent.action.PICK"));
+        assertFalse(manifest.contains("WhatsAppRecipientsActivity"));
+        assertFalse(manifest.contains("android.intent.action.PICK"));
         assertTrue(manifest.contains("wa.me"));
+        int contactsPerm = 0;
+        int from = 0;
+        while (manifest.indexOf("READ_CONTACTS", from) >= 0) {
+            contactsPerm++;
+            from = manifest.indexOf("READ_CONTACTS", from) + 1;
+        }
+        assertEquals(1, contactsPerm);
         assertTrue(manifest.contains("${pairScheme}"));
         assertFalse(manifest.contains("android:scheme=\"babisnap\""));
         String gradle = text("build.gradle");

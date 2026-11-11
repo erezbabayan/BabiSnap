@@ -4,152 +4,134 @@ import static org.junit.Assert.*;
 
 import org.junit.Test;
 
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
 public class WhatsAppRecipientsTest {
-    private static WhatsAppRecipients.Person person(String id, String name, String alias, String phone) {
-        return new WhatsAppRecipients.Person(id, name, alias, WhatsAppRecipients.toIlDigits(phone));
+    private static WhatsAppRecipients.Phone mobile(String raw) {
+        return new WhatsAppRecipients.Phone(raw, false, true);
+    }
+    private static WhatsAppRecipients.Phone wa(String raw) {
+        return new WhatsAppRecipients.Phone(raw, true, false);
+    }
+    private static WhatsAppRecipients.Contact person(String display, String given, String nick, WhatsAppRecipients.Phone... phones) {
+        return new WhatsAppRecipients.Contact(display, given, "", nick, Arrays.asList(phones));
     }
 
-    private static final List<WhatsAppRecipients.Person> TAMRI = Arrays.asList(
-        person("1", "תמר כהן", "תמרי", "0501234567"),
-        person("2", "אמא שלי", "אמא", "0507654321"));
+    @Test public void privatePhrasesKeepTheNameAndDropTheRoute() {
+        WhatsAppRecipients.Command a = WhatsAppRecipients.parse("הודעה לתמרי בוואטסאפ אני בדרך");
+        assertEquals(WhatsAppRecipients.Target.PERSON, a.target);
+        assertEquals("תמרי", a.name);
+        assertEquals("אני בדרך", a.body);
 
-    @Test public void messageForAliasBeforeChannel() {
-        WhatsAppRecipients.Resolved r = WhatsAppRecipients.resolve("הודעה לתמרי בוואטסאפ אני בדרך", TAMRI);
-        assertTrue(r.unique());
-        assertEquals("תמרי", r.person.alias);
-        assertEquals("אני בדרך", r.body);
-        assertEquals("לפתוח שיחה עם תמרי?", WhatsAppRecipients.headline(r.person));
+        WhatsAppRecipients.Command b = WhatsAppRecipients.parse("וואטסאפ לתמרי: אני בדרך");
+        assertEquals(WhatsAppRecipients.Target.PERSON, b.target);
+        assertEquals("תמרי", b.name);
+        assertEquals("אני בדרך", b.body);
+
+        WhatsAppRecipients.Command c = WhatsAppRecipients.parse("וואטסאפ אל תמרי אני מאחר");
+        assertEquals("תמרי", c.name);
+        assertEquals("אני מאחר", c.body);
+
+        WhatsAppRecipients.Command d = WhatsAppRecipients.parse("הודעה לאמא בוואטסאפ שאני בדרך");
+        assertEquals("אמא", d.name);
+        assertEquals("אני בדרך", d.body);
+        assertEquals("שלום", WhatsAppRecipients.parse("וואטסאפ לתמרי: שלום").body);
     }
 
-    @Test public void channelThenAliasWithColonAndElPrefix() {
-        WhatsAppRecipients.Resolved colon = WhatsAppRecipients.resolve("וואטסאפ לתמרי: אני בדרך", TAMRI);
-        assertTrue(colon.unique());
-        assertEquals("תמרי", colon.person.alias);
-        assertEquals("אני בדרך", colon.body);
+    @Test public void groupNameIsShownAndStrippedFromTheBody() {
+        WhatsAppRecipients.Command a = WhatsAppRecipients.parse("הודעה לקבוצת משפחה בוואטסאפ אני בדרך");
+        assertEquals(WhatsAppRecipients.Target.GROUP, a.target);
+        assertEquals("משפחה", a.name);
+        assertEquals("אני בדרך", a.body);
+        assertEquals("וואטסאפ · קבוצה משפחה", WhatsAppRecipients.groupCardHeadline(a.name));
 
-        WhatsAppRecipients.Resolved el = WhatsAppRecipients.resolve("וואטסאפ אל תמרי אני מאחר", TAMRI);
-        assertEquals("תמרי", el.person.alias);
-        assertEquals("אני מאחר", el.body);
+        WhatsAppRecipients.Command b = WhatsAppRecipients.parse("וואטסאפ לקבוצת משפחה: אני בדרך");
+        assertEquals(WhatsAppRecipients.Target.GROUP, b.target);
+        assertEquals("משפחה", b.name);
+        assertEquals("אני בדרך", b.body);
 
-        WhatsAppRecipients.Resolved shin = WhatsAppRecipients.resolve("הודעה לאמא בוואטסאפ שאני בדרך", TAMRI);
-        assertEquals("אמא", shin.person.alias);
-        assertEquals("אני בדרך", shin.body);
+        WhatsAppRecipients.Command multi = WhatsAppRecipients.parse("הודעה לקבוצת המשפחה של נועה בוואטסאפ מאחרים");
+        assertEquals("המשפחה של נועה", multi.name);
+        assertEquals("מאחרים", multi.body);
     }
 
-    @Test public void keepsShalomAndDoesNotGuessAMissingAlias() {
-        assertEquals("שלום", WhatsAppRecipients.resolve("וואטסאפ לתמרי: שלום", TAMRI).body);
-        assertEquals("שיעור", WhatsAppRecipients.resolve("וואטסאפ לתמרי שיעור", TAMRI).body);
-
-        WhatsAppRecipients.Resolved missing = WhatsAppRecipients.resolve("וואטסאפ אני בדרך", TAMRI);
-        assertEquals(WhatsAppRecipients.Code.CHOOSE, missing.code);
-        assertNull(missing.person);
-        assertEquals("אני בדרך", missing.body);
-
-        WhatsAppRecipients.Resolved noChannel = WhatsAppRecipients.resolve("הודעה לתמרי אני בדרך", TAMRI);
-        assertEquals(WhatsAppRecipients.Code.CHOOSE, noChannel.code);
-        assertNull("בלי מילת וואטסאפ לא בוחרים אדם", noChannel.person);
-
-        assertFalse(WhatsAppRecipients.resolve("הודעה לתמרי בוואטסאפ", TAMRI).body.contains("תמרי"));
-        assertEquals("", WhatsAppRecipients.resolve("הודעה לתמרי בוואטסאפ", TAMRI).body);
+    @Test public void noNameIsNotAPerson() {
+        WhatsAppRecipients.Command c = WhatsAppRecipients.parse("וואטסאפ אני בדרך");
+        assertEquals(WhatsAppRecipients.Target.NONE, c.target);
+        assertEquals("", c.name);
+        assertEquals("אני בדרך", c.body);
     }
 
-    @Test public void longestAliasWinsAndSharedAliasDoesNotPick() {
-        List<WhatsAppRecipients.Person> both = Arrays.asList(
-            person("1", "תמר", "תמרי", "0501234567"),
-            person("2", "תמר כהן", "תמרי כהן", "0501111111"));
-        WhatsAppRecipients.Resolved r = WhatsAppRecipients.resolve("וואטסאפ לתמרי כהן אני בדרך", both);
-        assertTrue(r.unique());
-        assertEquals("תמרי כהן", r.person.alias);
-        assertEquals("אני בדרך", r.body);
+    @Test public void hebrewNamesIgnoreNiqqudPrefixesAndMatchFirstNameOrNickname() {
+        WhatsAppRecipients.Contact tamar = person("תמר כהן", "תָּמָר", "", mobile("0501234567"));
+        WhatsAppRecipients.Contact dani = person("דניאל לוי", "דניאל", "דני", mobile("0521111111"));
+        List<WhatsAppRecipients.Contact> book = Arrays.asList(tamar, dani);
 
-        List<WhatsAppRecipients.Person> shared = Arrays.asList(
-            person("1", "תמר", "תמרי", "0501234567"),
-            person("2", "תמרה", "תמרי", "0502222222"));
-        WhatsAppRecipients.Resolved amb = WhatsAppRecipients.resolve("וואטסאפ לתמרי היי", shared);
-        assertEquals(WhatsAppRecipients.Code.CHOOSE, amb.code);
-        assertNull(amb.person);
+        WhatsAppRecipients.Matches one = WhatsAppRecipients.match("תמרי", book);
+        assertTrue(one.one());
+        assertEquals("תמר כהן", one.hits.get(0).label());
+
+        WhatsAppRecipients.Matches prefixed = WhatsAppRecipients.match("לתמרי", book);
+        assertTrue(prefixed.one());
+        assertEquals("תמר כהן", prefixed.hits.get(0).displayName);
+
+        WhatsAppRecipients.Matches nick = WhatsAppRecipients.match("דני", book);
+        assertTrue(nick.one());
+        assertEquals("דני", nick.hits.get(0).nickname);
+
+        WhatsAppRecipients.Matches full = WhatsAppRecipients.match("תמר כהן", book);
+        assertTrue(full.one());
+        assertEquals("תמר כהן", full.hits.get(0).displayName);
+
+        WhatsAppRecipients.Contact other = person("תמר לוי", "תמר", "", mobile("0533333333"));
+        WhatsAppRecipients.Matches many = WhatsAppRecipients.match("תמר", Arrays.asList(tamar, other));
+        assertEquals(WhatsAppRecipients.MatchCode.MANY, many.code);
+        assertEquals(2, many.hits.size());
+        assertEquals(WhatsAppRecipients.MatchCode.NONE, WhatsAppRecipients.match("יוסי", book).code);
+        assertEquals("וואטסאפ · ייפתח אצל תמר כהן", WhatsAppRecipients.cardHeadline(tamar));
+        assertEquals(5000L, CardFlow.UNDO_MS);
     }
 
-    @Test public void nearerAliasWinsWhenDistancesDiffer() {
-        List<WhatsAppRecipients.Person> people = Arrays.asList(
-            person("1", "דני", "דני", "0501234567"),
-            person("2", "דנה", "דנה", "0502222222"));
-        WhatsAppRecipients.Resolved r = WhatsAppRecipients.resolve("וואטסאפ לדני היי לדנה", people);
-        assertTrue(r.unique());
-        assertEquals("דני", r.person.alias);
-        assertFalse(r.body.contains("לדני"));
+    @Test public void spacesAndPartialFirstName() {
+        WhatsAppRecipients.Contact c = person("תמר  כהן", "תמר", "", mobile("0501234567"));
+        assertTrue(WhatsAppRecipients.match("תמר כהן", Collections.singletonList(c)).one());
+        assertTrue(WhatsAppRecipients.match("שתמר", Collections.singletonList(c)).one());
+        assertTrue(WhatsAppRecipients.match("ותמר", Collections.singletonList(c)).one());
     }
 
-    @Test public void englishChannelAndEmptyListStayAChooser() {
-        WhatsAppRecipients.Resolved en = WhatsAppRecipients.resolve("WhatsApp לתמרי: היי", TAMRI);
-        assertTrue(en.unique());
-        assertEquals("היי", en.body);
-        WhatsAppRecipients.Resolved none = WhatsAppRecipients.resolve("וואטסאפ לתמרי היי", Collections.emptyList());
-        assertEquals(WhatsAppRecipients.Code.CHOOSE, none.code);
-        assertNull(none.person);
-        assertEquals("היי", WhatsAppRecipients.bodyFor(TAMRI.get(0), "וואטסאפ לתמרי היי"));
-    }
-
-    @Test public void israeliMobileBecomesE164AndPrivateJid() {
+    @Test public void whatsAppNumberWinsOtherwiseMobile() {
+        WhatsAppRecipients.Contact both = new WhatsAppRecipients.Contact("תמר", "תמר", "", "",
+            Arrays.asList(mobile("0501234567"), wa("0529999999")));
+        assertEquals("972529999999", both.digits());
+        assertEquals("+972529999999", both.pretty());
+        WhatsAppRecipients.Contact onlyMobile = person("תמר", "תמר", "", mobile("050-123-4567"));
+        assertEquals("972501234567", onlyMobile.digits());
         assertEquals("+972501234567", WhatsAppRecipients.toIlE164("0501234567"));
-        assertEquals("+972501234567", WhatsAppRecipients.toIlE164("050-123-4567"));
         assertEquals("+972501234567", WhatsAppRecipients.toIlE164("05 01234567"));
-        assertEquals("+972501234567", WhatsAppRecipients.toIlE164("+972 50 123 4567"));
-        assertEquals("972501234567", WhatsAppRecipients.toIlDigits("0501234567"));
-        assertEquals("972501234567@s.whatsapp.net", WhatsAppRecipients.contactJid("972501234567"));
-        assertEquals("972501234567@s.whatsapp.net", WhatsAppRecipients.contactJid("+972501234567"));
         assertTrue(WhatsAppRecipients.toIlE164("0501234567").startsWith("+9725"));
+        assertEquals("972501234567@s.whatsapp.net", WhatsAppRecipients.contactJid("0501234567"));
         assertTrue(WhatsAppRecipients.isPrivateJid(WhatsAppRecipients.contactJid("0501234567")));
+        assertFalse(WhatsAppRecipients.isPrivateJid("120363@g.us"));
         assertNull(WhatsAppRecipients.toIlE164("123"));
-        assertNull(WhatsAppRecipients.toIlE164(null));
-        assertNull(WhatsAppRecipients.contactJid("123"));
-        assertNull(WhatsAppRecipients.contactJid("972501234567-1620000000"));
-        assertFalse(WhatsAppRecipients.isPrivateJid("120363123456789012@g.us"));
+        assertTrue(WhatsAppRecipients.isWhatsAppAccount("com.whatsapp"));
+        assertTrue(WhatsAppRecipients.isWhatsAppAccount("com.whatsapp.w4b"));
+        assertFalse(WhatsAppRecipients.isWhatsAppAccount("com.google"));
+        assertTrue(WhatsAppRecipients.isMobileType(WhatsAppRecipients.TYPE_MOBILE));
         String url = WhatsAppRecipients.waMeUrl("972501234567", "אני בדרך");
         assertTrue(url.startsWith("https://wa.me/972501234567?text="));
         assertTrue(url.contains("%20"));
-        assertFalse(url.contains("@g.us"));
     }
 
-    @Test public void listRoundTripSearchAliasAndDelete() {
-        List<WhatsAppRecipients.Person> saved = WhatsAppRecipients.upsert(null, "תמר כהן", "תמרי", "050-123-4567");
-        assertNotNull(saved);
-        assertEquals(1, saved.size());
-        assertEquals("972501234567", saved.get(0).e164);
-        assertEquals("תמר", WhatsAppRecipients.suggestAlias("תמר כהן"));
-        List<WhatsAppRecipients.Person> again = WhatsAppRecipients.upsert(saved, "תמר כהן", "", "0501234567");
-        assertEquals("תמרי", again.get(0).alias);
-        assertEquals(saved.get(0).id, again.get(0).id);
-        assertNull(WhatsAppRecipients.upsert(saved, "זר", "זר", "123"));
-        List<WhatsAppRecipients.Person> renamed = WhatsAppRecipients.withAlias(again, again.get(0).id, "  תמרי ");
-        assertEquals("תמרי", renamed.get(0).alias);
-        assertEquals(1, WhatsAppRecipients.search(renamed, "תמר").size());
-        assertEquals(1, WhatsAppRecipients.search(renamed, "050").size());
-        assertTrue(WhatsAppRecipients.search(renamed, "אין כזה").isEmpty());
-        assertTrue(WhatsAppRecipients.without(renamed, renamed.get(0).id).isEmpty());
-        String json = WhatsAppRecipients.toJson(renamed);
-        assertFalse(json.contains("g.us"));
-        assertFalse(json.contains("@"));
-        List<WhatsAppRecipients.Person> back = WhatsAppRecipients.parse(json);
-        assertEquals("תמרי", back.get(0).alias);
-        assertEquals("972501234567", back.get(0).e164);
-        assertTrue(WhatsAppRecipients.parse(null).isEmpty());
-        assertTrue(WhatsAppRecipients.parse("not-json").isEmpty());
-        assertTrue(WhatsAppRecipients.parse("[{\"id\":\"g\",\"name\":\"משפחה\",\"alias\":\"משפחה\",\"jid\":\"1203@g.us\"}]").isEmpty());
-    }
-
-    @Test public void openCountdownIsEightSeconds() {
-        assertEquals(8, WhatsAppRecipients.OPEN_SECONDS);
-        assertEquals(8000L, WhatsAppRecipients.OPEN_MS);
-        assertEquals("+972501234567", TAMRI.get(0).prettyPhone());
-        assertTrue(TAMRI.get(0).detail().contains("תמר כהן"));
-        assertTrue(TAMRI.get(0).detail().contains("+972501234567"));
+    @Test public void searchFindsAContactWhenTheSpokenNameMissed() {
+        WhatsAppRecipients.Contact a = person("תמר כהן", "תמר", "", mobile("0501234567"));
+        WhatsAppRecipients.Contact b = person("יוסי לוי", "יוסי", "", mobile("0521111111"));
+        List<WhatsAppRecipients.Contact> book = Arrays.asList(a, b);
+        assertEquals(2, WhatsAppRecipients.search(book, "").size());
+        assertEquals(1, WhatsAppRecipients.search(book, "כהן").size());
+        assertEquals("תמר כהן", WhatsAppRecipients.search(book, "כהן").get(0).label());
+        assertEquals(1, WhatsAppRecipients.search(book, "050").size());
+        assertTrue(WhatsAppRecipients.search(book, "אין כזה").isEmpty());
     }
 }

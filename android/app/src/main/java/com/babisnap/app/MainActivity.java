@@ -102,7 +102,7 @@ public class MainActivity extends Activity {
         section("הרשאות");
         LinearLayout perms = card();
         permRow(perms, "🎙", "מיקרופון", null, Manifest.permission.RECORD_AUDIO, REQ_MIC);
-        permRow(perms, "👥", "אנשי קשר", "להזמנת משתתפים", Manifest.permission.READ_CONTACTS, REQ_CONTACTS);
+        permRow(perms, "👥", "אנשי קשר", "להזמנות ולוואטסאפ", Manifest.permission.READ_CONTACTS, REQ_CONTACTS);
         if (android.os.Build.VERSION.SDK_INT >= 33) {
             permRow(perms, "🔔", "התראות", "כששמירה ליומן נכשלת", Manifest.permission.POST_NOTIFICATIONS, REQ_NOTIF);
         }
@@ -125,11 +125,8 @@ public class MainActivity extends Activity {
             Core.prefs(this).edit().putBoolean(WhatsAppLogic.PREF_ENABLED, on).apply();
             render();
         });
-        row(prefs, "💬", false, "שליחה לוואטסאפ", plain("כבוי כברירת מחדל. רק כשאומרים וואטסאפ"), wa);
+        row(prefs, "💬", false, "שליחה לוואטסאפ", plain("כבוי כברירת מחדל. השם נלקח מאנשי הקשר"), wa);
         if (waOn) {
-            int saved = WhatsAppDirectory.load(this).size();
-            row(prefs, "👤", false, "נמעני וואטסאפ", plain(saved == 0 ? "כינוי לכל שיחה פרטית" : saved + " שמורים במכשיר"),
-                link("עריכה", false, v -> startActivity(new Intent(this, WhatsAppRecipientsActivity.class))));
             WhatsAppLogic.Mode mode = Core.whatsAppMode(this);
             row(prefs, "📤", false, "מה נשלח לוואטסאפ", plain(WhatsAppLogic.modeHint(mode)),
                 link(WhatsAppLogic.modeLabel(mode) + " ▾", false, v -> pickWhatsAppMode()));
@@ -423,8 +420,8 @@ public class MainActivity extends Activity {
         "• פגישות נשמרות ישירות ביומן Google שלך, דרך החשבון שחיברת. BabiSnap לא שומר סיסמה או טוקן של Google.\n\n" +
         "• אם בחרתם יעד \"יומן המכשיר\", הפגישה נכתבת ליומן שבטלפון בלבד. BabiSnap לא שולח את האירוע לשרת. אם היומן מסונכרן באפליקציה אחרת, הסנכרון הוא שלה. זימון במייל נשלח רק מיומן Google.\n\n" +
         "• משימות והערות נשלחות רק ללוח \"מחברת\" ב-BabiTk שלך. מפתח החיבור נשמר מוצפן בטלפון.\n\n" +
-        "• אנשי קשר נקראים בטלפון בלבד ולא נשלחים לשום מקום (אימייל מוזמן עובר ל-Google רק אם ביקשת לשלוח הזמנה).\n\n" +
-        "• שליחה לוואטסאפ כבויה כברירת מחדל. כשהיא דלוקה ואומרים «וואטסאפ», נפתחת שיחה פרטית עם נמען שנשמר במכשיר (כינוי), והטקסט מוכן. השליחה רק בלחיצה שלך בוואטסאפ. בלי נמען נפתח שיתוף רגיל. הרשימה נשארת בטלפון, בלי קבוצות ובלי שרת.\n\n" +
+        "• אנשי קשר נקראים בטלפון בלבד ולא נשלחים לשום מקום (אימייל מוזמן עובר ל-Google רק אם ביקשת לשלוח הזמנה, ומספר נמען נפתח בוואטסאפ רק אם ביקשת).\n\n" +
+        "• שליחה לוואטסאפ כבויה כברירת מחדל. כשהיא דלוקה ואומרים «וואטסאפ», השם נבדק מול אנשי הקשר בטלפון ונפתחת שיחה פרטית עם הטקסט מוכן. לקבוצה נפתח השיתוף של וואטסאפ ובוחרים את הקבוצה שם. השליחה רק בלחיצה שלך. אין רשימת כינויים ואין שרת.\n\n" +
         "• האימייל של חשבון Google שחיברתם, יחד עם מזהה התקנה אקראי (לא IMEI), גרסה ושם דגם, נשמרים לניהול הגישה בלבד. לא נשלחים הקלטות, תמלילים, תוכן יומן או טוקן Google.\n\n" +
         "• אין פרסומות ואין מעקב תוכן. \"מחק את כל הנתונים מהמכשיר\" מוחק את נתוני האפליקציה מהטלפון ומסמן את ההתקנה כמנותקת.\n\n" +
         "• מדיניות הפרטיות המלאה זמינה בקישור \"מדיניות מלאה\".";
@@ -443,7 +440,7 @@ public class MainActivity extends Activity {
 
     private void confirmDeleteAll() {
         AlertDialog d = new AlertDialog.Builder(this).setTitle("למחוק את כל הנתונים מהמכשיר?")
-            .setMessage("ינותקו Google יומן (כולל ביטול הגישה) ו-BabiTk, יישכח יומן המכשיר שנבחר, יימחקו פריטים שעוד לא נשלחו, קבצי קול זמניים לוואטסאפ, רשימת נמעני וואטסאפ וכל ההעדפות, והאימייל ברישום הגישה יסומן כמנותק.\nהפגישות ביומן (Google או יומן המכשיר) וההערות ב-BabiTk לא נמחקות.")
+            .setMessage("ינותקו Google יומן (כולל ביטול הגישה) ו-BabiTk, יישכח יומן המכשיר שנבחר, יימחקו פריטים שעוד לא נשלחו, קבצי קול זמניים לוואטסאפ וכל ההעדפות, והאימייל ברישום הגישה יסומן כמנותק.\nהפגישות ביומן (Google או יומן המכשיר) וההערות ב-BabiTk לא נמחקות.")
             .setPositiveButton("מחק", (x, w) -> deleteAll()).setNegativeButton("ביטול", null).show();
         rtl(d);
         d.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(RED);
