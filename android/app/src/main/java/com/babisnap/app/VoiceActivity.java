@@ -39,6 +39,7 @@ public class VoiceActivity extends Activity {
     private Runnable waCommit;
     private String waText = "";
     private String waBody = "";
+    private String waGroupName = "";
     private WhatsAppRecipients.Contact waPerson;
     private WhatsAppRecipients.Command waCommand;
     private final List<WhatsAppRecipients.Contact> waContacts = new ArrayList<>();
@@ -89,7 +90,7 @@ public class VoiceActivity extends Activity {
         if (waHandedOff) { waAudio = null; waUri = null; } else discardWa();
         waPending = false; waHandedOff = false; waLeft = false; waConfirming = false; waGroup = false; waAskingContacts = false;
         waCommit = null;
-        waText = ""; waBody = ""; waPerson = null; waCommand = null; waAfterContacts = null; waContacts.clear();
+        waText = ""; waBody = ""; waGroupName = ""; waPerson = null; waCommand = null; waAfterContacts = null; waContacts.clear();
         pendingBody = null; pendingId = null; pendingMeeting = false; committed = false;
         cardClosed = false; awaitingConsent = false; pickerMode = false;
         invitees.clear(); inviteQueries = new ArrayList<>();
@@ -361,6 +362,7 @@ public class VoiceActivity extends Activity {
             CalQueueLogic.cardHeadline(meetingRoute == DeviceCalendarLogic.Route.DEVICE));
         TextView chip = findViewById(R.id.chip); chip.setText("פגישה");
         chip.setBackgroundResource(R.drawable.chip_meeting); chip.setTextColor(0xFFFFFFFF);
+        RouteMark.apply(chip, RouteMark.Route.CALENDAR, 0xFFFFFFFF);
         ((TextView) findViewById(R.id.summary)).setText(CardText.meeting(p.optString("title"), p.optInt("d"), p.optInt("m"), p.optInt("y"),
             p.optInt("hour"), p.optInt("minute"), p.optBoolean("timeDefaulted"), p.optBoolean("allDay"), p.optString("location", "")));
         if (InviteFlow.needsPicker(invitees)) { startPickers(); return; }
@@ -446,6 +448,7 @@ public class VoiceActivity extends Activity {
             : "נשמר במכשיר · " + c.kind.he() + "\n" + (BabiTk.needsRepair(this) ? "BabiTk " + BabiTk.NOT_CONNECTED : "BabiTk לא מחובר") + " – פתחו את BabiSnap ← הגדרות ← BabiTk");
         TextView chip = findViewById(R.id.chip); chip.setText(c.kind.he() + (spokenTags.isEmpty() ? "" : " · #" + String.join(" #", spokenTags)));
         if (c.kind == Classifier.Kind.NOTE) { chip.setBackgroundResource(R.drawable.chip_note); chip.setTextColor(0xFF2A1B7A); }
+        RouteMark.apply(chip, RouteMark.Route.BABITK, chip.getCurrentTextColor());
         ((TextView) findViewById(R.id.summary)).setText(CardText.saved(title, date != null, p.optInt("d"), p.optInt("m"), p.optInt("y"), time, p.optString("location", "")));
         android.widget.ProgressBar bar = findViewById(R.id.countdown);
         android.animation.ObjectAnimator.ofInt(bar, "progress", (int) UNDO_MS, 0).setDuration(UNDO_MS).start();
@@ -656,6 +659,7 @@ public class VoiceActivity extends Activity {
     private void showWaDirect(WhatsAppRecipients.Contact person, String body) {
         waGroup = false;
         waPerson = person;
+        waGroupName = "";
         waBody = body == null ? "" : body;
         waText = waBody;
         paintWaCard(WhatsAppRecipients.cardHeadline(person), person.pretty().isEmpty() ? "וואטסאפ" : person.pretty(),
@@ -663,22 +667,39 @@ public class VoiceActivity extends Activity {
         waCommit = this::openDirectChat;
     }
 
-    /** Group name on the meeting card. WhatsApp's own share list is where the group is picked. */
+    /** Group name on the meeting card. WhatsApp's own forward picker is where the group is searched. */
     private void showWaGroup(String name, String body) {
         waGroup = true;
         waPerson = null;
+        waGroupName = name == null ? "" : name.trim();
         waBody = body == null ? "" : body;
         waText = waBody;
-        paintWaCard(WhatsAppRecipients.groupCardHeadline(name), name == null || name.isEmpty() ? "קבוצה" : name,
+        paintWaCard(WhatsAppRecipients.groupCardHeadline(waGroupName), waGroupName.isEmpty() ? "קבוצה" : waGroupName,
             waBody.isEmpty() ? "אין טקסט" : waBody, true);
+        if (!waGroupName.isEmpty()) {
+            copyGroupName(waGroupName);
+            LinearLayout box = findViewById(R.id.invites);
+            box.removeAllViews();
+            box.addView(InviteViews.strip(this, true, "«" + waGroupName + "» הועתק. הדביקו בחיפוש של וואטסאפ", waGroupName));
+            box.setVisibility(View.VISIBLE);
+        }
         waCommit = this::openGroupShare;
     }
 
     private void showWaPlain() {
         waGroup = true;
         waPerson = null;
+        waGroupName = "";
         paintWaCard(WhatsAppRecipients.plainCardHeadline(), "וואטסאפ", waBody.isEmpty() ? "אין טקסט" : waBody, true);
         waCommit = this::openGroupShare;
+    }
+
+    private void copyGroupName(String name) {
+        if (name == null || name.trim().isEmpty()) return;
+        try {
+            android.content.ClipboardManager clips = (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+            if (clips != null) clips.setPrimaryClip(android.content.ClipData.newPlainText("קבוצה", name.trim()));
+        } catch (RuntimeException ignored) {}
     }
 
     /** The saved-card used for a meeting and for a BabiTk item. Undo text stays the layout's «ביטול (Undo)». */
@@ -691,6 +712,7 @@ public class VoiceActivity extends Activity {
         chip.setText(chipText);
         chip.setBackgroundResource(R.drawable.chip_whatsapp);
         chip.setTextColor(0xFFFFFFFF);
+        RouteMark.apply(chip, RouteMark.Route.WHATSAPP, 0xFFFFFFFF);
         ((TextView) findViewById(R.id.summary)).setText(summary);
         findViewById(R.id.undo).setOnClickListener(v -> cancelWhatsApp("בוטל – לא נשלח לוואטסאפ"));
         if (!counting) {
@@ -709,16 +731,16 @@ public class VoiceActivity extends Activity {
         ui.postDelayed(waExpire, UNDO_MS);
     }
 
-    /** WhatsApp's share screen, transcript filled in, so the group can be searched there. */
+    /** WhatsApp's own forward picker. The group name is already on the clipboard for its search. */
     private void openGroupShare() {
         if (!waPending || waHandedOff) return;
         ui.removeCallbacks(waExpire);
         if (waAnim != null) waAnim.cancel();
-        String pkg = WhatsAppShare.resolvePackage(this);
+        copyGroupName(waGroupName);
         String text = waBody == null ? "" : waBody;
-        if (pkg != null && startWa(WhatsAppShare.text(pkg, text))) { discardWa(); return; }
-        if (startWa(WhatsAppShare.text(null, text))) { discardWa(); return; }
-        Toast.makeText(this, "וואטסאפ לא נפתח", Toast.LENGTH_LONG).show();
+        Intent intent = WhatsAppShare.groupPicker(this, text);
+        if (intent != null && startWa(intent)) { discardWa(); return; }
+        Toast.makeText(this, "וואטסאפ לא מותקן במכשיר", Toast.LENGTH_LONG).show();
     }
 
     /** Open the private chat with the text filled in. WhatsApp sends only after the user taps Send. */
