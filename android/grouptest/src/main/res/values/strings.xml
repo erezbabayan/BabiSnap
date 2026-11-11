@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">BabiSnap בדיקת קבוצות</string>
+    <string name="recipients_title">נמענים בלי מגע</string>
+    <string name="screen_title">בדיקת שליחה בלי מגע</string>
+    <string name="screen_sub">אפליקציית בדיקה נפרדת. לא נוגעת ב־BabiSnap הרגיל.</string>
+    <string name="default_text">בדיקה מ־BabiSnap</string>
+    <string name="add_group">הוסף קבוצה</string>
+    <string name="notif_settings">גישה להתראות</string>
+    <string name="open_recipients">נמענים בלי מגע</string>
+    <string name="send_test">שלח בדיקה</string>
+    <string name="copy_report">העתק דוח</string>
+    <string name="a11y_settings">הפעל נגישות</string>
+    <string name="auto_switch">לחץ שלח אוטומטית (ניסיוני)</string>
+    <string name="mark_ok">✅ הצ׳אט נפתח עם הטקסט</string>
+    <string name="mark_bad">❌ לא נפתח ישר</string>
+    <string name="search_hint">חיפוש שם או כינוי</string>
+    <string name="select_all">בחר הכול</string>
+    <string name="alias_hint">כינוי (לא חובה)</string>
+    <string name="cancel">ביטול</string>
+    <string name="close">סגור</string>
+    <string name="message_label">ההודעה שתישלח</string>
+    <string name="a11y_desc">בדיקת BabiSnap לקבוצות. קורא רק את כותרת הצ׳אט ב־WhatsApp ואת כפתור השליחה. לוחץ «שלח» רק אחרי ספירה של 8 שניות, רק ליעד שסומן, ורק אם הכותרת זהה בדיוק לשם השמור. לא נשמר תוכן הודעות.</string>
+    <string name="restricted_help">באנדרואיד 13 ומעלה, אפליקציה שהותקנה מקובץ חסומה עד «הגדרות מוגבלות»: הגדרות ← אפליקציות ← BabiSnap בדיקת קבוצות ← תפריט (⋮) ← Allow restricted settings. אחר כך מפעילים כאן נגישות וגישה להתראות. אם אין תפריט, נסו להפעיל את השירות פעם אחת ואז חזרו לפרטי האפליקציה.</string>
+    <string name="auto_hint">כבוי כברירת מחדל. כשדלוק: כרטיס עם השם והטקסט המלא, 8 שניות, ו«ביטול» גדול. הלחיצה רק אם הכותרת זהה בדיוק.</string>
+    <string name="recipients_help">סמנו למי מותר לשלוח בלי מגע. «יעד» בוחר לאן תלך בדיקת השליחה. «בחר הכול» מסמן את מה שמוצג עכשיו (אחרי חיפוש). «הוסף מספר» שומר מספר בלי לפתוח את אנשי הקשר.</string>
+    <string name="add_number">הוסף מספר</string>
+    <string name="pick_contact">בחר מאנשי קשר</string>
+    <string name="add_number_title">הוספת מספר</string>
+    <string name="remove">הסר</string>
+    <string name="make_target">יעד</string>
+    <string name="target_on">יעד ✓</string>
+</resources>

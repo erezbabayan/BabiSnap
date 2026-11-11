@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/auto_scroll"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:layoutDirection="rtl"
+    android:background="@color/bg"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp"
+        android:paddingBottom="32dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/app_name"
+            android:textColor="@color/ink"
+            android:textSize="26sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="@string/screen_sub"
+            android:textColor="@color/muted"
+            android:textSize="15sp" />
+
+        <TextView
+            android:id="@+id/auto_status"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:textColor="@color/ink"
+            android:textSize="15sp" />
+
+        <include
+            android:id="@+id/countdown_card"
+            layout="@layout/card_countdown"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:visibility="gone" />
+
+        <TextView
+            style="@style/Section"
+            android:text="הקלטה או טקסט" />
+
+        <Button
+            android:id="@+id/record"
+            style="@style/PrimaryButton"
+            android:text="הקלט" />
+
+        <EditText
+            android:id="@+id/transcript"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/card_bg"
+            android:gravity="top|right"
+            android:hint="הודעה לתמרי בוואטסאפ אני בדרך"
+            android:inputType="textMultiLine|textCapSentences"
+            android:minLines="3"
+            android:padding="12dp"
+            android:textColor="@color/ink"
+            android:textDirection="rtl"
+            android:textSize="17sp" />
+
+        <Button
+            android:id="@+id/send_typed"
+            style="@style/PrimaryButton"
+            android:text="שלח את הטקסט" />
+
+        <TextView
+            style="@style/Section"
+            android:text="נמענים" />
+
+        <Button
+            android:id="@+id/open_recipients"
+            style="@style/PrimaryButton"
+            android:text="@string/open_recipients" />
+
+        <TextView
+            style="@style/Section"
+            android:text="נגישות" />
+
+        <Button
+            android:id="@+id/open_settings"
+            style="@style/PrimaryButton"
+            android:text="איך מפעילים שליחה בלי מגע" />
+
+        <TextView
+            style="@style/Section"
+            android:text="דוח" />
+
+        <Button
+            android:id="@+id/copy_report"
+            style="@style/PrimaryButton"
+            android:text="@string/copy_report" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="הדוח הוא קודים בלבד: בלי שמות ובלי מספרים."
+            android:textColor="@color/muted"
+            android:textSize="14sp" />
+    </LinearLayout>
+</ScrollView>
