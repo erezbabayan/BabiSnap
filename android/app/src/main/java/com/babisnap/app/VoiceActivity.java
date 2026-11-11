@@ -143,6 +143,8 @@ public class VoiceActivity extends Activity {
             .putExtra(RecognizerIntent.EXTRA_LANGUAGE, "he-IL")
             .putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "he-IL")
             .putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+            // Fixed for the whole session, so a call phrase cannot switch these mid-listen.
+            // SilenceDetector ends a call command after 1.5s of unchanged partials instead.
             .putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 4000L)
             .putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 4000L)
             .putExtra(RecognizerIntent.EXTRA_PROMPT, Core.whatsAppEnabled(this)

@@ -92,7 +92,7 @@ public class CallDialTest {
         } catch (IllegalArgumentException expected) {
             assertTrue(expected.getMessage().contains("CALL"));
         }
-        assertEquals(8000L, CallDial.CONFIRM_MS);
+        assertEquals(3000L, CallDial.CONFIRM_MS);
         assertEquals(5000L, CardFlow.UNDO_MS);
         assertEquals(1, CallDial.actions().size());
         assertEquals(CallDial.Action.DIAL, CallDial.actions().get(0));
@@ -159,7 +159,7 @@ public class CallDialTest {
         assertEquals(CallDial.ToggleResult.SAVED_ON, CallDial.onToggle(true, true, false));
         assertEquals(CallDial.ToggleResult.NEED_PROMPT, CallDial.onToggle(true, false, false));
         assertEquals(CallDial.ToggleResult.NEED_SETTINGS, CallDial.onToggle(true, false, true));
-        assertEquals(8000L, CallDial.CONFIRM_MS);
+        assertEquals(3000L, CallDial.CONFIRM_MS);
         WhatsAppRecipients.Contact tamar = person("תמר כהן", "תמר", "", mobile("0501234567"));
         assertEquals("שיחה · מתקשר לתמר כהן", CallDial.headline(tamar, true));
         assertEquals("שיחה · ייפתח החייגן אצל תמר כהן", CallDial.headline(tamar, false));
