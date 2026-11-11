@@ -34,9 +34,13 @@ public final class Core {
     public static int defaultDuration(Context c) { return prefs(c).getInt("dur", 60); }
     /** Stage-2 invites ('שליחת הזמנות'), default OFF. */
     public static boolean sendInvites(Context c) { return prefs(c).getBoolean("send_invites", false); }
-    /** WhatsApp share. Default off, so a channel word stays on the calendar / BabiTk path. */
+    /**
+     * WhatsApp share. Product default is off, so a channel word stays on the calendar / BabiTk path.
+     * The watest APK defaults the missing pref to on; a saved toggle still wins.
+     */
     public static boolean whatsAppEnabled(Context c) {
-        return prefs(c).getBoolean(WhatsAppLogic.PREF_ENABLED, WhatsAppLogic.DEFAULT_ENABLED);
+        return prefs(c).getBoolean(WhatsAppLogic.PREF_ENABLED,
+            WhatsAppLogic.DEFAULT_ENABLED || BuildConfig.WHATSAPP_DEFAULT_ON);
     }
     public static WhatsAppLogic.Mode whatsAppMode(Context c) {
         return WhatsAppLogic.mode(prefs(c).getString(WhatsAppLogic.PREF_MODE, WhatsAppLogic.DEFAULT_MODE));

@@ -11,7 +11,8 @@ import java.util.regex.Pattern;
  * Task vs note is decided by CONTENT (something to do vs information), never by presence of a date.
  * Exception: an explicit date+time with no action verb and no destination word is a calendar item.
  * WHATSAPP is returned only when the caller passes whatsappEnabled (the setting, default off).
- * {@link #classify(String, boolean)} is the live path and never returns WHATSAPP.
+ * {@link #classify(String, boolean)} passes false and never returns WHATSAPP.
+ * The live path is {@link #classify(String, boolean, boolean)} with the saved setting.
  */
 public final class Classifier {
     public enum Kind { MEETING, TASK, NOTE, WHATSAPP;

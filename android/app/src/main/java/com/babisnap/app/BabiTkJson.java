@@ -13,12 +13,19 @@ public final class BabiTkJson {
     static final Pattern CLIENT_ID_RE = Pattern.compile("^[A-Za-z0-9._:-]+$");
     static final String FALLBACK_TITLE = "פריט קולי";
 
+    /** A WhatsApp payload must not sit on the BabiTk queue, even if a caller built the JSON by hand. */
+    public static boolean isWhatsAppPayload(String body) {
+        if (body == null) return false;
+        return body.contains("\"type\":\"whatsapp\"") || body.contains("\"type\": \"whatsapp\"");
+    }
+
     /** dueDate "YYYY-MM-DD" or null, dueTime "HH:MM" or null; invalid date/time are dropped, long text is cut, empty optional fields are omitted. */
     public static String build(String title, String dueDate, String dueTime, String notes, String location, String type, String clientId) {
         return build(title, dueDate, dueTime, notes, location, type, clientId, null);
     }
     /** tags: BabiTk tag names (תיוגים), sent as "tags":[..] only when non-empty; cleaned, unique, max 12, each max 40. */
     public static String build(String title, String dueDate, String dueTime, String notes, String location, String type, String clientId, java.util.List<String> tags) {
+        if ("whatsapp".equals(type)) throw new IllegalArgumentException("WHATSAPP is not a BabiTk item");
         String t = clip(title, TITLE_MAX); if (t.isEmpty()) t = FALLBACK_TITLE;
         String d = validDate(dueDate) ? dueDate : null;
         String tm = validTime(dueTime) ? dueTime : null; // time-only = today on the server

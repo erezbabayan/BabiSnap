@@ -109,6 +109,7 @@ public final class BabiTk {
     }
     static synchronized void saveQueue(Context c, JSONArray a) { Core.prefs(c).edit().putString(QUEUE, a.toString()).commit(); }
     public static synchronized void enqueue(Context c, String clientId, String body) {
+        if (BabiTkJson.isWhatsAppPayload(body)) return;
         JSONArray a = queue(c);
         try { a.put(new JSONObject().put("id", clientId).put("body", body)); } catch (Exception ignored) {}
         saveQueue(c, a); kick(c);
@@ -192,7 +193,10 @@ public final class BabiTk {
             JSONArray a = queue(c); java.util.List<SendLoop.Item> items = new java.util.ArrayList<>();
             for (int i = 0; i < a.length(); i++) {
                 JSONObject it = a.optJSONObject(i);
-                if (it != null && !it.optBoolean("failed")) items.add(new SendLoop.Item(it.optString("id"), sanitize(it.optString("body"))));
+                if (it != null && !it.optBoolean("failed")) {
+                    if (BabiTkJson.isWhatsAppPayload(it.optString("body"))) { remove(c, it.optString("id")); continue; }
+                    items.add(new SendLoop.Item(it.optString("id"), sanitize(it.optString("body"))));
+                }
             }
             if (items.isEmpty()) return Result.success();
             SendLoop.Report r = SendLoop.run(items, body -> Core.http("POST", BabiTkJson.URL, tok, body));
