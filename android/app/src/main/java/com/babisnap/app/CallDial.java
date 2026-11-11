@@ -17,7 +17,7 @@ import java.util.regex.Pattern;
  * {@link Action} with the label "וואטסאפ" plus a branch in VoiceActivity — not built here.
  */
 public final class CallDial {
-    public static final long CONFIRM_MS = 3000L;
+    public static final long CONFIRM_MS = 5000L;
     /** Settings switch. Default off. Auto-call also needs CALL_PHONE. */
     public static final String PREF_DIRECT = "call_direct";
     public static final String TOGGLE_TITLE = "אישור לבצע שיחות";
@@ -234,6 +234,13 @@ public final class CallDial {
         List<WhatsAppRecipients.Contact> eligible = new ArrayList<>();
         if (contacts != null) for (WhatsAppRecipients.Contact c : contacts) if (hasNumber(c)) eligible.add(c);
         return WhatsAppRecipients.matchAmong(spoken, eligible);
+    }
+
+    /** Same rules as {@link #match}, across every speech hypothesis. */
+    public static WhatsAppRecipients.Matches matchNames(List<String> names, List<WhatsAppRecipients.Contact> contacts) {
+        List<WhatsAppRecipients.Contact> eligible = new ArrayList<>();
+        if (contacts != null) for (WhatsAppRecipients.Contact c : contacts) if (hasNumber(c)) eligible.add(c);
+        return WhatsAppRecipients.matchNamesAmong(names, eligible);
     }
 
     public static boolean hasNumber(WhatsAppRecipients.Contact contact) { return chooseRaw(contact) != null; }

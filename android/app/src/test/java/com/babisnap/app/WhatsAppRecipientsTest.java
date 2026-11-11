@@ -103,12 +103,13 @@ public class WhatsAppRecipientsTest {
         WhatsAppRecipients.Contact dani = person("דניאל לוי", "דניאל", "דני", mobile("0521111111"));
         List<WhatsAppRecipients.Contact> book = Arrays.asList(tamar, dani);
 
-        WhatsAppRecipients.Matches one = WhatsAppRecipients.match("תמרי", book);
-        assertTrue(one.one());
-        assertEquals("תמר כהן", one.hits.get(0).label());
+        WhatsAppRecipients.Matches diminutive = WhatsAppRecipients.match("תמרי", book);
+        assertFalse(diminutive.one());
+        assertEquals(WhatsAppRecipients.MatchCode.MANY, diminutive.code);
+        assertEquals("תמר כהן", diminutive.hits.get(0).label());
 
         WhatsAppRecipients.Matches prefixed = WhatsAppRecipients.match("לתמרי", book);
-        assertTrue(prefixed.one());
+        assertFalse(prefixed.one());
         assertEquals("תמר כהן", prefixed.hits.get(0).displayName);
 
         WhatsAppRecipients.Matches nick = WhatsAppRecipients.match("דני", book);
@@ -167,5 +168,75 @@ public class WhatsAppRecipientsTest {
         assertEquals("תמר כהן", WhatsAppRecipients.search(book, "כהן").get(0).label());
         assertEquals(1, WhatsAppRecipients.search(book, "050").size());
         assertTrue(WhatsAppRecipients.search(book, "אין כזה").isEmpty());
+    }
+
+    @Test public void nearNamesNeverAutoConfirmAndExactStaysFirst() {
+        String[][] pairs = {
+            {"רני", "רוני"}, {"דני", "דיני"}, {"גל", "גיל"}, {"שי", "ישי"},
+            {"אבי", "אביב"}, {"רון", "רוני"}, {"רון", "רונן"}, {"טל", "טלי"}, {"רן", "רני"}
+        };
+        for (String[] pair : pairs) {
+            for (int dir = 0; dir < 2; dir++) {
+                String said = pair[dir];
+                String other = pair[1 - dir];
+                WhatsAppRecipients.Contact a = named(said, "050111111" + dir);
+                WhatsAppRecipients.Contact b = named(other, "052222222" + dir);
+                WhatsAppRecipients.Matches both = WhatsAppRecipients.match(said, Arrays.asList(a, b));
+                assertEquals(said + "/" + other, WhatsAppRecipients.MatchCode.MANY, both.code);
+                assertFalse(said, both.one());
+                assertEquals(said, both.hits.get(0).displayName);
+                WhatsAppRecipients.Matches onlyOther = WhatsAppRecipients.match(said, Collections.singletonList(b));
+                assertEquals(said + " only " + other, WhatsAppRecipients.MatchCode.MANY, onlyOther.code);
+                assertFalse(onlyOther.one());
+                assertNotEquals(WhatsAppRecipients.MatchCode.NONE, onlyOther.code);
+                assertEquals(other, onlyOther.hits.get(0).displayName);
+            }
+        }
+        WhatsAppRecipients.Contact lone = named("רוני", "0501234567");
+        assertTrue(WhatsAppRecipients.match("רוני", Collections.singletonList(lone)).one());
+        WhatsAppRecipients.Contact tamar = named("תמר", "0501234567");
+        WhatsAppRecipients.Matches tamari = WhatsAppRecipients.match("תמרי", Collections.singletonList(tamar));
+        assertEquals(WhatsAppRecipients.MatchCode.MANY, tamari.code);
+        assertFalse(tamari.one());
+        WhatsAppRecipients.Contact daniel = new WhatsAppRecipients.Contact("דניאל", "דניאל", "", "",
+            Collections.singletonList(mobile("0521111111")));
+        assertFalse(WhatsAppRecipients.match("דני", Collections.singletonList(daniel)).one());
+        WhatsAppRecipients.Contact nick = new WhatsAppRecipients.Contact("דניאל", "דניאל", "", "דני",
+            Collections.singletonList(mobile("0521111111")));
+        assertTrue(WhatsAppRecipients.match("דני", Collections.singletonList(nick)).one());
+
+        WhatsAppRecipients.Contact cohen = new WhatsAppRecipients.Contact("רוני כהן", "רוני", "כהן", "",
+            Collections.singletonList(mobile("0501234567")));
+        WhatsAppRecipients.Contact levi = new WhatsAppRecipients.Contact("רוני לוי", "רוני", "לוי", "",
+            Collections.singletonList(mobile("0521111111")));
+        WhatsAppRecipients.Matches full = WhatsAppRecipients.match("רוני כהן", Arrays.asList(levi, cohen));
+        assertTrue(full.one());
+        assertEquals("רוני כהן", full.hits.get(0).displayName);
+        WhatsAppRecipients.Matches first = WhatsAppRecipients.match("רוני", Arrays.asList(cohen, levi));
+        assertEquals(WhatsAppRecipients.MatchCode.MANY, first.code);
+        assertFalse(first.one());
+        WhatsAppRecipients.Contact bare = named("רוני", "0541111111");
+        WhatsAppRecipients.Matches fallback = WhatsAppRecipients.match("רוני כהן", Collections.singletonList(bare));
+        assertEquals(WhatsAppRecipients.MatchCode.MANY, fallback.code);
+        assertFalse(fallback.one());
+        assertEquals("רוני", fallback.hits.get(0).displayName);
+
+        WhatsAppRecipients.Contact rani = named("רני", "0501234567");
+        WhatsAppRecipients.Contact roni = named("רוני", "0521111111");
+        WhatsAppRecipients.Matches lamed = WhatsAppRecipients.match("לרני", Arrays.asList(roni, rani));
+        assertEquals(WhatsAppRecipients.MatchCode.MANY, lamed.code);
+        assertEquals("רני", lamed.hits.get(0).displayName);
+        WhatsAppRecipients.Matches dotted = WhatsAppRecipients.match("רָנִי", Arrays.asList(roni, rani));
+        assertEquals("רני", dotted.hits.get(0).displayName);
+        assertFalse(dotted.one());
+        WhatsAppRecipients.Matches heard = WhatsAppRecipients.matchNames(Arrays.asList("רני", "רוני"), Arrays.asList(rani, roni));
+        assertEquals(WhatsAppRecipients.MatchCode.MANY, heard.code);
+        assertFalse(heard.one());
+        assertTrue(heard.hits.contains(rani));
+        assertTrue(heard.hits.contains(roni));
+    }
+
+    private static WhatsAppRecipients.Contact named(String name, String phone) {
+        return new WhatsAppRecipients.Contact(name, name, "", "", Collections.singletonList(mobile(phone)));
     }
 }

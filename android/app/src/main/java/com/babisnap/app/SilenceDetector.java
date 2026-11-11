@@ -29,7 +29,23 @@ public final class SilenceDetector {
 
     /** Final results win when non-empty; otherwise the latest partial. */
     public static String pick(java.util.List<String> finals, String lastPartial) {
-        if (finals != null && !finals.isEmpty() && finals.get(0) != null && !finals.get(0).trim().isEmpty()) return finals.get(0).trim();
-        return lastPartial == null ? "" : lastPartial.trim();
+        java.util.List<String> all = hypotheses(finals, lastPartial);
+        return all.isEmpty() ? "" : all.get(0);
+    }
+
+    /** Every non-empty hypothesis, primary first, at most five. Duplicates are dropped. */
+    public static java.util.List<String> hypotheses(java.util.List<String> finals, String lastPartial) {
+        java.util.List<String> out = new java.util.ArrayList<>();
+        if (finals != null) for (String s : finals) addHeard(out, s);
+        addHeard(out, lastPartial);
+        if (out.size() > 5) return new java.util.ArrayList<>(out.subList(0, 5));
+        return out;
+    }
+
+    private static void addHeard(java.util.List<String> out, String raw) {
+        if (out.size() >= 5 || raw == null) return;
+        String t = raw.trim();
+        if (t.isEmpty() || out.contains(t)) return;
+        out.add(t);
     }
 }

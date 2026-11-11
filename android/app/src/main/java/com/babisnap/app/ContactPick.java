@@ -28,8 +28,15 @@ final class ContactPick {
         List<Integer> order = new ArrayList<>();
         for (int i = 0; i < src.size(); i++) if (src.get(i) != null) order.add(i);
         order.sort((a, b) -> {
-            int cmp = Integer.compare(band(spoken, src.get(a)), band(spoken, src.get(b)));
-            return cmp != 0 ? cmp : Integer.compare(a, b);
+            WhatsAppRecipients.Contact ca = src.get(a);
+            WhatsAppRecipients.Contact cb = src.get(b);
+            int cmp = Integer.compare(band(spoken, ca), band(spoken, cb));
+            if (cmp != 0) return cmp;
+            int times = Integer.compare(cb.timesContacted, ca.timesContacted);
+            if (times != 0) return times;
+            int recent = Long.compare(cb.lastTimeContacted, ca.lastTimeContacted);
+            if (recent != 0) return recent;
+            return Integer.compare(a, b);
         });
         List<WhatsAppRecipients.Contact> out = new ArrayList<>();
         for (int i : order) out.add(src.get(i));
@@ -67,33 +74,9 @@ final class ContactPick {
         return digits.length() >= 2 && phoneHit(c, digits);
     }
 
-    /** 0 exact first or full name, 1 starts with the spoken name, 2 the rest. */
+    /** 0 exact, 1 near (prefix, diminutive, or one edit), 2 the rest. */
     private static int band(String spoken, WhatsAppRecipients.Contact c) {
-        String key = squash(spoken);
-        if (key.isEmpty() || c == null) return 2;
-        String first = squash(firstName(c));
-        String full = squash(c.displayName);
-        if ((!first.isEmpty() && first.equals(key)) || (!full.isEmpty() && full.equals(key))) return 0;
-        if (starts(first, key) || starts(full, key)) return 1;
-        return 2;
-    }
-
-    private static boolean starts(String name, String key) {
-        return !name.isEmpty() && name.startsWith(key) && !name.equals(key);
-    }
-
-    private static String firstName(WhatsAppRecipients.Contact c) {
-        String given = c.given == null ? "" : c.given.trim();
-        if (!given.isEmpty()) return firstWord(given);
-        return firstWord(c.displayName);
-    }
-
-    private static String firstWord(String raw) {
-        if (raw == null) return "";
-        String t = raw.trim();
-        if (t.isEmpty()) return "";
-        int sp = t.indexOf(' ');
-        return sp < 0 ? t : t.substring(0, sp);
+        return WhatsAppRecipients.closeness(spoken, c);
     }
 
     static String squash(String s) { return ContactMatcher.norm(s).replace(" ", ""); }
