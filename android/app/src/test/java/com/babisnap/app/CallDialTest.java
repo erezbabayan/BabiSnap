@@ -199,8 +199,7 @@ public class CallDialTest {
             WhatsAppRecipients.Contact saidC = said.equals("רני") ? rani : roni;
             WhatsAppRecipients.Contact otherC = said.equals("רני") ? roni : rani;
             WhatsAppRecipients.Matches both = CallDial.match(said, Arrays.asList(otherC, saidC));
-            assertEquals(WhatsAppRecipients.MatchCode.MANY, both.code);
-            assertFalse(both.one());
+            assertTrue(both.one());
             assertEquals(said, both.hits.get(0).displayName);
             WhatsAppRecipients.Matches only = CallDial.match(said, Collections.singletonList(otherC));
             assertEquals(WhatsAppRecipients.MatchCode.MANY, only.code);
@@ -222,11 +221,22 @@ public class CallDialTest {
         assertEquals(WhatsAppRecipients.MatchCode.MANY, CallDial.match("רוני", Arrays.asList(cohen, levi)).code);
         assertFalse(CallDial.match("רוני כהן", Collections.singletonList(roni)).one());
         assertEquals("רוני", CallDial.match("רוני כהן", Collections.singletonList(roni)).hits.get(0).displayName);
+        assertTrue(CallDial.match("לרני", Arrays.asList(roni, rani)).one());
         assertEquals("רני", CallDial.match("לרני", Arrays.asList(roni, rani)).hits.get(0).displayName);
-        assertEquals("רני", CallDial.match("רָנִי", Arrays.asList(roni, rani)).hits.get(0).displayName);
+        assertTrue(CallDial.match("רָנִי", Arrays.asList(roni, rani)).one());
+        WhatsAppRecipients.Contact tamari = new WhatsAppRecipients.Contact("תמרי", "תמרי", "", "",
+            Collections.singletonList(mobile("0540000000")));
+        assertTrue(CallDial.match("תמרי", Arrays.asList(tamar, tamari)).one());
+        assertEquals("תמרי", CallDial.match("תמרי", Arrays.asList(tamar, tamari)).hits.get(0).displayName);
+        WhatsAppRecipients.Contact tamarToo = new WhatsAppRecipients.Contact("תמר", "תמר", "", "",
+            Collections.singletonList(mobile("0541111111")));
+        assertEquals(WhatsAppRecipients.MatchCode.MANY, CallDial.match("תמר", Arrays.asList(tamar, tamarToo)).code);
+        assertFalse(CallDial.match("תמר", Arrays.asList(tamar, tamarToo)).one());
+        assertEquals(WhatsAppRecipients.MatchCode.MANY, CallDial.match("רון", Collections.singletonList(roni)).code);
+        assertFalse(CallDial.match("רון", Collections.singletonList(roni)).one());
         WhatsAppRecipients.Matches heard = CallDial.matchNames(Arrays.asList("רני", "רוני"), Arrays.asList(rani, roni));
-        assertFalse(heard.one());
-        assertEquals(WhatsAppRecipients.MatchCode.MANY, heard.code);
+        assertTrue(heard.one());
+        assertEquals("רני", heard.hits.get(0).displayName);
         assertEquals(5000L, CallDial.CONFIRM_MS);
     }
 

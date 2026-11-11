@@ -3,7 +3,6 @@ package com.babisnap.app;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.regex.Matcher;
@@ -222,8 +221,8 @@ public final class WhatsAppRecipients {
 
     /**
      * Best contacts for a spoken name. Prefixes ל/ש/ו/אל are optional.
-     * A confirm card is only a unique exact token with no near neighbor.
-     * A prefix, a diminutive, or one edit (רני/רוני) is a picker, never an automatic open.
+     * One exact display name, first name, or nickname opens the confirm card even if a similar name is saved.
+     * A picker is only for no exact hit (a near name such as רון/רוני) or for two contacts with that same exact name.
      * Only contacts with an Israeli number are considered (WhatsApp).
      */
     public static Matches match(String spoken, List<Contact> contacts) {
@@ -231,8 +230,8 @@ public final class WhatsAppRecipients {
     }
 
     /**
-     * Several speech hypotheses. One shared exact contact can confirm.
-     * Different contacts, or any near hit, stay a picker. An empty name is skipped.
+     * Several speech hypotheses. The first one with a unique exact contact confirms.
+     * Otherwise the first hypothesis that matched at all stays a picker. An empty name is skipped.
      */
     public static Matches matchNames(List<String> names, List<Contact> contacts) {
         return matchNamesAmong(names, withNumber(contacts));
@@ -247,23 +246,13 @@ public final class WhatsAppRecipients {
             if (!keys.contains(t)) keys.add(t);
         }
         if (keys.isEmpty()) return none();
-        Matches firstAuto = null;
-        List<Contact> union = new ArrayList<>();
-        boolean auto = true;
+        Matches fallback = null;
         for (String key : keys) {
             Matches m = matchAmong(key, contacts);
-            if (m.code == MatchCode.NONE) continue;
-            if (!m.one()) auto = false;
-            for (Contact c : m.hits) {
-                if (!union.contains(c)) union.add(c);
-                else auto = auto && m.one();
-            }
-            if (union.size() != 1) auto = false;
-            if (firstAuto == null && m.one()) firstAuto = m;
+            if (m.one()) return m;
+            if (fallback == null && m.code != MatchCode.NONE) fallback = m;
         }
-        if (union.isEmpty()) return none();
-        if (auto && firstAuto != null && union.size() == 1) return firstAuto;
-        return new Matches(MatchCode.MANY, orderHits(keys.get(0), union), 1);
+        return fallback == null ? none() : fallback;
     }
 
     /**
@@ -308,7 +297,7 @@ public final class WhatsAppRecipients {
         return matchSingle(key, contacts);
     }
 
-    /** One spoken token. Exact with no near neighbor confirms. Anything near is a picker. */
+    /** One spoken token. A unique exact name confirms. Near names never do. Two exact names are a picker. */
     private static Matches matchSingle(String key, List<Contact> contacts) {
         List<Contact> exact = new ArrayList<>();
         List<Contact> near = new ArrayList<>();
@@ -320,12 +309,10 @@ public final class WhatsAppRecipients {
         }
         byUse(exact);
         byUse(near);
-        if (exact.size() == 1 && near.isEmpty()) return new Matches(MatchCode.ONE, exact, 0);
-        List<Contact> hits = new ArrayList<>();
-        hits.addAll(exact);
-        hits.addAll(near);
-        if (hits.isEmpty()) return none();
-        return new Matches(MatchCode.MANY, hits, exact.isEmpty() ? 1 : 0);
+        if (exact.size() == 1) return new Matches(MatchCode.ONE, exact, 0);
+        if (exact.size() > 1) return new Matches(MatchCode.MANY, exact, 0);
+        if (near.isEmpty()) return none();
+        return new Matches(MatchCode.MANY, near, 1);
     }
 
     /**
@@ -336,52 +323,11 @@ public final class WhatsAppRecipients {
         List<Contact> exact = new ArrayList<>();
         for (Contact c : contacts) if (c != null && exactFull(key, c)) exact.add(c);
         byUse(exact);
-        if (exact.size() == 1 && !fullBlocked(key, first, exact.get(0), contacts))
-            return new Matches(MatchCode.ONE, exact, 0);
-        if (!exact.isEmpty()) {
-            List<Contact> hits = new ArrayList<>(exact);
-            for (Contact c : contacts) {
-                if (c == null || hits.contains(c)) continue;
-                if (fullBlocked(key, first, exact.get(0), Collections.singletonList(c))) hits.add(c);
-            }
-            byUse(hits);
-            // exact contacts stay ahead of the neighbors that were appended
-            List<Contact> ordered = new ArrayList<>();
-            for (Contact c : exact) if (hits.contains(c)) ordered.add(c);
-            for (Contact c : hits) if (!ordered.contains(c)) ordered.add(c);
-            return new Matches(MatchCode.MANY, ordered, 0);
-        }
+        if (exact.size() == 1) return new Matches(MatchCode.ONE, exact, 0);
+        if (!exact.isEmpty()) return new Matches(MatchCode.MANY, exact, 0);
         Matches firstName = matchSingle(first, contacts);
         if (firstName.code == MatchCode.NONE) return none();
         return new Matches(MatchCode.MANY, firstName.hits, 1);
-    }
-
-    private static boolean fullBlocked(String key, String first, Contact hit, List<Contact> contacts) {
-        for (Contact c : contacts) {
-            if (c == null || c == hit) continue;
-            if (blocksFull(key, first, c)) return true;
-        }
-        return false;
-    }
-
-    /** Another רוני with a different family does not block "רוני כהן". A near family does. */
-    private static boolean blocksFull(String key, String first, Contact other) {
-        String display = ContactMatcher.norm(other.displayName);
-        String both = ContactMatcher.norm((other.given + " " + other.family).trim());
-        if (display.equals(key) || both.equals(key) || fold(display).equals(fold(key)) || fold(both).equals(fold(key)))
-            return false;
-        if (prefixEither(fold(key), fold(display)) || prefixEither(fold(key), fold(both))) return true;
-        if (edits(fold(key), fold(display)) == 1 || edits(fold(key), fold(both)) == 1) return true;
-        String oFirst = fold(firstName(other));
-        String spokenFirst = fold(first);
-        String oFamily = fold(other.family);
-        String spokenFamily = familyFold(key);
-        if (oFirst.equals(spokenFirst)) {
-            if (oFamily.isEmpty() || spokenFamily.isEmpty()) return false;
-            return nearTokens(oFamily, spokenFamily);
-        }
-        return nearTokens(oFirst, spokenFirst) && !spokenFamily.isEmpty() && !oFamily.isEmpty()
-            && (oFamily.equals(spokenFamily) || nearTokens(oFamily, spokenFamily));
     }
 
     /** 0 exact, 1 near, 2 neither. Picker order uses this. Exact is a whole token, never a prefix. */
@@ -485,36 +431,6 @@ public final class WhatsAppRecipients {
         }
         if (i < n || j < m) edits++;
         return edits;
-    }
-
-    private static String firstName(Contact c) {
-        if (c.given != null && !c.given.trim().isEmpty()) return c.given.trim().split(" ")[0];
-        if (c.displayName == null) return "";
-        String d = c.displayName.trim();
-        if (d.isEmpty()) return "";
-        return d.split(" ")[0];
-    }
-
-    private static String familyFold(String key) {
-        String n = ContactMatcher.norm(key);
-        int sp = n.indexOf(' ');
-        return sp < 0 ? "" : fold(n.substring(sp + 1));
-    }
-
-    private static List<Contact> orderHits(String spoken, List<Contact> hits) {
-        List<Contact> exact = new ArrayList<>();
-        List<Contact> near = new ArrayList<>();
-        List<Contact> rest = new ArrayList<>();
-        for (Contact c : hits) {
-            int band = closeness(spoken, c);
-            if (band == 0) exact.add(c);
-            else if (band == 1) near.add(c);
-            else rest.add(c);
-        }
-        byUse(exact); byUse(near); byUse(rest);
-        List<Contact> out = new ArrayList<>();
-        out.addAll(exact); out.addAll(near); out.addAll(rest);
-        return out;
     }
 
     private static void byUse(List<Contact> list) {
