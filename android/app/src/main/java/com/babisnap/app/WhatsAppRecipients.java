@@ -222,7 +222,8 @@ public final class WhatsAppRecipients {
     /**
      * Best contacts for a spoken name. Prefixes ל/ש/ו/אל are optional.
      * One exact display name, first name, or nickname opens the confirm card even if a similar name is saved.
-     * A picker is only for no exact hit (a near name such as רון/רוני) or for two contacts with that same exact name.
+     * A multi-word name that is not exact still confirms when exactly one display name contains every spoken word.
+     * A picker is for several exact names, several all-word names, or no exact hit (a near name such as רון/רוני).
      * Only contacts with an Israeli number are considered (WhatsApp).
      */
     public static Matches match(String spoken, List<Contact> contacts) {
@@ -317,6 +318,7 @@ public final class WhatsAppRecipients {
 
     /**
      * "רוני כהן" confirms when that full name is unique, even if another רוני exists.
+     * Otherwise every spoken word must appear in one display name (any order, extra words allowed).
      * A full name that only hits a bare first name is a picker, not a miss.
      */
     private static Matches matchFull(String key, String first, List<Contact> contacts) {
@@ -325,9 +327,55 @@ public final class WhatsAppRecipients {
         byUse(exact);
         if (exact.size() == 1) return new Matches(MatchCode.ONE, exact, 0);
         if (!exact.isEmpty()) return new Matches(MatchCode.MANY, exact, 0);
+        List<Contact> allWords = new ArrayList<>();
+        for (Contact c : contacts) if (c != null && containsAllWords(key, c)) allWords.add(c);
+        byUse(allWords);
+        if (allWords.size() == 1) return new Matches(MatchCode.ONE, allWords, 0);
+        if (allWords.size() > 1) return new Matches(MatchCode.MANY, allWords, 0);
         Matches firstName = matchSingle(first, contacts);
         if (firstName.code == MatchCode.NONE) return none();
         return new Matches(MatchCode.MANY, firstName.hits, 1);
+    }
+
+    /**
+     * Every spoken word is a whole token of the display name. Order does not matter.
+     * A short diminutive suffix counts; an edit such as רני/רוני does not.
+     */
+    private static boolean containsAllWords(String key, Contact c) {
+        List<String> want = spokenWords(key);
+        if (want.size() < 2) return false;
+        List<String> got = displayWords(c);
+        for (String word : want) if (!wordIn(word, got)) return false;
+        return true;
+    }
+
+    private static List<String> spokenWords(String key) {
+        List<String> out = new ArrayList<>();
+        if (key == null) return out;
+        for (String w : key.split(" ")) {
+            String folded = fold(w);
+            if (folded.length() >= 2 && !out.contains(folded)) out.add(folded);
+        }
+        return out;
+    }
+
+    private static List<String> displayWords(Contact c) {
+        List<String> out = new ArrayList<>();
+        if (c == null || c.displayName == null) return out;
+        for (String w : ContactMatcher.norm(c.displayName).split(" ")) {
+            if (fold(w).length() >= 2) out.add(w);
+        }
+        return out;
+    }
+
+    /** Exact folded token, or the same token plus י/ה/רי/ית/יה/ון. Not a one-edit neighbor. */
+    private static boolean wordIn(String want, List<String> words) {
+        for (String token : words) {
+            String got = fold(token);
+            if (got.length() < 2) continue;
+            if (got.equals(want) || diminutive(want, got)) return true;
+        }
+        return false;
     }
 
     /** 0 exact, 1 near, 2 neither. Picker order uses this. Exact is a whole token, never a prefix. */
