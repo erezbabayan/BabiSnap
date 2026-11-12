@@ -46,6 +46,7 @@ public class MainActivity extends Activity {
 
     @Override protected void onCreate(Bundle b) {
         super.onCreate(b);
+        WidgetSize.forgetOldPref(Core.prefs(this));
         if (handoffToRecording(b != null)) return;
         SnapHeartbeat.onAppOpen(this); // registry: at most once a day, or when the version changed
         TagSync.maybeFetch(this, false); // background, throttled to 12 h
@@ -179,8 +180,6 @@ public class MainActivity extends Activity {
         callSw.setOnCheckedChangeListener(this::onCallToggle);
         markRow(prefs, R.drawable.ic_route_call, CALL_ICON, CallDial.TOGGLE_TITLE, CallDial.TOGGLE_TITLE,
             plain(CallDial.TOGGLE_HINT), callSw);
-        int tile = WidgetSize.saved(Core.prefs(this));
-        row(prefs, "🔳", false, "גודל לחצן ההקלטה", null, link(WidgetSize.label(tile) + " ▾", false, v -> pickWidgetSize()));
         boolean launchRecords = RecordLaunch.enabled(Core.prefs(this));
         Switch launch = new Switch(this);
         launch.setChecked(launchRecords);
@@ -477,17 +476,6 @@ public class MainActivity extends Activity {
     }
 
     // ---- preferences ----
-    private void pickWidgetSize() {
-        int cur = WidgetSize.saved(Core.prefs(this));
-        rtl(new AlertDialog.Builder(this).setTitle("גודל לחצן ההקלטה")
-            .setSingleChoiceItems(WidgetSize.LABELS, WidgetSize.index(cur), (d, i) -> {
-                Core.prefs(this).edit().putInt(WidgetSize.PREF, WidgetSize.PERCENT[i]).apply();
-                ButtonWidget.refresh(this);
-                d.dismiss();
-                render();
-            }).setNegativeButton("ביטול", null).show());
-    }
-
     private void pickWhatsAppMode() {
         WhatsAppLogic.Mode cur = Core.whatsAppMode(this);
         rtl(new AlertDialog.Builder(this).setTitle("מה נשלח לוואטסאפ")

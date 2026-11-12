@@ -53,8 +53,8 @@ public class RecordLaunchTest {
         assertTrue(manifest.contains("android:launchMode=\"singleTask\""));
         assertTrue(manifest.contains(".RecordEntryActivity"));
         String layout = text("src/main/res/layout/widget_button.xml");
-        assertTrue(layout.contains("65dp"));
-        assertFalse(layout.contains("56dp"));
+        assertTrue(layout.contains("70dp"));
+        assertFalse(layout.contains("65dp"));
         assertTrue(layout.contains("12sp"));
         assertTrue(layout.contains("#FFFFFF"));
         String listen = text("src/main/res/layout/activity_listen.xml");
@@ -73,9 +73,10 @@ public class RecordLaunchTest {
         String settings = text("src/main/java/com/babisnap/app/MainActivity.java");
         assertTrue(settings.contains("handoffToRecording"));
         assertTrue(settings.contains("onNewIntent"));
-        assertTrue(settings.contains("גודל לחצן ההקלטה"));
+        assertFalse(settings.contains("גודל לחצן ההקלטה"));
         assertTrue(settings.contains("פתיחת BabiSnap מתחילה הקלטה מיד"));
-        assertTrue(settings.contains("ButtonWidget.refresh"));
+        assertTrue(settings.contains("WidgetSize.forgetOldPref"));
+        assertFalse(settings.contains("ButtonWidget.refresh"));
         String voice = text("src/main/java/com/babisnap/app/VoiceActivity.java");
         assertTrue(voice.contains("RecordLaunch.settings"));
     }
