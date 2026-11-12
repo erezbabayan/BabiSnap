@@ -29,7 +29,7 @@
 
 ## כפתור צד ועוזר דיגיטלי
 - האייקון «BabiSnap» הוא `MainActivity` בלבד. הוא פותח את ההגדרות ולא מתחיל הקלטה. אין מתג «פתיחת BabiSnap מתחילה הקלטה מיד».
-- «BabiSnap הקלטה» הוא `activity-alias` עם אייקון המיקרופון, `MAIN`/`LAUNCHER`, ותווית משלו. הוא פותח את `RecordEntryActivity`, שתמיד עובר למסך ההקלטה, גם בלחיצה שנייה (`singleTask` / `onNewIntent`). `ASSIST` ו־`VOICE_COMMAND` על אותה פעילות עושים אותו דבר.
+- «BabiSnap הקלטה» הוא `RecordEntryActivity`, פעילות ה־`LAUNCHER` הראשונה, עם אייקון המיקרופון ותווית משלה. `getLaunchIntentForPackage` (כפתור הצד של סמסונג) פותח אותה, והיא עוברת למסך ההקלטה, גם בלחיצה שנייה (`singleTask` / `onNewIntent`). `MainActivity` נשארת אייקון «BabiSnap» שני ופותחת הגדרות. `ASSIST` ו־`VOICE_COMMAND` על אותה פעילות נשארים.
 - `VoiceInteractionService` ו־`onShow` פותחים את `VoiceActivity`, לא את ההגדרות. הסשן לא קורא תוכן מסך ולא שומר קול. שירות הזיהוי הנלווה מחזיר שגיאה מיד ולא פותח את המיקרופון.
 - אין הרשאה חדשה. `BIND_VOICE_INTERACTION` ו־`BIND_RECOGNITION_SERVICE` הן הרשאות על השירות, לא `uses-permission`.
 

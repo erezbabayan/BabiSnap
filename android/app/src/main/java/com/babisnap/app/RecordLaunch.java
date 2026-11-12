@@ -17,8 +17,9 @@ public final class RecordLaunch {
     public static final String EXTRA_NO_AUTO_RECORD = "no_auto_record";
     public static final int FLAGS = Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK;
     public static final String HINT =
-        "כפתור צד, לחיצה כפולה: הגדרות ← תכונות מתקדמות ← כפתור צד ← לחיצה כפולה ← פתיחת אפליקציה ← «BabiSnap הקלטה» (האייקון עם המיקרופון). "
+        "כפתור צד, לחיצה כפולה: הגדרות ← תכונות מתקדמות ← כפתור צד ← לחיצה כפולה ← פתיחת אפליקציה ← BabiSnap. הלחיצה הכפולה מתחילה הקלטה. "
         + "האייקון «BabiSnap» פותח את ההגדרות ולא מתחיל הקלטה. "
+        + "האייקון «BabiSnap הקלטה» (עם המיקרופון) מתחיל הקלטה. "
         + "לחיצה ארוכה: הגדרות ← אפליקציות ← אפליקציות ברירת מחדל ← אפליקציית עוזר דיגיטלי ← BabiSnap. "
         + "בלי הרשאת מיקרופון מסך ההקלטה מבקש אישור. אין הקלטה נוספת מעבר להקלטה הרגילה.";
 
