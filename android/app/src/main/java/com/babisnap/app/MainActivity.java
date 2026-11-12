@@ -41,10 +41,13 @@ public class MainActivity extends Activity {
         CAL_ICON = 0xFF1A73E8, WA_ICON = 0xFF075E54, CALL_ICON = 0xFF148F4A, BABI_ICON = 0xFF2A1B7A;
     private boolean ignoreCallToggle;
     private boolean askMic;
+    private boolean handedOff;
     private LinearLayout content;
 
     @Override protected void onCreate(Bundle b) {
         super.onCreate(b);
+        WidgetSize.forgetOldPref(Core.prefs(this));
+        if (handoffToRecording(b != null)) return;
         SnapHeartbeat.onAppOpen(this); // registry: at most once a day, or when the version changed
         TagSync.maybeFetch(this, false); // background, throttled to 12 h
         UpdateCheck.maybeCheck(this); // GitHub latest release, throttled to 6 h; dialog only if newer
@@ -64,8 +67,30 @@ public class MainActivity extends Activity {
         ScrollView sv = new ScrollView(this); sv.setBackgroundColor(BG); sv.addView(content); setContentView(sv);
     }
 
+    @Override protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        askMic = intent != null && intent.getBooleanExtra(RecordLaunch.EXTRA_ASK_MIC, false);
+        handoffToRecording(false);
+    }
+
+    /** Side key and the launcher icon. A live singleTask activity gets this from onNewIntent too. */
+    private boolean handoffToRecording(boolean recreated) {
+        Intent in = getIntent();
+        boolean go = RecordLaunch.shouldRecordOnLaunch(RecordLaunch.enabled(Core.prefs(this)),
+            in == null ? null : in.getAction(),
+            in != null && in.hasCategory(Intent.CATEGORY_LAUNCHER),
+            RecordLaunch.fromHistory(in), RecordLaunch.skipAuto(in), recreated);
+        if (!go) return false;
+        handedOff = true;
+        startActivity(RecordLaunch.recording(this));
+        finish();
+        return true;
+    }
+
     @Override protected void onResume() {
         super.onResume();
+        if (handedOff || content == null) return;
         render(); // permissions may have changed in App info
         if (!askMic) return;
         askMic = false;
@@ -155,6 +180,18 @@ public class MainActivity extends Activity {
         callSw.setOnCheckedChangeListener(this::onCallToggle);
         markRow(prefs, R.drawable.ic_route_call, CALL_ICON, CallDial.TOGGLE_TITLE, CallDial.TOGGLE_TITLE,
             plain(CallDial.TOGGLE_HINT), callSw);
+        boolean launchRecords = RecordLaunch.enabled(Core.prefs(this));
+        Switch launch = new Switch(this);
+        launch.setChecked(launchRecords);
+        launch.setContentDescription("פתיחת BabiSnap מתחילה הקלטה מיד");
+        launch.setMinHeight(dp(48));
+        launch.setMinimumHeight(dp(48));
+        launch.setOnCheckedChangeListener((s, on) -> {
+            Core.prefs(this).edit().putBoolean(RecordLaunch.PREF_AUTO, on).apply();
+            render();
+        });
+        row(prefs, "🎙", false, "פתיחת BabiSnap מתחילה הקלטה מיד",
+            plain(launchRecords ? "פתיחה מהמסך או מכפתור הצד מתחילה הקלטה" : "פתיחה מציגה את ההגדרות"), launch);
         row(prefs, "➕", true, "כפתור במסך הבית", null, link("הוסף", false, v -> addWidget()));
         TextView side = new TextView(this);
         side.setText(RecordLaunch.HINT);
@@ -490,7 +527,7 @@ public class MainActivity extends Activity {
         "https://github.com/erezbabayan/BabiSnap/blob/main/docs/TERMS_HE.md";
 
     static final String PRIVACY_HE =
-        "• הדיבור מתומלל ע\"י שירות זיהוי הדיבור של הטלפון, והפענוח (פגישה/משימה/הערה, תאריך, שעה, מקום) נעשה בטלפון עצמו. כפתור הצד ועוזר דיגיטלי מתחילים את אותה הקלטה. אין איסוף קול נוסף ואין שמירת תוכן המסך.\n\n" +
+        "• הדיבור מתומלל ע\"י שירות זיהוי הדיבור של הטלפון, והפענוח (פגישה/משימה/הערה, תאריך, שעה, מקום) נעשה בטלפון עצמו. פתיחת BabiSnap (המתג דלוק כברירת מחדל), כפתור הצד ועוזר דיגיטלי מתחילים את אותה הקלטה. גלגל השיניים פותח הגדרות בלי הקלטה חדשה. אין איסוף קול נוסף ואין שמירת תוכן המסך.\n\n" +
         "• פגישות נשמרות ישירות ביומן Google שלך, דרך החשבון שחיברת. BabiSnap לא שומר סיסמה או טוקן של Google.\n\n" +
         "• אם בחרתם יעד \"יומן המכשיר\", הפגישה נכתבת ליומן שבטלפון בלבד. BabiSnap לא שולח את האירוע לשרת. אם היומן מסונכרן באפליקציה אחרת, הסנכרון הוא שלה. זימון במייל נשלח רק מיומן Google.\n\n" +
         "• משימות והערות נשלחות רק ללוח \"מחברת\" ב-BabiTk שלך. מפתח החיבור נשמר מוצפן בטלפון.\n\n" +

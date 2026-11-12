@@ -90,9 +90,19 @@ public class VoiceActivity extends Activity {
         logo = findViewById(R.id.logo); halo = findViewById(R.id.halo);
         status = findViewById(R.id.status); partial = findViewById(R.id.partial);
         findViewById(R.id.cancel).setOnClickListener(v -> { ended = true; tick.removeCallbacks(ticker); stopRec(); dropDraft(); done(null); });
+        findViewById(R.id.settings).setOnClickListener(v -> openSettings());
         logo.setOnClickListener(v -> tapToFinish()); halo.setOnClickListener(v -> tapToFinish());
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) listen(false);
         else requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, REQ_MIC);
+    }
+
+    /** Settings gear. The extra keeps a launcher-style return from starting another recording. */
+    private void openSettings() {
+        ended = true;
+        tick.removeCallbacks(ticker);
+        stopRec();
+        startActivity(RecordLaunch.settings(this));
+        finish();
     }
 
     /** Reset session state and open the mic again (after onNewIntent commit). */
