@@ -59,6 +59,42 @@
         <activity android:name=".VoiceActivity" android:exported="false" android:excludeFromRecents="true"
             android:taskAffinity="com.babisnap.app.voice" android:launchMode="singleTask"
             android:theme="@android:style/Theme.DeviceDefault.Light.Dialog.NoActionBar" />
+        <!-- Side-button double press picks this launcher entry. ASSIST / VOICE_COMMAND start the same recording. -->
+        <activity android:name=".RecordEntryActivity" android:exported="true"
+            android:label="@string/record_entry_label" android:icon="@mipmap/ic_launcher"
+            android:excludeFromRecents="true" android:launchMode="singleTask"
+            android:theme="@android:style/Theme.NoDisplay">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.ASSIST" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VOICE_COMMAND" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+        <service android:name=".BabiSnapVoiceService" android:exported="true"
+            android:label="@string/app_name" android:permission="android.permission.BIND_VOICE_INTERACTION">
+            <intent-filter>
+                <action android:name="android.service.voice.VoiceInteractionService" />
+            </intent-filter>
+            <meta-data android:name="android.voice_interaction" android:resource="@xml/voice_interaction_service" />
+        </service>
+        <service android:name=".BabiSnapSessionService" android:exported="true"
+            android:permission="android.permission.BIND_VOICE_INTERACTION" />
+        <!-- Stub only, so the assistant entry is valid. It does not open the microphone. -->
+        <service android:name=".BabiSnapRecognition" android:exported="true"
+            android:permission="android.permission.BIND_RECOGNITION_SERVICE">
+            <intent-filter>
+                <action android:name="android.speech.RecognitionService" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <meta-data android:name="android.speech" android:resource="@xml/recognition_service" />
+        </service>
         <receiver android:name=".MicWidget" android:exported="false" android:label="@string/app_name">
             <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/mic_widget" />

@@ -15,10 +15,15 @@ public class MicWidget extends AppWidgetProvider {
         PendingIntent pi = PendingIntent.getActivity(c, 0, i, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
         for (int id : ids) {
             RemoteViews v = new RemoteViews(c.getPackageName(), layout());
-            v.setOnClickPendingIntent(R.id.root, pi);
-            v.setOnClickPendingIntent(R.id.mic, pi);
+            bindClicks(v, pi);
             customize(m, id, v);
             m.updateAppWidget(id, v);
         }
+    }
+
+    /** The whole tile, including a label when the layout has one, starts the same recording. */
+    protected void bindClicks(RemoteViews v, PendingIntent pi) {
+        v.setOnClickPendingIntent(R.id.root, pi);
+        v.setOnClickPendingIntent(R.id.mic, pi);
     }
 }

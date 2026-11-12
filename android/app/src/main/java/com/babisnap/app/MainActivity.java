@@ -40,6 +40,7 @@ public class MainActivity extends Activity {
         MUTED = 0xFF7A7888, SECTION = 0xFF6A5FA8, RED = 0xFFB3261E, DIVIDER = 0xFFEEECF5, ICON_BG = 0xFFEFEDF8, ICON_BG_Y = 0xFFFFF1C4,
         CAL_ICON = 0xFF1A73E8, WA_ICON = 0xFF075E54, CALL_ICON = 0xFF148F4A, BABI_ICON = 0xFF2A1B7A;
     private boolean ignoreCallToggle;
+    private boolean askMic;
     private LinearLayout content;
 
     @Override protected void onCreate(Bundle b) {
@@ -56,13 +57,24 @@ public class MainActivity extends Activity {
             int in = dp(4);
             getActionBar().setIcon(new android.graphics.drawable.InsetDrawable(logo, in, in, dp(10), in));
         }
+        askMic = getIntent() != null && getIntent().getBooleanExtra(RecordLaunch.EXTRA_ASK_MIC, false);
         content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL); content.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
         content.setPadding(dp(14), dp(12), dp(14), dp(24));
         ScrollView sv = new ScrollView(this); sv.setBackgroundColor(BG); sv.addView(content); setContentView(sv);
     }
 
-    @Override protected void onResume() { super.onResume(); render(); } // permissions may have changed in App info
+    @Override protected void onResume() {
+        super.onResume();
+        render(); // permissions may have changed in App info
+        if (!askMic) return;
+        askMic = false;
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) return;
+        if (isBlocked(this, Manifest.permission.RECORD_AUDIO)) {
+            Toast.makeText(this, "הרשאות ← מיקרופון ← אפשר", Toast.LENGTH_LONG).show();
+            openAppInfo();
+        } else requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, REQ_MIC);
+    }
 
     private void render() {
         content.removeAllViews();
@@ -144,6 +156,12 @@ public class MainActivity extends Activity {
         markRow(prefs, R.drawable.ic_route_call, CALL_ICON, CallDial.TOGGLE_TITLE, CallDial.TOGGLE_TITLE,
             plain(CallDial.TOGGLE_HINT), callSw);
         row(prefs, "➕", true, "כפתור במסך הבית", null, link("הוסף", false, v -> addWidget()));
+        TextView side = new TextView(this);
+        side.setText(RecordLaunch.HINT);
+        side.setTextSize(12.5f); side.setTextColor(MUTED);
+        side.setTextAlignment(View.TEXT_ALIGNMENT_VIEW_START);
+        side.setPadding(dp(14), 0, dp(14), dp(12));
+        prefs.addView(side);
 
         footer();
         if ((getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0) debugParserTest(); // debug builds only
@@ -472,7 +490,7 @@ public class MainActivity extends Activity {
         "https://github.com/erezbabayan/BabiSnap/blob/main/docs/TERMS_HE.md";
 
     static final String PRIVACY_HE =
-        "• הדיבור מתומלל ע\"י שירות זיהוי הדיבור של הטלפון, והפענוח (פגישה/משימה/הערה, תאריך, שעה, מקום) נעשה בטלפון עצמו.\n\n" +
+        "• הדיבור מתומלל ע\"י שירות זיהוי הדיבור של הטלפון, והפענוח (פגישה/משימה/הערה, תאריך, שעה, מקום) נעשה בטלפון עצמו. כפתור הצד ועוזר דיגיטלי מתחילים את אותה הקלטה. אין איסוף קול נוסף ואין שמירת תוכן המסך.\n\n" +
         "• פגישות נשמרות ישירות ביומן Google שלך, דרך החשבון שחיברת. BabiSnap לא שומר סיסמה או טוקן של Google.\n\n" +
         "• אם בחרתם יעד \"יומן המכשיר\", הפגישה נכתבת ליומן שבטלפון בלבד. BabiSnap לא שולח את האירוע לשרת. אם היומן מסונכרן באפליקציה אחרת, הסנכרון הוא שלה. זימון במייל נשלח רק מיומן Google.\n\n" +
         "• משימות והערות נשלחות רק ללוח \"מחברת\" ב-BabiTk שלך. מפתח החיבור נשמר מוצפן בטלפון.\n\n" +
