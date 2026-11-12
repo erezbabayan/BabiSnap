@@ -298,20 +298,25 @@ public final class WhatsAppRecipients {
         return matchSingle(key, contacts);
     }
 
-    /** One spoken token. A unique exact name confirms. Near names never do. Two exact names are a picker. */
+    /** One spoken token. Exact wins. A unique spelling variant (רני/רוני) confirms. Near names stay a picker. */
     private static Matches matchSingle(String key, List<Contact> contacts) {
         List<Contact> exact = new ArrayList<>();
+        List<Contact> variant = new ArrayList<>();
         List<Contact> near = new ArrayList<>();
         for (Contact c : contacts) {
             if (c == null) continue;
             int rel = tokenRelation(key, c);
             if (rel == 0) exact.add(c);
+            else if (variantOf(key, c)) variant.add(c);
             else if (rel == 1) near.add(c);
         }
         byUse(exact);
+        byUse(variant);
         byUse(near);
         if (exact.size() == 1) return new Matches(MatchCode.ONE, exact, 0);
         if (exact.size() > 1) return new Matches(MatchCode.MANY, exact, 0);
+        if (variant.size() == 1) return new Matches(MatchCode.ONE, variant, 0);
+        if (variant.size() > 1) return new Matches(MatchCode.MANY, variant, 0);
         if (near.isEmpty()) return none();
         return new Matches(MatchCode.MANY, near, 1);
     }
@@ -339,7 +344,7 @@ public final class WhatsAppRecipients {
 
     /**
      * Every spoken word is a whole token of the display name. Order does not matter.
-     * A short diminutive suffix counts; an edit such as רני/רוני does not.
+     * A short diminutive suffix counts, and so does a medial ו/י spelling variant.
      */
     private static boolean containsAllWords(String key, Contact c) {
         List<String> want = spokenWords(key);
@@ -368,14 +373,43 @@ public final class WhatsAppRecipients {
         return out;
     }
 
-    /** Exact folded token, or the same token plus י/ה/רי/ית/יה/ון. Not a one-edit neighbor. */
+    /** Exact folded token, a diminutive, or a medial ו/י spelling variant. */
     private static boolean wordIn(String want, List<String> words) {
         for (String token : words) {
             String got = fold(token);
             if (got.length() < 2) continue;
-            if (got.equals(want) || diminutive(want, got)) return true;
+            if (got.equals(want) || diminutive(want, got) || spellingVariant(want, got)) return true;
         }
         return false;
+    }
+
+    private static boolean variantOf(String key, Contact c) {
+        String want = fold(key);
+        if (want.length() < 2) return false;
+        for (String token : tokens(c)) if (spellingVariant(want, fold(token))) return true;
+        return false;
+    }
+
+    /**
+     * Same name once ו and י in the middle are ignored. The first and last letters stay,
+     * so רני/רוני and שרה/שירה match, and an exact pair is not a variant.
+     */
+    static boolean spellingVariant(String a, String b) {
+        if (a == null || b == null || a.equals(b) || a.length() < 2 || b.length() < 2) return false;
+        String ka = withoutMedialMater(a);
+        String kb = withoutMedialMater(b);
+        return ka.length() >= 2 && ka.equals(kb);
+    }
+
+    private static String withoutMedialMater(String folded) {
+        StringBuilder out = new StringBuilder(folded.length());
+        int n = folded.length();
+        for (int i = 0; i < n; i++) {
+            char c = folded.charAt(i);
+            if (i > 0 && i < n - 1 && (c == 'ו' || c == 'י')) continue;
+            out.append(c);
+        }
+        return out.toString();
     }
 
     /** 0 exact, 1 near, 2 neither. Picker order uses this. Exact is a whole token, never a prefix. */

@@ -202,8 +202,7 @@ public class CallDialTest {
             assertTrue(both.one());
             assertEquals(said, both.hits.get(0).displayName);
             WhatsAppRecipients.Matches only = CallDial.match(said, Collections.singletonList(otherC));
-            assertEquals(WhatsAppRecipients.MatchCode.MANY, only.code);
-            assertFalse(only.one());
+            assertTrue(said + " variant " + other, only.one());
             assertEquals(other, only.hits.get(0).displayName);
         }
         assertTrue(CallDial.match("רוני", Collections.singletonList(roni)).one());
