@@ -62,6 +62,14 @@ final class WhatsAppCapture {
 
     boolean isRecording() { return rec != null; }
 
+    /** Peak since the previous call. 0 when the recorder is already stopped. */
+    int maxAmplitude() {
+        MediaRecorder r = rec;
+        if (r == null) return 0;
+        try { return r.getMaxAmplitude(); }
+        catch (Exception ignored) { return 0; }
+    }
+
     /** Stop the encoder and keep the file when it actually contains audio. */
     void stop() {
         MediaRecorder r = rec;
