@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<voice-interaction-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:sessionService="com.babisnap.app.BabiSnapSessionService"
+    android:recognitionService="com.babisnap.app.BabiSnapRecognition"
+    android:settingsActivity="com.babisnap.app.MainActivity"
+    android:supportsAssist="true"
+    android:supportsLaunchVoiceAssistFromKeyguard="false" />
