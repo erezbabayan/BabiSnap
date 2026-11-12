@@ -37,8 +37,8 @@ android {
         applicationId = 'com.babisnap.app'
         minSdk = 26
         targetSdk = 34
-        versionCode = 42
-        versionName = '2.31'
+        versionCode = 43
+        versionName = '2.32'
         // Product default is off. The watest build type (side-by-side test APK) overrides this to true.
         buildConfigField "boolean", "WHATSAPP_DEFAULT_ON", "false"
         manifestPlaceholders = [pairScheme: "babisnap"]
