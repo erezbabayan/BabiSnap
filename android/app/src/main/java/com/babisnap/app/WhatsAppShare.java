@@ -62,11 +62,23 @@ final class WhatsAppShare {
 
     /** Cache file via FileProvider. Caller grants read to the target package only. */
     static Intent voice(Context c, String pkg, File file, String mime) {
+        return voiceToJid(c, pkg, file, mime, null).intent;
+    }
+
+    /** Private chat with the audio file attached. jid null is WhatsApp's own picker, still not the system sheet. */
+    static VoiceShare voiceToJid(Context c, String pkg, File file, String mime, String jid) {
         Uri uri = FileProvider.getUriForFile(c, c.getPackageName() + AUTHORITY_SUFFIX, file);
         Intent i = new Intent(Intent.ACTION_SEND).setPackage(pkg).setType(mime).putExtra(Intent.EXTRA_STREAM, uri);
+        if (jid != null && !jid.isEmpty()) i.putExtra("jid", jid);
         i.setClipData(ClipData.newRawUri("voice", uri));
         i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-        return i;
+        return new VoiceShare(i, uri);
+    }
+
+    static final class VoiceShare {
+        final Intent intent;
+        final Uri uri;
+        VoiceShare(Intent intent, Uri uri) { this.intent = intent; this.uri = uri; }
     }
 
     private WhatsAppShare() {}

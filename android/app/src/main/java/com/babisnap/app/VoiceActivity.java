@@ -38,6 +38,8 @@ public class VoiceActivity extends Activity {
     private SpeechRecognizer rec; private View logo, halo; private TextView status, partial;
     private int listenRetries;
     private WhatsAppCapture waAudio;
+    private boolean waRecording;
+    private long waRecStart, waQuietMs;
     private boolean waPending, waHandedOff, waLeft, waCaptureGaveUp, waConfirming, waGroup, waAskingContacts;
     private Runnable waCommit;
     private String waText = "";
@@ -110,6 +112,7 @@ public class VoiceActivity extends Activity {
         draftId = null; parsed = null; spoken = null; spokenTags = new ArrayList<>();
         jobClientId = null;
         listenRetries = 0; waCaptureGaveUp = false;
+        stopVoiceTake();
         heard.clear();
         beginListenUi();
     }
@@ -534,7 +537,7 @@ public class VoiceActivity extends Activity {
     }
 
     private void done(String msg) {
-        cardClosed = true; ui.removeCallbacks(closeCard); ui.removeCallbacks(commit); ui.removeCallbacks(pickerTimeout); ui.removeCallbacks(waExpire); ui.removeCallbacks(callExpire);
+        cardClosed = true; stopVoiceTake(); ui.removeCallbacks(closeCard); ui.removeCallbacks(commit); ui.removeCallbacks(pickerTimeout); ui.removeCallbacks(waExpire); ui.removeCallbacks(callExpire);
         if (waAnim != null) waAnim.cancel();
         if (callAnim != null) callAnim.cancel();
         if (!waHandedOff) discardWa();
@@ -542,7 +545,7 @@ public class VoiceActivity extends Activity {
         if (!isFinishing()) finish();
     }
 
-    /** The chat gets the transcript. A second recorder is not started beside the recognizer. */
+    /** The recognizer owns the mic. A voice take starts only after the recipient is known. */
     private void startWaCaptureIfWanted() {}
 
     private void stopWaCapture() { if (waAudio != null) waAudio.stop(); }
@@ -571,6 +574,7 @@ public class VoiceActivity extends Activity {
     private void cancelWhatsApp(String toast) {
         if (waHandedOff) return;
         waPending = false;
+        stopVoiceTake();
         ui.removeCallbacks(waExpire);
         if (waAnim != null) waAnim.cancel();
         discardWa();
@@ -686,16 +690,163 @@ public class VoiceActivity extends Activity {
         box.setVisibility(View.VISIBLE);
     }
 
-    /** One contact, on the meeting card. The countdown is CardFlow.UNDO_MS, then the chat opens. */
+    /** One contact. Transcript opens the text card. Voice records first. Both offers the two buttons. */
     private void showWaDirect(WhatsAppRecipients.Contact person, String body) {
         waGroup = false;
         waPerson = person;
         waGroupName = "";
         waBody = body == null ? "" : body;
         waText = waBody;
-        paintWaCard(WhatsAppRecipients.cardHeadline(person), person.pretty().isEmpty() ? "וואטסאפ" : person.pretty(),
+        WhatsAppLogic.Mode mode = Core.whatsAppMode(this);
+        if (WhatsAppLogic.afterMatch(mode) == WhatsAppLogic.AfterMatch.RECORD) {
+            beginVoiceTake();
+            return;
+        }
+        showTranscriptCard(mode == WhatsAppLogic.Mode.BOTH);
+    }
+
+    private void showTranscriptCard(boolean choice) {
+        paintWaCard(WhatsAppRecipients.cardHeadline(waPerson), waPerson != null && !waPerson.pretty().isEmpty() ? waPerson.pretty() : "וואטסאפ",
             waBody.isEmpty() ? "אין טקסט" : waBody, true);
+        if (choice) addWaChoiceButtons();
         waCommit = this::openDirectChat;
+    }
+
+    private void addWaChoiceButtons() {
+        LinearLayout actions = findViewById(R.id.call_actions);
+        actions.removeAllViews();
+        actions.addView(waButton(WhatsAppLogic.BTN_SEND_TEXT, v -> runWaCommit()));
+        actions.addView(waButton(WhatsAppLogic.BTN_RECORD, v -> {
+            stopVoiceTake();
+            ui.removeCallbacks(waExpire);
+            if (waAnim != null) waAnim.cancel();
+            waConfirming = false;
+            beginVoiceTake();
+        }));
+        actions.setVisibility(View.VISIBLE);
+    }
+
+    private TextView waButton(String label, View.OnClickListener tap) {
+        TextView button = new TextView(this);
+        button.setText(label);
+        button.setContentDescription(label);
+        button.setGravity(Gravity.CENTER);
+        button.setTextColor(0xFFFFFFFF);
+        button.setTextSize(15);
+        button.setTypeface(Typeface.DEFAULT_BOLD);
+        int h = InviteViews.dp(this, 48);
+        button.setMinHeight(h);
+        button.setMinimumHeight(h);
+        button.setBackgroundResource(R.drawable.pill_purple);
+        button.setOnClickListener(tap);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        lp.topMargin = InviteViews.dp(this, 8);
+        button.setLayoutParams(lp);
+        return button;
+    }
+
+    /** MediaRecorder only, after speech recognition has finished and the contact is known. */
+    private void beginVoiceTake() {
+        stopVoiceTake();
+        waRecording = true;
+        waConfirming = false;
+        ui.removeCallbacks(waExpire);
+        if (waAnim != null) waAnim.cancel();
+        String who = waPerson == null ? "" : waPerson.label();
+        paintWaCard("וואטסאפ · מקליט קול", who.isEmpty() ? "וואטסאפ" : who,
+            "ההקלטה נעצרת אחרי שקט קצר", false);
+        LinearLayout actions = findViewById(R.id.call_actions);
+        actions.removeAllViews();
+        actions.addView(waButton(WhatsAppLogic.BTN_STOP, v -> finishVoiceTake()));
+        actions.setVisibility(View.VISIBLE);
+        beepThenRecord();
+    }
+
+    private void beepThenRecord() {
+        try {
+            android.media.ToneGenerator tone = new android.media.ToneGenerator(android.media.AudioManager.STREAM_NOTIFICATION, 80);
+            tone.startTone(android.media.ToneGenerator.TONE_PROP_BEEP, 160);
+            ui.postDelayed(() -> { try { tone.release(); } catch (RuntimeException ignored) {} }, 400);
+        } catch (RuntimeException ignored) {}
+        ui.postDelayed(startVoiceRecorder, 450);
+    }
+
+    private final Runnable startVoiceRecorder = this::runVoiceRecorder;
+    private final Runnable voiceTick = this::runVoiceTick;
+
+    private void runVoiceRecorder() {
+        if (!waRecording || isFinishing() || cardClosed) return;
+        if (waAudio == null) waAudio = new WhatsAppCapture();
+        if (!waAudio.start(this)) {
+            voiceFailed();
+            return;
+        }
+        waRecStart = android.os.SystemClock.elapsedRealtime();
+        waQuietMs = 0;
+        ui.postDelayed(voiceTick, 250);
+    }
+
+    private void runVoiceTick() {
+        if (!waRecording || waAudio == null || !waAudio.isRecording()) return;
+        long now = android.os.SystemClock.elapsedRealtime();
+        waQuietMs = WhatsAppLogic.quietAfter(waQuietMs, waAudio.maxAmplitude(), 250);
+        if (WhatsAppLogic.voiceShouldStop(now - waRecStart, waQuietMs, false)) finishVoiceTake();
+        else ui.postDelayed(voiceTick, 250);
+    }
+
+    private void finishVoiceTake() {
+        boolean was = waRecording;
+        stopVoiceTake();
+        if (!was) return;
+        if (waAudio != null) waAudio.stop();
+        if (waAudio != null && waAudio.ready()) showVoiceCard();
+        else voiceFailed();
+    }
+
+    private void voiceFailed() {
+        stopVoiceTake();
+        Toast.makeText(this, WhatsAppLogic.RECORD_FAILED, Toast.LENGTH_LONG).show();
+        if (waAudio != null) { waAudio.delete(); waAudio = null; }
+        showTranscriptCard(false);
+    }
+
+    private void showVoiceCard() {
+        String who = waPerson == null ? "" : waPerson.label();
+        paintWaCard(WhatsAppRecipients.cardHeadline(waPerson), who.isEmpty() ? "וואטסאפ" : who,
+            "קובץ שמע מוכן. בוואטסאפ לוחצים שלח", true);
+        waCommit = this::openVoiceChat;
+    }
+
+    private void stopVoiceTake() {
+        waRecording = false;
+        ui.removeCallbacks(startVoiceRecorder);
+        ui.removeCallbacks(voiceTick);
+    }
+
+    /** Attach the file to the private chat. A failed jid opens WhatsApp's own picker with the same file. */
+    private void openVoiceChat() {
+        if (!waPending || waHandedOff || waPerson == null || waAudio == null || !waAudio.ready()) {
+            openDirectChat();
+            return;
+        }
+        ui.removeCallbacks(waExpire);
+        if (waAnim != null) waAnim.cancel();
+        String pkg = WhatsAppShare.resolvePackage(this);
+        String jid = WhatsAppRecipients.contactJid(waPerson.digits());
+        if (pkg == null) {
+            Toast.makeText(this, "וואטסאפ לא מותקן במכשיר", Toast.LENGTH_LONG).show();
+            return;
+        }
+        WhatsAppShare.VoiceShare aimed = WhatsAppShare.voiceToJid(this, pkg, waAudio.file(), waAudio.mime(), jid);
+        waUri = aimed.uri;
+        try { grantUriPermission(pkg, aimed.uri, Intent.FLAG_GRANT_READ_URI_PERMISSION); }
+        catch (RuntimeException ignored) {}
+        if (jid != null && startWa(aimed.intent)) return;
+        WhatsAppShare.VoiceShare picker = WhatsAppShare.voiceToJid(this, pkg, waAudio.file(), waAudio.mime(), null);
+        waUri = picker.uri;
+        if (startWa(picker.intent)) return;
+        Toast.makeText(this, "וואטסאפ לא נפתח", Toast.LENGTH_LONG).show();
     }
 
     /** Group name on the meeting card. WhatsApp's own forward picker is where the group is searched. */

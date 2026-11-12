@@ -75,8 +75,61 @@ public class WhatsAppLogicTest {
         assertEquals("תמלול", WhatsAppLogic.modeLabel(WhatsAppLogic.Mode.TRANSCRIPT));
         assertEquals(0, WhatsAppLogic.modeIndex(WhatsAppLogic.Mode.BOTH));
         assertTrue(WhatsAppLogic.modeHint(WhatsAppLogic.Mode.BOTH).contains("רק"));
+        assertTrue(WhatsAppLogic.modeHint(WhatsAppLogic.Mode.VOICE).contains("קובץ שמע"));
+        assertTrue(WhatsAppLogic.modeHint(WhatsAppLogic.Mode.VOICE).contains("לא כהודעה קולית"));
+        assertTrue(WhatsAppLogic.modeHint(WhatsAppLogic.Mode.TRANSCRIPT).contains("שלח"));
+        assertTrue(WhatsAppLogic.modeHint(WhatsAppLogic.Mode.BOTH).contains("שלח תמלול"));
         assertEquals("הודעת קול", WhatsAppLogic.preview("  "));
         assertEquals("לדני", WhatsAppLogic.preview(" לדני "));
+    }
+
+    @Test public void voiceRecordsOnlyAfterTheRecipientAndFallsBackToText() {
+        assertEquals(WhatsAppLogic.AfterMatch.TEXT_CARD, WhatsAppLogic.afterMatch(WhatsAppLogic.Mode.TRANSCRIPT));
+        assertEquals(WhatsAppLogic.AfterMatch.RECORD, WhatsAppLogic.afterMatch(WhatsAppLogic.Mode.VOICE));
+        assertEquals(WhatsAppLogic.AfterMatch.CHOICE_CARD, WhatsAppLogic.afterMatch(WhatsAppLogic.Mode.BOTH));
+        assertTrue(WhatsAppLogic.countdownSendsTranscript(WhatsAppLogic.Mode.TRANSCRIPT, false));
+        assertTrue(WhatsAppLogic.countdownSendsTranscript(WhatsAppLogic.Mode.BOTH, false));
+        assertTrue(WhatsAppLogic.countdownSendsTranscript(WhatsAppLogic.Mode.VOICE, false));
+        assertFalse(WhatsAppLogic.countdownSendsTranscript(WhatsAppLogic.Mode.VOICE, true));
+        assertTrue(WhatsAppLogic.fallbackToTranscript(false));
+        assertFalse(WhatsAppLogic.fallbackToTranscript(true));
+        assertEquals("שלח תמלול", WhatsAppLogic.BTN_SEND_TEXT);
+        assertEquals("הקלט קול", WhatsAppLogic.BTN_RECORD);
+        assertEquals("עצור", WhatsAppLogic.BTN_STOP);
+        assertTrue(WhatsAppLogic.RECORD_FAILED.contains("תמלול"));
+    }
+
+    @Test public void voiceTakeStopsOnSilenceCapOrTheStopButton() {
+        assertFalse(WhatsAppLogic.voiceShouldStop(1000, 500, false));
+        assertTrue(WhatsAppLogic.voiceShouldStop(1000, WhatsAppLogic.VOICE_SILENCE_MS, false));
+        assertTrue(WhatsAppLogic.voiceShouldStop(WhatsAppLogic.VOICE_CAP_MS, 0, false));
+        assertTrue(WhatsAppLogic.voiceShouldStop(100, 0, true));
+        assertEquals(0L, WhatsAppLogic.quietAfter(1500, WhatsAppLogic.VOICE_QUIET, 250));
+        assertEquals(1750L, WhatsAppLogic.quietAfter(1500, WhatsAppLogic.VOICE_QUIET - 1, 250));
+        assertEquals(2000L, WhatsAppLogic.VOICE_SILENCE_MS);
+        assertEquals(60000L, WhatsAppLogic.VOICE_CAP_MS);
+    }
+
+    @Test public void voiceShareTargetsTheJidAndDoesNotRecordBesideSpeech() throws Exception {
+        String share = new String(Files.readAllBytes(Path.of("src/main/java/com/babisnap/app/WhatsAppShare.java")), StandardCharsets.UTF_8);
+        int method = share.indexOf("static VoiceShare voiceToJid");
+        assertTrue(method > 0);
+        String body = share.substring(method);
+        assertTrue(body.contains("EXTRA_STREAM"));
+        assertTrue(body.contains("\"jid\""));
+        assertTrue(body.contains("FLAG_GRANT_READ_URI_PERMISSION"));
+        assertTrue(body.contains("setPackage(pkg)"));
+        assertFalse(body.contains("createChooser"));
+        String voice = new String(Files.readAllBytes(Path.of("src/main/java/com/babisnap/app/VoiceActivity.java")), StandardCharsets.UTF_8);
+        int stub = voice.indexOf("void startWaCaptureIfWanted()");
+        int next = voice.indexOf("void stopWaCapture");
+        assertTrue(stub > 0 && next > stub);
+        String stubBody = voice.substring(stub, next);
+        assertFalse(stubBody.contains("MediaRecorder"));
+        assertFalse(stubBody.contains(".start("));
+        assertTrue(voice.contains("beginVoiceTake"));
+        assertTrue(voice.contains("WhatsAppShare.voiceToJid"));
+        assertTrue(voice.contains("WhatsAppLogic.RECORD_FAILED"));
     }
 
     @Test public void fileProviderIsPrivateCacheOnly() throws Exception {

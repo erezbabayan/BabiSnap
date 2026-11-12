@@ -52,10 +52,55 @@ public final class WhatsAppLogic {
 
     public static String modeLabel(Mode mode) { return MODE_LABELS[modeIndex(mode)]; }
 
+    /** What happens after the private recipient is known. Groups stay on the text picker. */
+    public enum AfterMatch { TEXT_CARD, RECORD, CHOICE_CARD }
+
+    /** Voice-only records first. Both shows the choice card. Transcript goes straight to the text card. */
+    public static AfterMatch afterMatch(Mode mode) {
+        if (mode == Mode.VOICE) return AfterMatch.RECORD;
+        if (mode == Mode.BOTH) return AfterMatch.CHOICE_CARD;
+        return AfterMatch.TEXT_CARD;
+    }
+
+    /** The 5s countdown sends the transcript, except a finished voice take which sends the file. */
+    public static boolean countdownSendsTranscript(Mode mode, boolean voiceFileReady) {
+        if (mode == Mode.VOICE && voiceFileReady) return false;
+        return true;
+    }
+
+    /** A missing or empty recording is not a dead end: the transcript is what gets shared. */
+    public static boolean fallbackToTranscript(boolean voiceFileReady) { return !voiceFileReady; }
+
+    public static final String BTN_SEND_TEXT = "שלח תמלול";
+    public static final String BTN_RECORD = "הקלט קול";
+    public static final String BTN_STOP = "עצור";
+    public static final String RECORD_FAILED = "ההקלטה לא נשמרה. נפתח את התמלול במקום";
+
+    /** Quiet stretch that ends a voice take, and the hard cap. Not the speech-recognizer silence. */
+    public static final long VOICE_SILENCE_MS = 2000L;
+    public static final long VOICE_CAP_MS = 60000L;
+    /** MediaRecorder max amplitude at or above this counts as speech. Below it, silence accumulates. */
+    public static final int VOICE_QUIET = 500;
+
+    public static boolean voiceShouldStop(long elapsedMs, long quietMs, boolean tappedStop) {
+        if (tappedStop) return true;
+        if (elapsedMs >= VOICE_CAP_MS) return true;
+        return quietMs >= VOICE_SILENCE_MS;
+    }
+
+    /** Reset the quiet clock when the mic hears something. Otherwise add the poll interval. */
+    public static long quietAfter(long quietMs, int amplitude, long deltaMs) {
+        if (amplitude >= VOICE_QUIET) return 0L;
+        long next = quietMs + Math.max(0L, deltaMs);
+        return next < 0 ? Long.MAX_VALUE : next;
+    }
+
     public static String modeHint(Mode mode) {
-        if (mode == Mode.VOICE) return "הודעת קול בלבד";
-        if (mode == Mode.TRANSCRIPT) return "הטקסט בלבד";
-        return "שני כפתורים — נשלח רק מה שבוחרים";
+        if (mode == Mode.VOICE)
+            return "אחרי בחירת הנמען מוקלט קול. הקובץ נפתח כקובץ שמע, לא כהודעה קולית. השליחה רק בלחיצה על שלח בוואטסאפ";
+        if (mode == Mode.TRANSCRIPT)
+            return "הטקסט נפתח מוכן בצ'אט של הנמען. השליחה רק בלחיצה על שלח בוואטסאפ";
+        return "שני כפתורים: «שלח תמלול» ו«הקלט קול». בלי בחירה נשלח התמלול. קול מגיע כקובץ שמע, לא כהודעה קולית. השליחה רק בלחיצה על שלח בוואטסאפ";
     }
 
     public static boolean wantsVoice(Mode mode) { return mode == Mode.VOICE || mode == Mode.BOTH; }
