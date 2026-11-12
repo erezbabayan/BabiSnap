@@ -237,6 +237,18 @@ public class CallDialTest {
         WhatsAppRecipients.Matches heard = CallDial.matchNames(Arrays.asList("רני", "רוני"), Arrays.asList(rani, roni));
         assertTrue(heard.one());
         assertEquals("רני", heard.hits.get(0).displayName);
+        WhatsAppRecipients.Contact yechiel = new WhatsAppRecipients.Contact("משה יחיאל", "משה", "", "",
+            Collections.singletonList(mobile("0501111111")));
+        WhatsAppRecipients.Contact otherMoshe = new WhatsAppRecipients.Contact("משה כהן", "משה", "", "",
+            Collections.singletonList(mobile("0502222222")));
+        assertTrue(CallDial.match("משה יחיאל", Arrays.asList(otherMoshe, yechiel)).one());
+        assertEquals("משה יחיאל", CallDial.match("משה יחיאל", Arrays.asList(otherMoshe, yechiel)).hits.get(0).displayName);
+        WhatsAppRecipients.Contact efrat = new WhatsAppRecipients.Contact("אלחנן פרומן אפרת", "אלחנן", "", "",
+            Collections.singletonList(mobile("0521111111")));
+        WhatsAppRecipients.Contact otherEl = new WhatsAppRecipients.Contact("אלחנן לוי", "אלחנן", "", "",
+            Collections.singletonList(mobile("0522222222")));
+        assertTrue(CallDial.match("אלחנן אפרת", Arrays.asList(otherEl, efrat)).one());
+        assertEquals("אלחנן פרומן אפרת", CallDial.match("אלחנן אפרת", Arrays.asList(otherEl, efrat)).hits.get(0).displayName);
         assertEquals(5000L, CallDial.CONFIRM_MS);
     }
 
