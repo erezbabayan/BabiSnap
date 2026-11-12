@@ -22,24 +22,25 @@ public class RecordLaunchTest {
         assertTrue(RecordLaunch.HINT.contains("אין הקלטה נוספת"));
     }
 
-    @Test public void launcherEntryIsLabeledAndTheMainActivityStaysSettings() throws Exception {
+    @Test public void sideKeyLaunchIntentIsTheRecorderAndSettingsStaysSecond() throws Exception {
         String manifest = text("src/main/AndroidManifest.xml");
-        int main = manifest.indexOf("android:name=\".MainActivity\"");
+        java.util.List<String> launchers = launcherNames(manifest);
+        assertEquals(java.util.Arrays.asList(".RecordEntryActivity", ".MainActivity"), launchers);
+        assertFalse(manifest.contains("activity-alias"));
         int record = manifest.indexOf("android:name=\".RecordEntryActivity\"");
-        int alias = manifest.indexOf("android:name=\".RecordLauncher\"");
-        assertTrue(main > 0 && record > main && alias > record);
+        int main = manifest.indexOf("android:name=\".MainActivity\"");
+        assertTrue(record > 0 && record < main);
+        String recordTag = manifest.substring(record, manifest.indexOf("</activity>", record));
+        assertTrue(recordTag.contains("android:label=\"@string/record_entry_label\""));
+        assertTrue(recordTag.contains("android:icon=\"@drawable/record_tile\""));
+        assertTrue(recordTag.contains("android.intent.action.ASSIST"));
+        assertTrue(recordTag.contains("android.intent.action.VOICE_COMMAND"));
+        assertTrue(recordTag.contains("android.intent.category.LAUNCHER"));
         String mainTag = manifest.substring(main, manifest.indexOf("</activity>", main));
         assertTrue(mainTag.contains("android:label=\"@string/app_name\""));
+        assertTrue(mainTag.contains("android:icon=\"@mipmap/ic_launcher\""));
         assertTrue(mainTag.contains("android.intent.category.LAUNCHER"));
         assertFalse(mainTag.contains("record_entry_label"));
-        assertFalse(mainTag.contains("launchMode=\"singleTask\""));
-        String aliasTag = manifest.substring(alias, manifest.indexOf("</activity-alias>"));
-        assertTrue(aliasTag.contains("android:label=\"@string/record_entry_label\""));
-        assertTrue(aliasTag.contains("android:icon=\"@drawable/record_tile\""));
-        assertTrue(aliasTag.contains("android:targetActivity=\".RecordEntryActivity\""));
-        assertTrue(aliasTag.contains("android.intent.category.LAUNCHER"));
-        assertTrue(manifest.contains("android.intent.action.ASSIST"));
-        assertTrue(manifest.contains("android.intent.action.VOICE_COMMAND"));
         String strings = text("src/main/res/values/strings.xml");
         assertTrue(strings.contains(">BabiSnap הקלטה<"));
         String settings = text("src/main/java/com/babisnap/app/MainActivity.java");
@@ -58,6 +59,33 @@ public class RecordLaunchTest {
         assertTrue(voice.contains("RecordLaunch.settings"));
         String listen = text("src/main/res/layout/activity_listen.xml");
         assertTrue(listen.contains("@+id/settings"));
+    }
+
+    /** Names of activities and aliases whose own tag contains a LAUNCHER category, in manifest order. */
+    private static java.util.List<String> launcherNames(String manifest) {
+        java.util.List<String> names = new java.util.ArrayList<>();
+        int from = 0;
+        while (from < manifest.length()) {
+            int activity = manifest.indexOf("<activity ", from);
+            int alias = manifest.indexOf("<activity-alias ", from);
+            int start = activity < 0 ? alias : alias < 0 ? activity : Math.min(activity, alias);
+            if (start < 0) break;
+            boolean isAlias = start == alias;
+            int openEnd = manifest.indexOf('>', start);
+            boolean selfClosing = openEnd > start && manifest.charAt(openEnd - 1) == '/';
+            int end = selfClosing
+                    ? openEnd
+                    : manifest.indexOf(isAlias ? "</activity-alias>" : "</activity>", openEnd);
+            if (end < 0) break;
+            String tag = manifest.substring(start, end);
+            if (tag.contains("android.intent.category.LAUNCHER")) {
+                int nameAt = tag.indexOf("android:name=\"");
+                int nameEnd = tag.indexOf('"', nameAt + 14);
+                names.add(tag.substring(nameAt + 14, nameEnd));
+            }
+            from = end + 1;
+        }
+        return names;
     }
 
     private static String text(String path) throws Exception {
