@@ -28,8 +28,8 @@
 - לוגים בלי תמליל, בלי שם נמען ובלי מספר טלפון.
 
 ## כפתור צד ועוזר דיגיטלי
-- «BabiSnap הקלטה» הוא activity מיוצא עם `MAIN`/`LAUNCHER`, וגם `ASSIST` ו־`VOICE_COMMAND`. הוא תמיד פותח את מסך ההקלטה, גם בלחיצה שנייה כשהוא כבר חי (`singleTask` / `onNewIntent`).
-- פתיחת האייקון הראשי מתחילה הקלטה כשהמתג דלוק (ברירת מחדל). `MainActivity` הוא `singleTask`, אז לחיצה כפולה מכפתור הצד בזמן שהאפליקציה ברקע מגיעה ל־`onNewIntent` ועוברת להקלטה במקום להישאר על ההגדרות. חזרה מהאחרונים, התראה, או גלגל השיניים לא מתחילים הקלטה.
+- האייקון «BabiSnap» הוא `MainActivity` בלבד. הוא פותח את ההגדרות ולא מתחיל הקלטה. אין מתג «פתיחת BabiSnap מתחילה הקלטה מיד».
+- «BabiSnap הקלטה» הוא `activity-alias` עם אייקון המיקרופון, `MAIN`/`LAUNCHER`, ותווית משלו. הוא פותח את `RecordEntryActivity`, שתמיד עובר למסך ההקלטה, גם בלחיצה שנייה (`singleTask` / `onNewIntent`). `ASSIST` ו־`VOICE_COMMAND` על אותה פעילות עושים אותו דבר.
 - `VoiceInteractionService` ו־`onShow` פותחים את `VoiceActivity`, לא את ההגדרות. הסשן לא קורא תוכן מסך ולא שומר קול. שירות הזיהוי הנלווה מחזיר שגיאה מיד ולא פותח את המיקרופון.
 - אין הרשאה חדשה. `BIND_VOICE_INTERACTION` ו־`BIND_RECOGNITION_SERVICE` הן הרשאות על השירות, לא `uses-permission`.
 
