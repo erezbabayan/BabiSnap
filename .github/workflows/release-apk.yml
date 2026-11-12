@@ -1,0 +1,102 @@
+# One-shot: build a signed release APK and publish GitHub Release v2.32.
+# Uses SNAP_REGISTRY_CLIENT_KEY plus the VoiceCal keystore secrets. Never reads
+# SNAP_REGISTRY_ADMIN_KEY. Remove this workflow before merging to main.
+name: Release – BabiSnap APK
+
+on:
+  push:
+    branches:
+      - cursor/release-v2-32
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-apk-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: signed release APK
+    if: github.repository == 'erezbabayan/BabiSnap'
+    runs-on: ubuntu-latest
+    env:
+      SNAP_REGISTRY_CLIENT_KEY: ${{ secrets.SNAP_REGISTRY_CLIENT_KEY }}
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+      ANDROID_KEYSTORE_FILE: ${{ secrets.ANDROID_KEYSTORE_FILE }}
+      ANDROID_KEYSTORE_JKS_BASE64: ${{ secrets.ANDROID_KEYSTORE_JKS_BASE64 }}
+      ANDROID_KEYSTORE_P12_BASE64: ${{ secrets.ANDROID_KEYSTORE_P12_BASE64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_KEYSTORE_STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_STORE_PASSWORD }}
+      ANDROID_KEYSTORE_KEY_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_KEY_PASSWORD }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      ANDROID_KEYSTORE_ALIAS: ${{ secrets.ANDROID_KEYSTORE_ALIAS }}
+      ANDROID_KEYSTORE_KEY_ALIAS: ${{ secrets.ANDROID_KEYSTORE_KEY_ALIAS }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEYSTORE_PROPERTIES: ${{ secrets.ANDROID_KEYSTORE_PROPERTIES }}
+      ANDROID_KEYSTORE_PROPS: ${{ secrets.ANDROID_KEYSTORE_PROPS }}
+      ANDROID_KEYSTORE_PROPS_BASE64: ${{ secrets.ANDROID_KEYSTORE_PROPS_BASE64 }}
+    steps:
+      - name: משיכת הקוד
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Prepare signing material from repo secrets
+        run: python3 .github/workflows/prepare_release_signing.py
+
+      - name: Assemble signed release
+        working-directory: android
+        run: ./gradlew --no-daemon assembleRelease
+        env:
+          VOICECAL_KEYSTORE_PROPS: ${{ runner.temp }}/voicecal-keystore.properties
+
+      - name: Verify APK
+        run: python3 .github/workflows/verify_release_apk.py
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: BabiSnap-apk
+          path: ${{ runner.temp }}/BabiSnap.apk
+          if-no-files-found: error
+
+      - name: Publish GitHub Release v2.32
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          apk="${RUNNER_TEMP}/BabiSnap.apk"
+          notes="${RUNNER_TEMP}/release-notes.md"
+          cat > "$notes" << 'EOF'
+          **עברית**
+          - שם מדויק ויחיד, כולל כינוי שמור כמו «תמרי», נפתח ישר בכרטיס ל־5 שניות גם אם בספר יש שם דומה (תמר, תמר כהן, או רוני כשנאמר רני)
+          - בורר נפתח רק כשאין התאמה מדויקת (למשל רון כששמורה רק רוני), או כשכמה אנשי קשר נושאים אותו שם. אם אין התאמה בכלל, נפתח בורר עם חיפוש
+          - הודעות וואטסאפ פרטיות נשארות כבויות כברירת מחדל. קבוצות וואטסאפ כבויות לעת עתה
+
+          **English**
+          - A unique exact name, including a saved nickname such as תמרי, opens the 5-second confirm card even when a similar name is saved (תמר, תמר כהן, or רוני when רני was said)
+          - The picker opens only when there is no exact match, such as רון when only רוני is saved, or when several contacts share that exact name. No match at all opens the searchable picker
+          - Private WhatsApp stays off by default. WhatsApp groups stay disabled for now
+          EOF
+          # The heredoc above is indented; strip the 10-space prefix from this YAML block.
+          sed -i 's/^          //' "$notes"
+          if gh release view v2.32 >/dev/null 2>&1; then
+            gh release upload v2.32 "$apk" --clobber
+            gh release edit v2.32 --title "BabiSnap v2.32" --notes-file "$notes"
+          else
+            gh release create v2.32 "$apk" \
+              --title "BabiSnap v2.32" \
+              --notes-file "$notes" \
+              --target "$GITHUB_SHA" \
+              --latest
+          fi
+          gh release view v2.32 --json url,assets --jq '{url:.url, assets:[.assets[].name]}'
