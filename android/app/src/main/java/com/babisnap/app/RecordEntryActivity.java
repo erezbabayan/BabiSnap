@@ -4,13 +4,23 @@ import android.app.Activity;
 import android.os.Bundle;
 
 /**
- * Launcher entry «BabiSnap הקלטה» for a side-button double press, and the ASSIST / VOICE_COMMAND
- * activity. Starts the home-button recording, or Settings when the microphone is not granted.
+ * «BabiSnap הקלטה», plus ASSIST and VOICE_COMMAND. Always the recording screen,
+ * including a second side-key press while this entry is already alive.
  */
 public class RecordEntryActivity extends Activity {
     @Override protected void onCreate(Bundle saved) {
         super.onCreate(saved);
-        startActivity(RecordLaunch.intent(this));
+        openRecording();
+    }
+
+    @Override protected void onNewIntent(android.content.Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        openRecording();
+    }
+
+    private void openRecording() {
+        startActivity(RecordLaunch.recording(this));
         finish();
     }
 }

@@ -11,50 +11,73 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 public class RecordLaunchTest {
-    @Test public void micGrantedStartsRecordingOtherwiseSettings() {
-        assertEquals(VoiceActivity.class.getName(), RecordLaunch.target(true));
-        assertEquals(MainActivity.class.getName(), RecordLaunch.target(false));
+    @Test public void recordingScreenIsNeverTheSettingsScreen() {
+        assertEquals(VoiceActivity.class.getName(), RecordLaunch.recordingClass());
+        assertTrue(RecordLaunch.DEFAULT_AUTO);
+        assertEquals("no_auto_record", RecordLaunch.EXTRA_NO_AUTO_RECORD);
         assertEquals(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK, RecordLaunch.FLAGS);
-        assertEquals("ask_mic", RecordLaunch.EXTRA_ASK_MIC);
         assertTrue(RecordLaunch.HINT.contains("BabiSnap הקלטה"));
+        assertTrue(RecordLaunch.HINT.contains("פתיחת BabiSnap מתחילה הקלטה מיד"));
         assertTrue(RecordLaunch.HINT.contains("לחיצה כפולה"));
         assertTrue(RecordLaunch.HINT.contains("עוזר דיגיטלי"));
         assertTrue(RecordLaunch.HINT.contains("מיקרופון"));
         assertTrue(RecordLaunch.HINT.contains("אין הקלטה נוספת"));
     }
 
-    @Test public void sideButtonAndWidgetAreWired() throws Exception {
+    @Test public void launcherOpensRecordingUnlessRecentsGearOrTheToggleIsOff() {
+        assertTrue(RecordLaunch.shouldRecordOnLaunch(true, Intent.ACTION_MAIN, true, false, false, false));
+        assertFalse(RecordLaunch.shouldRecordOnLaunch(false, Intent.ACTION_MAIN, true, false, false, false));
+        assertFalse(RecordLaunch.shouldRecordOnLaunch(true, Intent.ACTION_MAIN, true, true, false, false));
+        assertFalse(RecordLaunch.shouldRecordOnLaunch(true, Intent.ACTION_MAIN, true, false, true, false));
+        assertFalse(RecordLaunch.shouldRecordOnLaunch(true, Intent.ACTION_MAIN, true, false, false, true));
+        assertFalse(RecordLaunch.shouldRecordOnLaunch(true, Intent.ACTION_MAIN, false, false, false, false));
+        assertFalse(RecordLaunch.shouldRecordOnLaunch(true, Intent.ACTION_VIEW, true, false, false, false));
+        assertFalse(RecordLaunch.shouldRecordOnLaunch(true, null, false, false, false, false));
+    }
+
+    @Test public void sideKeyWhileTheAppIsAlreadyRunningStillRecords() {
+        // SystemUI double press: MAIN/LAUNCHER and NEW_TASK, while singleTask delivers onNewIntent.
+        // NEW_TASK itself is not a reason to stay on the main screen.
+        assertTrue(RecordLaunch.shouldRecordOnNewIntent(true, Intent.ACTION_MAIN, true, false, false));
+        assertFalse(RecordLaunch.shouldRecordOnNewIntent(true, Intent.ACTION_MAIN, true, true, false));
+        assertFalse(RecordLaunch.shouldRecordOnNewIntent(true, Intent.ACTION_MAIN, true, false, true));
+        assertFalse(RecordLaunch.shouldRecordOnNewIntent(false, Intent.ACTION_MAIN, true, false, false));
+        assertFalse(RecordLaunch.shouldRecordOnNewIntent(true, null, false, false, false));
+    }
+
+    @Test public void sideButtonAssistantAndWidgetAreWired() throws Exception {
         String manifest = text("src/main/AndroidManifest.xml");
         assertTrue(manifest.contains("android.intent.action.ASSIST"));
         assertTrue(manifest.contains("android.intent.action.VOICE_COMMAND"));
         assertTrue(manifest.contains("android.service.voice.VoiceInteractionService"));
-        assertTrue(manifest.contains("android:permission=\"android.permission.BIND_VOICE_INTERACTION\""));
-        assertFalse(manifest.contains("uses-permission android:name=\"android.permission.BIND_VOICE_INTERACTION\""));
+        assertTrue(manifest.contains("android:launchMode=\"singleTask\""));
         assertTrue(manifest.contains(".RecordEntryActivity"));
-        String strings = text("src/main/res/values/strings.xml");
-        assertTrue(strings.contains("BabiSnap הקלטה"));
         String layout = text("src/main/res/layout/widget_button.xml");
-        assertTrue(layout.contains("56dp"));
-        assertFalse(layout.contains("76dp"));
+        assertTrue(layout.contains("65dp"));
+        assertFalse(layout.contains("56dp"));
         assertTrue(layout.contains("12sp"));
         assertTrue(layout.contains("#FFFFFF"));
-        assertTrue(layout.contains("@string/app_name"));
-        assertTrue(layout.contains("android:maxLines=\"1\""));
-        String voice = text("src/main/res/xml/voice_interaction_service.xml");
-        assertTrue(voice.contains("supportsAssist=\"true\""));
-        assertTrue(voice.contains("BabiSnapSessionService"));
-        assertTrue(voice.contains("BabiSnapRecognition"));
+        String listen = text("src/main/res/layout/activity_listen.xml");
+        assertTrue(listen.contains("@+id/settings"));
+        assertTrue(listen.contains("הגדרות"));
         String session = text("src/main/java/com/babisnap/app/BabiSnapSession.java");
-        assertTrue(session.contains("RecordLaunch.intent"));
+        assertTrue(session.contains("RecordLaunch.recording"));
+        assertFalse(session.contains("MainActivity"));
         assertFalse(session.contains("AssistStructure"));
-        String recognition = text("src/main/java/com/babisnap/app/BabiSnapRecognition.java");
-        assertTrue(recognition.contains("ERROR_CLIENT"));
-        assertFalse(recognition.contains("MediaRecorder"));
-        String widget = text("src/main/java/com/babisnap/app/MicWidget.java");
-        assertTrue(widget.contains("VoiceActivity.class"));
+        String service = text("src/main/java/com/babisnap/app/BabiSnapVoiceService.java");
+        assertTrue(service.contains("onLaunchVoiceAssistFromKeyguard"));
+        assertTrue(service.contains("RecordLaunch.recording"));
+        String entry = text("src/main/java/com/babisnap/app/RecordEntryActivity.java");
+        assertTrue(entry.contains("onNewIntent"));
+        assertTrue(entry.contains("RecordLaunch.recording"));
         String settings = text("src/main/java/com/babisnap/app/MainActivity.java");
-        assertTrue(settings.contains("RecordLaunch.HINT"));
-        assertTrue(settings.contains("RecordLaunch.EXTRA_ASK_MIC"));
+        assertTrue(settings.contains("handoffToRecording"));
+        assertTrue(settings.contains("onNewIntent"));
+        assertTrue(settings.contains("גודל לחצן ההקלטה"));
+        assertTrue(settings.contains("פתיחת BabiSnap מתחילה הקלטה מיד"));
+        assertTrue(settings.contains("ButtonWidget.refresh"));
+        String voice = text("src/main/java/com/babisnap/app/VoiceActivity.java");
+        assertTrue(voice.contains("RecordLaunch.settings"));
     }
 
     private static String text(String path) throws Exception {

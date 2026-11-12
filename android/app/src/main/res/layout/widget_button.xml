@@ -1,8 +1,8 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/root" android:layout_width="match_parent" android:layout_height="match_parent"
     android:orientation="vertical" android:gravity="top|center_horizontal">
-    <!-- Launcher-icon size (62% of the cell, set in ButtonWidget; 56dp fallback), top aligned with icons. -->
-    <ImageView android:id="@+id/mic" android:layout_width="56dp" android:layout_height="56dp" android:layout_marginTop="3dp"
+    <!-- Regular size is 72% of the cell (65dp fallback). ButtonWidget applies the saved percent on API 31+. -->
+    <ImageView android:id="@+id/mic" android:layout_width="65dp" android:layout_height="65dp" android:layout_marginTop="3dp"
         android:src="@drawable/record_tile" android:scaleType="fitCenter" android:adjustViewBounds="true"
         android:contentDescription="@string/widget_button_desc" />
     <TextView android:id="@+id/label" android:layout_width="match_parent" android:layout_height="wrap_content"
