@@ -49,6 +49,7 @@ public class MainActivity extends Activity {
         RecordLaunch.forgetOldPref(Core.prefs(this));
         SnapHeartbeat.onAppOpen(this); // registry: at most once a day, or when the version changed
         TagSync.maybeFetch(this, false); // background, throttled to 12 h
+        MicWidget.refreshAll(this); // large + small widget: same recording-only tap target
         UpdateCheck.maybeCheck(this); // GitHub latest release, at most once a day; dialog only if newer
         setTitle("הגדרות");
         getWindow().setStatusBarColor(PURPLE_DARK);
