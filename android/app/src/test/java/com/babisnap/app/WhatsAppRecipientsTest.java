@@ -342,6 +342,61 @@ public class WhatsAppRecipientsTest {
         assertEquals("רני כהן", full.hits.get(0).displayName);
     }
 
+    @Test public void imaSheliAndFullNameWorkInBothWhatsAppOrders() {
+        WhatsAppRecipients.Contact imaSheli = person("אמא שלי", "אמא", "", mobile("0501111111"));
+        WhatsAppRecipients.Contact imaDani = person("אמא של דני", "אמא", "", mobile("0502222222"));
+        WhatsAppRecipients.Contact ima = person("אמא", "אמא", "", mobile("0503333333"));
+        List<WhatsAppRecipients.Contact> imaBook = Arrays.asList(imaSheli, imaDani, ima);
+
+        WhatsAppRecipients.Resolution channelFirst = WhatsAppRecipients.resolve("וואטסאפ לאמא שלי היי", imaBook);
+        assertEquals("אמא שלי", channelFirst.command.name);
+        assertEquals("היי", channelFirst.command.body);
+        assertTrue(channelFirst.matches.one());
+        assertEquals("אמא שלי", channelFirst.matches.hits.get(0).displayName);
+
+        WhatsAppRecipients.Resolution withBody = WhatsAppRecipients.resolve("וואטסאפ לאמא שלי מה שלומך", imaBook);
+        assertEquals("אמא שלי", withBody.command.name);
+        assertEquals("מה שלומך", withBody.command.body);
+        assertTrue(withBody.matches.one());
+
+        WhatsAppRecipients.Resolution channelAfter = WhatsAppRecipients.resolve("הודעה לאמא שלי בוואטסאפ", imaBook);
+        assertEquals("אמא שלי", channelAfter.command.name);
+        assertTrue(channelAfter.matches.one());
+        assertEquals("אמא שלי", channelAfter.matches.hits.get(0).displayName);
+
+        WhatsAppRecipients.Contact abaSheli = person("אבא שלי", "אבא", "", mobile("0521111111"));
+        WhatsAppRecipients.Contact aba = person("אבא", "אבא", "", mobile("0522222222"));
+        WhatsAppRecipients.Resolution abaHits = WhatsAppRecipients.resolve("וואטסאפ לאבא שלי מה שלומך", Arrays.asList(aba, abaSheli));
+        assertTrue(abaHits.matches.one());
+        assertEquals("אבא שלי", abaHits.matches.hits.get(0).displayName);
+        assertEquals("מה שלומך", abaHits.command.body);
+
+        // שלי is not a diminutive of של, so both "אמא" contacts stay a picker — not a unique "אמא של דני"
+        WhatsAppRecipients.Matches noDiminutive = WhatsAppRecipients.match("אמא שלי", Arrays.asList(imaDani, ima));
+        assertEquals(WhatsAppRecipients.MatchCode.MANY, noDiminutive.code);
+        assertFalse(noDiminutive.one());
+        assertEquals(2, noDiminutive.hits.size());
+
+        WhatsAppRecipients.Contact efrat = person("אלחנן פרומן אפרת", "אלחנן", "", mobile("0521111111"));
+        WhatsAppRecipients.Contact el1 = person("אלחנן כהן", "אלחנן", "", mobile("0522222222"));
+        WhatsAppRecipients.Contact el2 = person("אלחנן לוי", "אלחנן", "", mobile("0523333333"));
+        List<WhatsAppRecipients.Contact> els = Arrays.asList(el1, efrat, el2);
+        WhatsAppRecipients.Resolution after = WhatsAppRecipients.resolve("הודעה לאלחנן אפרת בוואטסאפ", els);
+        assertTrue(after.matches.one());
+        assertEquals("אלחנן פרומן אפרת", after.matches.hits.get(0).displayName);
+        WhatsAppRecipients.Resolution before = WhatsAppRecipients.resolve("וואטסאפ לאלחנן אפרת מה קורה", els);
+        assertTrue(before.matches.one());
+        assertEquals("אלחנן פרומן אפרת", before.matches.hits.get(0).displayName);
+        assertEquals("אלחנן אפרת", before.command.name);
+        assertEquals("מה קורה", before.command.body);
+
+        WhatsAppRecipients.Contact dani = person("דני", "דני", "", mobile("0531111111"));
+        WhatsAppRecipients.Resolution fallback = WhatsAppRecipients.resolve("וואטסאפ לדני שלי היי", Collections.singletonList(dani));
+        assertTrue(fallback.matches.one());
+        assertEquals("דני", fallback.matches.hits.get(0).displayName);
+        assertEquals("היי", fallback.command.body);
+    }
+
     private static WhatsAppRecipients.Contact named(String name, String phone) {
         return new WhatsAppRecipients.Contact(name, name, "", "", Collections.singletonList(mobile(phone)));
     }

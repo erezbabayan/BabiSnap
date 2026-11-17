@@ -199,6 +199,7 @@ public class ClassifierTest {
         assertEquals("מחר בעשר שמירה", Classifier.classify("יומן מחר בעשר שמירה", true).stripped);
         assertEquals("שיעור פרטי", Classifier.stripConnectorShin("שיעור פרטי"));
         assertEquals("שמירה", Classifier.stripConnectorShin("שמירה"));
+        assertEquals("שלי היי", Classifier.stripConnectorShin("שלי היי"));
     }
 
     static final String[] WA_TOKENS = {

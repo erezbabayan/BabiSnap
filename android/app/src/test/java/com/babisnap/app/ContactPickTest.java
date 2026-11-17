@@ -110,6 +110,7 @@ public class ContactPickTest {
         assertTrue(voice.contains("EXTRA_MAX_RESULTS"));
         assertTrue(voice.contains("SilenceDetector.hypotheses"));
         assertTrue(voice.contains("CallDial.matchNames"));
+        assertTrue(voice.contains("WhatsAppRecipients.resolveHeard"));
         assertTrue(voice.contains("שיחה · בחירת איש קשר"));
     }
 

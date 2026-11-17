@@ -57,7 +57,7 @@ public final class CallDial {
     private static final Set<String> FILLER = new HashSet<>(Arrays.asList(
         "עכשיו", "בבקשה", "בדחיפות", "דחוף", "מיד", "מהר", "כבר", "נא", "אנא", "בטלפון", "טלפון", "לי", "לנו"));
     private static final Set<String> STOP = new HashSet<>(Arrays.asList(
-        "לגבי", "על", "בשביל", "כדי", "אחרי", "לפני", "כי", "וגם", "גם", "של", "שלי", "שלנו", "שלו", "שלה", "שלהם", "שלהן"));
+        "לגבי", "על", "בשביל", "כדי", "אחרי", "לפני", "כי", "וגם", "גם", "של", "שלנו", "שלו", "שלה", "שלהם", "שלהן"));
     private static final Set<String> WHEN = new HashSet<>(Arrays.asList(
         "היום", "להיום", "מחר", "למחר", "במחר", "המחר", "מחרתיים",
         "הערב", "הלילה", "הבוקר", "הצהריים",
@@ -219,6 +219,7 @@ public final class CallDial {
             if (n > 0) b.append(' ');
             b.append(w);
             n++;
+            if (w.equals("שלי")) break;
         }
         return b.toString().trim();
     }

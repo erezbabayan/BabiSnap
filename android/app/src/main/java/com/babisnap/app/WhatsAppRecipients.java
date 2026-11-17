@@ -107,6 +107,16 @@ public final class WhatsAppRecipients {
         public boolean one() { return code == MatchCode.ONE && hits.size() == 1; }
     }
 
+    /** A parsed command after the name hypotheses were tried against the contacts. */
+    public static final class Resolution {
+        public final Command command;
+        public final Matches matches;
+        Resolution(Command command, Matches matches) {
+            this.command = command;
+            this.matches = matches == null ? none() : matches;
+        }
+    }
+
     public static boolean isWhatsAppAccount(String type) {
         return "com.whatsapp".equals(type) || "com.whatsapp.w4b".equals(type);
     }
@@ -257,6 +267,48 @@ public final class WhatsAppRecipients {
     }
 
     /**
+     * Several spoken hypotheses. The first unique exact or all-words contact wins,
+     * and the command name/body consume those tokens. Otherwise the first non-empty match stays.
+     */
+    public static Resolution resolveHeard(List<String> utterances, String fallback, List<Contact> contacts) {
+        List<String> keys = new ArrayList<>();
+        if (utterances != null) for (String u : utterances) {
+            if (u == null || u.trim().isEmpty()) continue;
+            String t = u.trim();
+            if (!keys.contains(t)) keys.add(t);
+        }
+        if (fallback != null && !fallback.trim().isEmpty() && !keys.contains(fallback.trim())) keys.add(fallback.trim());
+        Resolution found = null;
+        for (String u : keys) {
+            Resolution r = resolve(u, contacts);
+            if (r.matches.one()) return r;
+            if (found == null && r.matches.code != MatchCode.NONE) found = r;
+        }
+        if (found != null) return found;
+        Command cmd = parse(keys.isEmpty() ? (fallback == null ? "" : fallback) : keys.get(0));
+        return new Resolution(cmd, none());
+    }
+
+    /**
+     * When the channel word came first, try name plus two following tokens, then one, then the parsed name.
+     * The first unique exact or all-words hit (or several such hits) wins; the body drops the consumed tokens.
+     * If none of the longer keys hit, the parsed name keeps the ordinary match, including a first-name picker.
+     */
+    public static Resolution resolve(String utterance, List<Contact> contacts) {
+        Command cmd = parse(utterance);
+        if (cmd.target != Target.PERSON || cmd.name.isEmpty()) return new Resolution(cmd, none());
+        List<String> hyps = personHypotheses(cmd);
+        for (int i = 0; i < hyps.size(); i++) {
+            String key = hyps.get(i);
+            boolean last = i == hyps.size() - 1;
+            Matches m = match(key, contacts);
+            if (!last && (m.code == MatchCode.NONE || m.tier != 0)) continue;
+            return new Resolution(withConsumedName(cmd, key), m);
+        }
+        return new Resolution(cmd, match(cmd.name, contacts));
+    }
+
+    /**
      * Same name rules as {@link #match}, against a list the caller already filtered.
      * A phone call passes every contact with a dialable number, including numbers outside Israel.
      */
@@ -337,6 +389,10 @@ public final class WhatsAppRecipients {
         byUse(allWords);
         if (allWords.size() == 1) return new Matches(MatchCode.ONE, allWords, 0);
         if (allWords.size() > 1) return new Matches(MatchCode.MANY, allWords, 0);
+        String withoutShelly = stripTrailingShelly(key);
+        if (!withoutShelly.equals(key) && fold(withoutShelly).length() >= 2) {
+            return matchKey(withoutShelly, contacts);
+        }
         Matches firstName = matchSingle(first, contacts);
         if (firstName.code == MatchCode.NONE) return none();
         return new Matches(MatchCode.MANY, firstName.hits, 1);
@@ -488,7 +544,13 @@ public final class WhatsAppRecipients {
     }
 
     private static boolean diminutive(String a, String b) {
+        if (possessiveShel(a) || possessiveShel(b)) return false;
         return shortTail(a, b) || shortTail(b, a);
+    }
+
+    /** «של» / «שלי» must not count as a diminutive of each other. */
+    private static boolean possessiveShel(String folded) {
+        return "של".equals(folded) || "שלי".equals(folded);
     }
 
     private static boolean shortTail(String longer, String shorter) {
@@ -695,6 +757,58 @@ public final class WhatsAppRecipients {
         }
         if (text.startsWith(":")) text = Classifier.normalize(text.substring(1));
         return Classifier.stripConnectorShin(text).trim();
+    }
+
+    /** Longest first: name + two body tokens, name + one, then the parsed name. */
+    private static List<String> personHypotheses(Command cmd) {
+        List<String> out = new ArrayList<>();
+        if (cmd == null || cmd.name == null || cmd.name.isEmpty()) return out;
+        List<String> extra = new ArrayList<>();
+        if (cmd.body != null && !cmd.body.isEmpty()) {
+            for (String w : cmd.body.trim().split("\s+")) {
+                if (w.isEmpty()) continue;
+                extra.add(w);
+                if (extra.size() == 2) break;
+            }
+        }
+        if (extra.size() == 2) out.add(cmd.name + " " + extra.get(0) + " " + extra.get(1));
+        if (extra.size() >= 1) out.add(cmd.name + " " + extra.get(0));
+        out.add(cmd.name);
+        return out;
+    }
+
+    private static Command withConsumedName(Command cmd, String name) {
+        if (cmd == null) return new Command(Target.NONE, "", "");
+        if (name == null || name.isEmpty() || name.equals(cmd.name)) return cmd;
+        return new Command(cmd.target, name, stripLeadingWords(cmd.body, extraAfter(cmd.name, name)));
+    }
+
+    private static String extraAfter(String original, String used) {
+        String a = original == null ? "" : original.trim();
+        String b = used == null ? "" : used.trim();
+        if (b.startsWith(a + " ")) return b.substring(a.length()).trim();
+        return "";
+    }
+
+    private static String stripLeadingWords(String body, String extra) {
+        if (body == null || body.isEmpty() || extra == null || extra.isEmpty()) return body == null ? "" : body;
+        List<String> have = new ArrayList<String>();
+        for (String w : body.trim().split("\s+")) if (!w.isEmpty()) have.add(w);
+        for (String w : extra.trim().split("\s+")) {
+            if (w.isEmpty() || have.isEmpty()) break;
+            if (!fold(have.get(0)).equals(fold(w))) break;
+            have.remove(0);
+        }
+        return String.join(" ", have);
+    }
+
+    private static String stripTrailingShelly(String key) {
+        if (key == null) return "";
+        String n = key.trim();
+        int sp = n.lastIndexOf(' ');
+        if (sp <= 0) return n;
+        if (!fold(n.substring(sp + 1)).equals("שלי")) return n;
+        return n.substring(0, sp).trim();
     }
 
     private WhatsAppRecipients() {}
