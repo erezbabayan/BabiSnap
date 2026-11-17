@@ -49,7 +49,7 @@ public class MainActivity extends Activity {
         RecordLaunch.forgetOldPref(Core.prefs(this));
         SnapHeartbeat.onAppOpen(this); // registry: at most once a day, or when the version changed
         TagSync.maybeFetch(this, false); // background, throttled to 12 h
-        UpdateCheck.maybeCheck(this); // GitHub latest release, throttled to 6 h; dialog only if newer
+        UpdateCheck.maybeCheck(this); // GitHub latest release, at most once a day; dialog only if newer
         setTitle("הגדרות");
         getWindow().setStatusBarColor(PURPLE_DARK);
         if (getActionBar() != null) {
@@ -479,6 +479,8 @@ public class MainActivity extends Activity {
         links.addView(footerLink("פרטיות", v -> showPrivacy()));
         TextView dot = new TextView(this); dot.setText(" · "); dot.setTextSize(12.5f); dot.setTextColor(0xFF8A879A); links.addView(dot);
         links.addView(footerLink("תנאי שימוש", v -> openUrl(TERMS_URL)));
+        TextView dot2 = new TextView(this); dot2.setText(" · "); dot2.setTextSize(12.5f); dot2.setTextColor(0xFF8A879A); links.addView(dot2);
+        links.addView(footerLink("בדוק עדכונים", v -> UpdateCheck.checkNow(this)));
         content.addView(links, new LinearLayout.LayoutParams(-1, -2));
         TextView del = new TextView(this);
         del.setText("מחק את כל הנתונים מהמכשיר"); del.setTextColor(RED); del.setTextSize(13.5f); del.setGravity(Gravity.CENTER);
@@ -501,6 +503,7 @@ public class MainActivity extends Activity {
         "• שליחה לוואטסאפ כבויה כברירת מחדל. כשהיא דלוקה ואומרים «וואטסאפ», השם נבדק מול אנשי הקשר בטלפון ונפתחת שיחה פרטית עם הטקסט מוכן. לקבוצה נפתח השיתוף של וואטסאפ ובוחרים את הקבוצה שם. השליחה רק בלחיצה שלך. אין רשימת כינויים ואין שרת.\n\n" +
         "• שיחה מיידית: שם מדויק ויחיד נפתח בכרטיס גם אם שמור שם דומה. שם של כמה מילים נפתח בכרטיס כשאיש קשר אחד מכיל את כולן, ובורר של אותם אנשי קשר כשיש כמה. אותו כלל חל על נמען וואטסאפ. בורר גם בלי התאמה מדויקת, או כשכמה אנשי קשר באותו שם. נפתח כחייגן, אלא אם הפעלתם «אישור לבצע שיחות» ואושרה הרשאת הטלפון. אז השיחה יוצאת בסוף 5 השניות. ההרשאה משמשת רק לחיוג שביקשתם. אין יומן שיחות ואין הקלטה.\n\n" +
         "• האימייל של חשבון Google שחיברתם, יחד עם מזהה התקנה אקראי (לא IMEI), גרסה ושם דגם, נשמרים לניהול הגישה בלבד. לא נשלחים הקלטות, תמלילים, תוכן יומן או טוקן Google.\n\n" +
+        "• בדיקת עדכונים: פעם ביום, או בלחיצה על «בדוק עדכונים», האפליקציה קוראת מ-GitHub את מספר הגרסה האחרונה בלבד. לא נשלח שום מידע עליך.\n\n" +
         "• אין פרסומות ואין מעקב תוכן. \"מחק את כל הנתונים מהמכשיר\" מוחק את נתוני האפליקציה מהטלפון ומסמן את ההתקנה כמנותקת.\n\n" +
         "• מדיניות הפרטיות המלאה זמינה בקישור \"מדיניות מלאה\".";
 
