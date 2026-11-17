@@ -36,6 +36,15 @@ public class RecordLaunchTest {
         assertTrue(recordTag.contains("android.intent.action.ASSIST"));
         assertTrue(recordTag.contains("android.intent.action.VOICE_COMMAND"));
         assertTrue(recordTag.contains("android.intent.category.LAUNCHER"));
+        // Own task: an open Settings screen must not come to the front when recording starts.
+        assertTrue(recordTag.contains("android:taskAffinity=\"com.babisnap.app.record\""));
+        assertTrue(recordTag.contains("android:excludeFromRecents=\"true\""));
+        assertTrue(recordTag.contains("android:noHistory=\"true\""));
+        assertTrue(recordTag.contains("@android:style/Theme.NoDisplay"));
+        int voiceAt = manifest.indexOf("android:name=\".VoiceActivity\"");
+        String voiceTag = manifest.substring(voiceAt, manifest.indexOf("/>", voiceAt));
+        assertTrue(voiceTag.contains("android:taskAffinity=\"com.babisnap.app.voice\""));
+        assertFalse(recordTag.contains("taskAffinity=\"com.babisnap.app\""));
         String mainTag = manifest.substring(main, manifest.indexOf("</activity>", main));
         assertTrue(mainTag.contains("android:label=\"@string/app_name\""));
         assertTrue(mainTag.contains("android:icon=\"@mipmap/ic_launcher\""));
@@ -90,5 +99,24 @@ public class RecordLaunchTest {
 
     private static String text(String path) throws Exception {
         return new String(Files.readAllBytes(Path.of(path)), StandardCharsets.UTF_8);
+    }
+
+    @Test public void largeAndSmallWidgetOpenOnlyTheRecordingTask() throws Exception {
+        String widget = text("src/main/java/com/babisnap/app/MicWidget.java");
+        assertTrue(widget.contains("RecordLaunch.recording(c)"));
+        assertFalse(widget.contains("MainActivity"));
+        assertFalse(widget.contains("RecordEntryActivity"));
+        assertTrue(widget.contains("onAppWidgetOptionsChanged"));
+        assertTrue(widget.contains("ButtonWidget.class"));
+        String small = text("src/main/java/com/babisnap/app/ButtonWidget.java");
+        assertTrue(small.contains("extends MicWidget"));
+        assertFalse(small.contains("PendingIntent.getActivity"));
+        String manifest = text("src/main/AndroidManifest.xml");
+        int r = manifest.indexOf("android:name=\".WidgetRefresh\"");
+        assertTrue(r > 0);
+        String tag = manifest.substring(r, manifest.indexOf("</receiver>", r));
+        assertTrue(tag.contains("android:exported=\"false\""));
+        assertTrue(tag.contains("android.intent.action.MY_PACKAGE_REPLACED"));
+        assertTrue(text("src/main/java/com/babisnap/app/MainActivity.java").contains("MicWidget.refreshAll(this)"));
     }
 }
