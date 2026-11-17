@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BabiSnap · הורדה</title>
+<meta name="description" content="BabiSnap – אומרים, וזה נכנס ליומן, ל-BabiTk, לשיחה או לוואטסאפ. הורדת האפליקציה לאנדרואיד.">
+<meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#2A1B7A">
+<link rel="icon" href="logo.svg" type="image/svg+xml">
+<style>
+  :root{--purple:#2A1B7A;--purple-dark:#1E1458;--yellow:#FFC531;--bg:#F6F5FA;--muted:#6E6B80;--card:#fff;--line:#ECEAF4}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans Hebrew",Arial,sans-serif;background:var(--bg);color:#1F1D2B;line-height:1.6}
+  .hero{background:radial-gradient(120% 90% at 50% 0%,#3A2A9A 0%,var(--purple) 55%,var(--purple-dark) 100%);color:#fff;text-align:center;padding:48px 20px 64px}
+  .logo{width:96px;height:96px;border-radius:22px;box-shadow:0 12px 32px rgba(0,0,0,.35)}
+  h1{font-size:2.2rem;margin:18px 0 4px;letter-spacing:.5px}
+  .tag{margin:0 auto;max-width:30rem;opacity:.9;font-size:1.08rem}
+  .dests{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin:20px 0 28px;padding:0;list-style:none}
+  .dests li{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.18);border-radius:999px;padding:6px 14px;font-size:.95rem}
+  .btn{display:inline-flex;align-items:center;gap:10px;background:linear-gradient(135deg,#FFD43B,#FFA41B);color:var(--purple-dark);font-weight:800;font-size:1.25rem;text-decoration:none;padding:16px 34px;border-radius:16px;box-shadow:0 10px 26px rgba(255,164,27,.35);min-height:56px;transition:transform .12s ease}
+  .btn:hover{transform:translateY(-1px)}
+  .btn:focus-visible{outline:3px solid #fff;outline-offset:3px}
+  .btn svg{width:24px;height:24px}
+  .ver{margin-top:14px;font-size:.95rem;opacity:.85;min-height:1.5em}
+  main{max-width:44rem;margin:-36px auto 0;padding:0 16px 40px}
+  .card{background:var(--card);border-radius:20px;box-shadow:0 4px 18px rgba(42,27,122,.08);padding:22px 22px 8px;margin-bottom:16px}
+  h2{font-size:1.2rem;color:var(--purple);margin:0 0 12px}
+  ol{margin:0;padding:0 0 0 0;list-style:none;counter-reset:s}
+  ol li{counter-increment:s;position:relative;padding:0 46px 16px 0}
+  ol li::before{content:counter(s);position:absolute;right:0;top:0;width:32px;height:32px;border-radius:50%;background:#EFEDF8;color:var(--purple);font-weight:800;display:flex;align-items:center;justify-content:center}
+  ol li b{display:block}
+  .muted{color:var(--muted);font-size:.95rem}
+  .note{background:#FFFBEA;border:1.5px solid #EADFB5;border-radius:14px;padding:12px 14px;margin:0 0 16px;font-size:.95rem}
+  footer{text-align:center;color:var(--muted);font-size:.9rem;padding:8px 16px 32px}
+  footer a{color:var(--purple)}
+  @media (prefers-color-scheme:dark){
+    :root{--bg:#14121F;--card:#1F1C2E;--muted:#A7A3BC;--line:#2E2A44}
+    body{color:#ECEAF6} h2{color:#C9C1FF} ol li::before{background:#2E2A44;color:#C9C1FF}
+    .note{background:#2A2614;border-color:#5A4E1E} footer a{color:#C9C1FF}
+  }
+</style>
+</head>
+<body>
+<header class="hero">
+  <img class="logo" src="logo.svg" alt="הלוגו של BabiSnap">
+  <h1>BabiSnap</h1>
+  <p class="tag">אומרים משפט אחד, וזה נכנס למקום הנכון.</p>
+  <ul class="dests" aria-label="יעדים">
+    <li>📅 יומן</li><li>✅ משימה ב-BabiTk</li><li>📝 הערה ב-BabiTk</li><li>📞 שיחה</li><li>💬 וואטסאפ</li>
+  </ul>
+  <a class="btn" id="dl" href="https://github.com/erezbabayan/BabiSnap/releases/latest/download/BabiSnap.apk" rel="noopener">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
+    הורד את BabiSnap
+  </a>
+  <div class="ver" id="ver" aria-live="polite">לאנדרואיד 8 ומעלה · הגרסה האחרונה תמיד</div>
+</header>
+
+<main>
+  <section class="card">
+    <h2>התקנה ראשונה</h2>
+    <ol>
+      <li><b>מורידים</b><span class="muted">לוחצים על «הורד את BabiSnap» בטלפון, ופותחים את הקובץ BabiSnap.apk מההתראה או מתיקיית ההורדות.</span></li>
+      <li><b>מאשרים התקנה ממקור לא ידוע</b><span class="muted">אם מופיע «מטעמי אבטחה הטלפון לא מאפשר…», לוחצים «הגדרות» ומפעילים «אפשר ממקור זה» לדפדפן (Chrome) או למנהל הקבצים. חוזרים אחורה.</span></li>
+      <li><b>Play Protect</b><span class="muted">אם מופיע «אפליקציה לא מוכרת» או «Google לא אימתה את האפליקציה», לוחצים «פרטים נוספים» ואז «להתקין בכל זאת». האפליקציה לא נמצאת בחנות Play, ולכן ההודעה הזו צפויה.</span></li>
+      <li><b>פותחים ומתחברים</b><span class="muted">האייקון «BabiSnap» פותח את ההגדרות, ו«BabiSnap הקלטה» מתחיל הקלטה. חיוג אוטומטי ושליחה לוואטסאפ כבויים כברירת מחדל ומופעלים בהגדרות.</span></li>
+    </ol>
+  </section>
+
+  <section class="card">
+    <h2>עדכון לגרסה חדשה</h2>
+    <p class="note">כשיש גרסה חדשה, האפליקציה מציגה «יש גרסה חדשה». אפשר גם ללחוץ «בדוק עדכונים» בתחתית ההגדרות.</p>
+    <ol>
+      <li><b>מורידים שוב מאותו כפתור</b><span class="muted">הקישור מוביל תמיד לגרסה האחרונה.</span></li>
+      <li><b>מתקינים מעל הקיימת</b><span class="muted">לא צריך להסיר קודם. ההגדרות והחיבורים נשמרים.</span></li>
+      <li><b>«האפליקציה לא הותקנה»?</b><span class="muted">כל הגרסאות חתומות באותה חתימה, ולכן העדכון מותקן מעל הקיימת. אם בכל זאת מופיעה שגיאה, כנראה שהותקנה גרסה ממקור אחר. מסירים אותה ומתקינים מכאן.</span></li>
+    </ol>
+  </section>
+
+  <section class="card">
+    <h2>פרטיות</h2>
+    <p class="muted">באתר הזה אין הרשמה, אין טפסים, אין עוגיות ואין כלי מעקב, ולא נשמר בו שום מידע. הקובץ מגיע ישירות מ-GitHub Releases. המידע על הגרסה האחרונה נקרא מ-GitHub בדפדפן שלך.</p>
+  </section>
+</main>
+
+<footer>
+  <a href="https://github.com/erezbabayan/BabiSnap/blob/main/docs/PRIVACY_HE.md" rel="noopener">מדיניות פרטיות</a> ·
+  <a href="https://github.com/erezbabayan/BabiSnap/blob/main/docs/TERMS_HE.md" rel="noopener">תנאי שימוש</a> ·
+  <a href="https://github.com/erezbabayan/BabiSnap/releases" rel="noopener">כל הגרסאות</a>
+</footer>
+
+<script>
+  // Latest version from the public GitHub API. No cookies, no storage, no tracking. On failure the static text stays.
+  (function () {
+    var el = document.getElementById('ver');
+    if (!window.fetch) return;
+    fetch('https://api.github.com/repos/erezbabayan/BabiSnap/releases/latest', { headers: { Accept: 'application/vnd.github+json' }, credentials: 'omit', referrerPolicy: 'no-referrer' })
+      .then(function (r) { if (!r.ok) throw 0; return r.json(); })
+      .then(function (j) {
+        var v = String(j.tag_name || '').replace(/^[vV]/, '');
+        if (!/^\d+(\.\d+)*$/.test(v)) return;
+        var d = j.published_at ? new Date(j.published_at) : null;
+        var when = d && !isNaN(d) ? ' · ' + d.toLocaleDateString('he-IL', { day: 'numeric', month: 'numeric', year: 'numeric', timeZone: 'Asia/Jerusalem' }) : '';
+        var size = '';
+        (j.assets || []).forEach(function (a) { if (a.name === 'BabiSnap.apk' && a.size) size = ' · \u2066' + (a.size / 1048576).toFixed(1) + ' MB\u2069'; });
+        el.textContent = 'גרסה ' + v + when + size + ' · לאנדרואיד 8 ומעלה';
+      })
+      .catch(function () {});
+  })();
+</script>
+</body>
+</html>
