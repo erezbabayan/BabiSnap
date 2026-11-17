@@ -57,7 +57,7 @@ public final class CallDial {
     private static final Set<String> FILLER = new HashSet<>(Arrays.asList(
         "עכשיו", "בבקשה", "בדחיפות", "דחוף", "מיד", "מהר", "כבר", "נא", "אנא", "בטלפון", "טלפון", "לי", "לנו"));
     private static final Set<String> STOP = new HashSet<>(Arrays.asList(
-        "לגבי", "על", "בשביל", "כדי", "אחרי", "לפני", "כי", "וגם", "גם", "של", "שלי", "שלנו", "שלו", "שלה", "שלהם", "שלהן"));
+        "לגבי", "על", "בשביל", "כדי", "אחרי", "לפני", "כי", "וגם", "גם"));
     private static final Set<String> WHEN = new HashSet<>(Arrays.asList(
         "היום", "להיום", "מחר", "למחר", "במחר", "המחר", "מחרתיים",
         "הערב", "הלילה", "הבוקר", "הצהריים",
@@ -212,7 +212,7 @@ public final class CallDial {
             toks.set(0, first.substring(1));
         StringBuilder b = new StringBuilder();
         int n = 0;
-        for (; i < toks.size() && n < 3; i++) {
+        for (; i < toks.size() && n < 5; i++) {
             String w = toks.get(i);
             if (STOP.contains(w) || WHEN.contains(w) || scheduled(w)) break;
             if (n > 0 && recipientToken(w)) break;
@@ -234,6 +234,15 @@ public final class CallDial {
         List<WhatsAppRecipients.Contact> eligible = new ArrayList<>();
         if (contacts != null) for (WhatsAppRecipients.Contact c : contacts) if (hasNumber(c)) eligible.add(c);
         return WhatsAppRecipients.matchAmong(spoken, eligible);
+    }
+
+    /**
+     * The name shown after «שמעתי»: the trimmed matched span ({@code usedKey}),
+     * not a leftover message word from the raw spoken window.
+     */
+    public static String heardName(String spoken, WhatsAppRecipients.Matches hits) {
+        if (hits != null && hits.usedKey != null && !hits.usedKey.isEmpty()) return hits.usedKey;
+        return spoken == null ? "" : spoken.trim();
     }
 
     /** Same rules as {@link #match}, across every speech hypothesis. */

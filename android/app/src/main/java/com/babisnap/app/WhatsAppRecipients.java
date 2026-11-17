@@ -3,8 +3,11 @@ package com.babisnap.app;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -21,6 +24,11 @@ public final class WhatsAppRecipients {
         "הודעה", "תשלח", "שלח", "תשלחי", "תכתוב", "כתוב", "תכתבי", "תגיד", "תגידי"
     };
     private static final String[] SHORT_TAIL = {"י", "ה", "רי", "ית", "יה", "ון"};
+    private static final Set<String> POSSESSIVE = new HashSet<>(Arrays.asList(
+        "של", "שלי", "שלו", "שלה", "שלנו", "שלכם", "שלכן", "שלהם", "שלהן"));
+    private static final Set<String> STANDALONE_POSSESSIVE = new HashSet<>(Arrays.asList(
+        "שלי", "שלו", "שלה", "שלנו", "שלכם", "שלכן", "שלהם", "שלהן"));
+    private static final int EXTRA_NAME_TOKENS = 4;
     private static final Pattern GROUP = Pattern.compile(
         "(?:^|\\s)((?:אל\\s+)?ל?(?:קבוצת|קבוצה))(?=\\s|$)");
     private static final Pattern EL = Pattern.compile("(?:^|\\s)אל\\s+(\\S+)");
@@ -98,13 +106,32 @@ public final class WhatsAppRecipients {
         public final List<Contact> hits;
         final int tier;
 
+        final String usedKey;
+
         Matches(MatchCode code, List<Contact> hits, int tier) {
+            this(code, hits, tier, "");
+        }
+
+        Matches(MatchCode code, List<Contact> hits, int tier, String usedKey) {
             this.code = code;
             this.hits = hits;
             this.tier = tier;
+            this.usedKey = usedKey == null ? "" : usedKey;
         }
 
+        Matches withUsed(String key) { return new Matches(code, hits, tier, key); }
+
         public boolean one() { return code == MatchCode.ONE && hits.size() == 1; }
+    }
+
+    /** A parsed command after the name hypotheses were tried against the contacts. */
+    public static final class Resolution {
+        public final Command command;
+        public final Matches matches;
+        Resolution(Command command, Matches matches) {
+            this.command = command;
+            this.matches = matches == null ? none() : matches;
+        }
     }
 
     public static boolean isWhatsAppAccount(String type) {
@@ -220,10 +247,11 @@ public final class WhatsAppRecipients {
     }
 
     /**
-     * Best contacts for a spoken name. Prefixes ל/ש/ו/אל are optional.
-     * One exact display name, first name, or nickname opens the confirm card even if a similar name is saved.
-     * A multi-word name that is not exact still confirms when exactly one display name contains every spoken word.
-     * A picker is for several exact names, several all-word names, or no exact hit (a near name such as רון/רוני).
+     * Best contacts for a spoken name. Prefixes ל/ב/ה/ו/ש/אל are optional.
+     * Contacts are ranked: exact full name, then every content word present (gaps allowed; של-words
+     * are ignored when comparing but may also match literally), then the highest partial word-count.
+     * A unique top contact opens the confirm card. A tie opens a picker of only the top contacts.
+     * A trailing message word is dropped by trying the longest prefix first.
      * Only contacts with an Israeli number are considered (WhatsApp).
      */
     public static Matches match(String spoken, List<Contact> contacts) {
@@ -257,21 +285,102 @@ public final class WhatsAppRecipients {
     }
 
     /**
+     * Several spoken hypotheses. The first unique exact or all-words contact wins,
+     * and the command name/body consume those tokens. Otherwise the first non-empty match stays.
+     */
+    public static Resolution resolveHeard(List<String> utterances, String fallback, List<Contact> contacts) {
+        List<String> keys = new ArrayList<>();
+        if (utterances != null) for (String u : utterances) {
+            if (u == null || u.trim().isEmpty()) continue;
+            String t = u.trim();
+            if (!keys.contains(t)) keys.add(t);
+        }
+        if (fallback != null && !fallback.trim().isEmpty() && !keys.contains(fallback.trim())) keys.add(fallback.trim());
+        Resolution found = null;
+        for (String u : keys) {
+            Resolution r = resolve(u, contacts);
+            if (r.matches.one()) return r;
+            if (found == null && r.matches.code != MatchCode.NONE) found = r;
+        }
+        if (found != null) return found;
+        Command cmd = parse(keys.isEmpty() ? (fallback == null ? "" : fallback) : keys.get(0));
+        return new Resolution(cmd, none());
+    }
+
+    /**
+     * Try the parsed name plus up to four following tokens. Matching keeps the longest prefix
+     * that is a strong name (exact, all content words, or a higher partial score) and leaves the rest in the body.
+     */
+    public static Resolution resolve(String utterance, List<Contact> contacts) {
+        Command cmd = parse(utterance);
+        if (cmd.target != Target.PERSON || cmd.name.isEmpty()) return new Resolution(cmd, none());
+        String longKey = longestPersonKey(cmd);
+        Matches m = match(longKey, contacts);
+        String used = m.usedKey != null && !m.usedKey.isEmpty() ? m.usedKey : cmd.name;
+        return new Resolution(withConsumedName(cmd, used), m);
+    }
+
+    /**
      * Same name rules as {@link #match}, against a list the caller already filtered.
      * A phone call passes every contact with a dialable number, including numbers outside Israel.
      */
     public static Matches matchAmong(String spoken, List<Contact> eligible) {
         List<Contact> list = new ArrayList<>();
         if (eligible != null) for (Contact c : eligible) if (c != null) list.add(c);
-        String raw = ContactMatcher.norm(spoken);
-        Matches direct = matchKey(raw, list);
+        String raw = spoken == null ? "" : spoken.replaceAll("\\s+", " ").trim();
+        Matches direct = matchWindows(raw, list);
         String stripped = stripOnePrefix(raw);
         if (stripped.equals(raw)) return direct;
-        Matches alt = matchKey(stripped, list);
+        Matches alt = matchWindows(stripped, list);
         if (direct.code == MatchCode.NONE) return alt;
         if (alt.code == MatchCode.NONE) return direct;
         if (alt.tier < direct.tier) return alt;
+        if (direct.tier < alt.tier) return direct;
+        if (alt.usedKey.length() > direct.usedKey.length()) return alt;
         return direct;
+    }
+
+    /** Longest prefix first, so a trailing message word («היי») is not kept as part of the name. */
+    private static Matches matchWindows(String key, List<Contact> contacts) {
+        if (key == null || fold(key).length() < 2) return none();
+        List<String> toks = new ArrayList<>();
+        for (String w : key.split(" ")) if (!w.isEmpty()) toks.add(w);
+        if (toks.isEmpty()) return none();
+        if (toks.size() == 1) return matchSingle(toks.get(0), contacts).withUsed(toks.get(0));
+        for (int len = toks.size(); len >= 2; len--) {
+            String window = joinWords(toks, len);
+            if (!windowUseful(window, contacts)) continue;
+            Matches m = matchKey(window, contacts);
+            if (m.code == MatchCode.NONE) continue;
+            return m.withUsed(window);
+        }
+        // A leftover first name after a longer phrase is a picker, not a unique confirm.
+        Matches firstName = matchSingle(toks.get(0), contacts);
+        if (firstName.code == MatchCode.NONE) return none();
+        return new Matches(MatchCode.MANY, firstName.hits, 1).withUsed(toks.get(0));
+    }
+
+    private static boolean windowUseful(String window, List<Contact> contacts) {
+        List<String> toks = new ArrayList<>();
+        for (String w : window.split(" ")) if (!w.isEmpty()) toks.add(w);
+        if (toks.isEmpty()) return false;
+        String last = toks.get(toks.size() - 1);
+        if (isPossessive(fold(last))) return true;
+        for (Contact c : contacts) {
+            if (c == null) continue;
+            if (exactFull(window, c)) return true;
+            if (wordIn(fold(last), nameWords(c))) return true;
+        }
+        return false;
+    }
+
+    private static String joinWords(List<String> toks, int len) {
+        StringBuilder b = new StringBuilder();
+        for (int i = 0; i < len && i < toks.size(); i++) {
+            if (i > 0) b.append(' ');
+            b.append(toks.get(i));
+        }
+        return b.toString();
     }
 
     /** Contacts that have a number. Empty query returns all of them; otherwise name or digits. */
@@ -322,24 +431,60 @@ public final class WhatsAppRecipients {
     }
 
     /**
-     * "רוני כהן" confirms when that full name is unique, even if another רוני exists.
-     * Otherwise every spoken word must appear in one display name (any order, extra words allowed).
-     * A full name that only hits a bare first name is a picker, not a miss.
+     * Exact full name, then every content word (של-words ignored when comparing), then the
+     * highest partial word-count. A unique top contact confirms unless a possessive clashes
+     * («אמא שלי» must not confirm «אמא של דני»). First-name matching is the last fallback.
      */
     private static Matches matchFull(String key, String first, List<Contact> contacts) {
         List<Contact> exact = new ArrayList<>();
         for (Contact c : contacts) if (c != null && exactFull(key, c)) exact.add(c);
         byUse(exact);
-        if (exact.size() == 1) return new Matches(MatchCode.ONE, exact, 0);
+        if (exact.size() == 1) return decide(exact, key, 0);
         if (!exact.isEmpty()) return new Matches(MatchCode.MANY, exact, 0);
-        List<Contact> allWords = new ArrayList<>();
-        for (Contact c : contacts) if (c != null && containsAllWords(key, c)) allWords.add(c);
-        byUse(allWords);
-        if (allWords.size() == 1) return new Matches(MatchCode.ONE, allWords, 0);
-        if (allWords.size() > 1) return new Matches(MatchCode.MANY, allWords, 0);
+
+        List<Contact> allContent = new ArrayList<>();
+        int bestAll = 0;
+        for (Contact c : contacts) {
+            if (c == null || !allContentWords(key, c)) continue;
+            int pts = score(key, c);
+            if (pts > bestAll) { bestAll = pts; allContent.clear(); allContent.add(c); }
+            else if (pts == bestAll) allContent.add(c);
+        }
+        byUse(allContent);
+        if (!allContent.isEmpty()) return decide(allContent, key, 0);
+
+        List<Contact> partial = new ArrayList<>();
+        int bestPts = 0;
+        for (Contact c : contacts) {
+            if (c == null) continue;
+            NameScore s = nameScore(key, c);
+            if (!s.beyondFirst) continue;
+            if (s.points > bestPts) { bestPts = s.points; partial.clear(); partial.add(c); }
+            else if (s.points == bestPts) partial.add(c);
+        }
+        byUse(partial);
+        if (!partial.isEmpty()) return decide(partial, key, 0);
+
+        if (standalonePossessiveTail(key)) {
+            String base = stripTrailingPossessives(key);
+            if (!base.equals(key) && fold(base).length() >= 2) {
+                Matches narrowed = matchKey(base, contacts);
+                if (narrowed.code != MatchCode.NONE) return decide(narrowed.hits, key, narrowed.tier);
+            }
+        }
+
         Matches firstName = matchSingle(first, contacts);
         if (firstName.code == MatchCode.NONE) return none();
         return new Matches(MatchCode.MANY, firstName.hits, 1);
+    }
+
+    /** Unique top confirms unless the only hit is a different possessive phrase. */
+    private static Matches decide(List<Contact> hits, String key, int tier) {
+        if (hits.isEmpty()) return none();
+        if (hits.size() == 1 && possessiveClash(key, hits.get(0)))
+            return new Matches(MatchCode.MANY, hits, Math.max(tier, 1));
+        if (hits.size() == 1) return new Matches(MatchCode.ONE, hits, tier);
+        return new Matches(MatchCode.MANY, hits, tier);
     }
 
     /**
@@ -373,14 +518,32 @@ public final class WhatsAppRecipients {
         return out;
     }
 
-    /** Exact folded token, a diminutive, or a medial ו/י spelling variant. */
+    /** Exact folded token, a diminutive, a medial ו/י spelling variant, or a ל/ב/ה/ו prefix. */
     private static boolean wordIn(String want, List<String> words) {
+        if (want == null || want.isEmpty()) return false;
+        if (wordHit(want, words)) return true;
+        String stripped = stripWordPrefix(want);
+        return !stripped.equals(want) && wordHit(stripped, words);
+    }
+
+    private static boolean wordHit(String want, List<String> words) {
         for (String token : words) {
             String got = fold(token);
             if (got.length() < 2) continue;
             if (got.equals(want) || diminutive(want, got) || spellingVariant(want, got)) return true;
+            String gotBare = stripWordPrefix(got);
+            if (!gotBare.equals(got) && (gotBare.equals(want) || diminutive(want, gotBare) || spellingVariant(want, gotBare)))
+                return true;
         }
         return false;
+    }
+
+    /** One leading ל/ב/ה/ו, never on a short remainder. */
+    private static String stripWordPrefix(String folded) {
+        if (folded == null || folded.length() < 3) return folded == null ? "" : folded;
+        char c = folded.charAt(0);
+        if (c == 'ל' || c == 'ב' || c == 'ה' || c == 'ו') return folded.substring(1);
+        return folded;
     }
 
     private static boolean variantOf(String key, Contact c) {
@@ -488,7 +651,13 @@ public final class WhatsAppRecipients {
     }
 
     private static boolean diminutive(String a, String b) {
+        if (possessiveShel(a) || possessiveShel(b)) return false;
         return shortTail(a, b) || shortTail(b, a);
+    }
+
+    /** «של» / «שלי» must not count as a diminutive of each other. */
+    private static boolean possessiveShel(String folded) {
+        return "של".equals(folded) || "שלי".equals(folded);
     }
 
     private static boolean shortTail(String longer, String shorter) {
@@ -530,7 +699,7 @@ public final class WhatsAppRecipients {
         if (n.startsWith("אל ") && n.length() > 3) return n.substring(3).trim();
         if (n.length() >= 3) {
             char c = n.charAt(0);
-            if ((c == 'ל' || c == 'ש' || c == 'ו') && n.charAt(1) != ' ') return n.substring(1);
+            if ((c == 'ל' || c == 'ב' || c == 'ה' || c == 'ש' || c == 'ו') && n.charAt(1) != ' ') return n.substring(1);
         }
         return n;
     }
@@ -634,7 +803,7 @@ public final class WhatsAppRecipients {
         if (channelAt > tokenEnd) {
             String gap = text.substring(tokenEnd, channelAt).trim();
             if (!gap.isEmpty()) {
-                String more = firstTokens(gap, 2);
+                String more = firstTokens(gap, EXTRA_NAME_TOKENS);
                 if (!more.isEmpty()) {
                     name = (name + " " + more).trim();
                     end = text.indexOf(more, tokenEnd) + more.length();
@@ -695,6 +864,201 @@ public final class WhatsAppRecipients {
         }
         if (text.startsWith(":")) text = Classifier.normalize(text.substring(1));
         return Classifier.stripConnectorShin(text).trim();
+    }
+
+    /** The parsed name plus up to four body tokens, for longest-prefix matching. */
+    private static String longestPersonKey(Command cmd) {
+        if (cmd == null || cmd.name == null || cmd.name.isEmpty()) return "";
+        List<String> extra = new ArrayList<>();
+        if (cmd.body != null && !cmd.body.isEmpty()) {
+            for (String w : cmd.body.trim().split("\\s+")) {
+                if (w.isEmpty()) continue;
+                extra.add(w);
+                if (extra.size() == EXTRA_NAME_TOKENS) break;
+            }
+        }
+        if (extra.isEmpty()) return cmd.name;
+        return cmd.name + " " + String.join(" ", extra);
+    }
+
+    private static List<String> nameWords(Contact c) {
+        List<String> out = new ArrayList<>();
+        if (c == null) return out;
+        for (String field : new String[]{c.displayName, c.given, c.family, c.nickname}) {
+            if (field == null) continue;
+            for (String w : ContactMatcher.norm(field).split(" ")) {
+                if (fold(w).length() >= 2 && !out.contains(w)) out.add(w);
+            }
+        }
+        return out;
+    }
+
+    private static boolean isPossessive(String folded) {
+        return POSSESSIVE.contains(folded);
+    }
+
+    private static boolean allContentWords(String key, Contact c) {
+        List<String> want = contentWords(key);
+        if (want.isEmpty()) return false;
+        List<String> got = nameWords(c);
+        for (String w : want) if (!wordIn(w, got)) return false;
+        return true;
+    }
+
+    private static int score(String key, Contact c) {
+        return nameScore(key, c).points;
+    }
+
+    private static final class NameScore {
+        final int points;
+        final int contentHits;
+        final boolean beyondFirst;
+        NameScore(int points, int contentHits, boolean beyondFirst) {
+            this.points = points;
+            this.contentHits = contentHits;
+            this.beyondFirst = beyondFirst;
+        }
+    }
+
+    private static NameScore nameScore(String key, Contact c) {
+        List<String> spoken = tokenList(key);
+        List<String> got = nameWords(c);
+        int contentHits = 0, connectorHits = 0;
+        String firstContent = "";
+        boolean firstHit = false;
+        for (String raw : spoken) {
+            String w = fold(raw);
+            if (w.length() < 2) continue;
+            boolean poss = isPossessive(w);
+            boolean hit = wordIn(w, got);
+            if (poss) {
+                if (hit) connectorHits++;
+            } else {
+                if (firstContent.isEmpty()) {
+                    firstContent = w;
+                    if (hit) firstHit = true;
+                }
+                if (hit) contentHits++;
+            }
+        }
+        boolean beyond = firstHit && contentHits >= 2;
+        return new NameScore(contentHits + connectorHits, contentHits, beyond);
+    }
+
+    private static boolean wordEqual(String a, String b) {
+        if (a.equals(b)) return true;
+        return diminutive(a, b) || spellingVariant(a, b);
+    }
+
+    private static List<String> contentWords(String key) {
+        List<String> out = new ArrayList<>();
+        for (String raw : tokenList(key)) {
+            String w = fold(raw);
+            if (w.length() < 2 || isPossessive(w)) continue;
+            if (!out.contains(w)) out.add(w);
+        }
+        return out;
+    }
+
+    private static List<String> tokenList(String key) {
+        List<String> out = new ArrayList<>();
+        if (key == null) return out;
+        for (String w : key.split(" ")) if (!w.isEmpty()) out.add(w);
+        return out;
+    }
+
+    private static boolean possessiveClash(String key, Contact c) {
+        if (c == null) return false;
+        List<String> spoken = possessiveSig(tokenList(key));
+        List<String> saved = possessiveSig(nameWords(c));
+        if (spoken.isEmpty() || saved.isEmpty()) return false;
+        return !possessiveCompatible(spoken, saved);
+    }
+
+    /** «שלי» / «של דני» / «שלו»… extracted from a token list. */
+    private static List<String> possessiveSig(List<String> words) {
+        List<String> sig = new ArrayList<>();
+        for (int i = 0; i < words.size(); i++) {
+            String w = fold(words.get(i));
+            if (w.equals("של")) {
+                sig.add("של");
+                for (int j = i + 1; j < words.size(); j++) {
+                    String n = fold(words.get(j));
+                    if (n.length() < 2 || isPossessive(n)) break;
+                    sig.add(n);
+                }
+                return sig;
+            }
+            if (STANDALONE_POSSESSIVE.contains(w)) {
+                sig.add(w);
+                return sig;
+            }
+        }
+        return sig;
+    }
+
+    private static boolean possessiveCompatible(List<String> spoken, List<String> contact) {
+        if (spoken.isEmpty() || contact.isEmpty()) return true;
+        if (!spoken.get(0).equals(contact.get(0))) return false;
+        if (!"של".equals(spoken.get(0))) return spoken.equals(contact);
+        List<String> got = new ArrayList<>(contact.subList(1, contact.size()));
+        for (int i = 1; i < spoken.size(); i++) {
+            if (!wordIn(spoken.get(i), got)) return false;
+        }
+        return true;
+    }
+
+    private static boolean standalonePossessiveTail(String key) {
+        List<String> toks = tokenList(key);
+        boolean sawContent = false, sawStandalone = false;
+        for (String raw : toks) {
+            String w = fold(raw);
+            if (w.length() < 2) continue;
+            if (w.equals("של")) return false;
+            if (STANDALONE_POSSESSIVE.contains(w)) { if (sawContent) sawStandalone = true; }
+            else { if (sawStandalone) return false; sawContent = true; }
+        }
+        return sawContent && sawStandalone;
+    }
+
+    private static String stripTrailingPossessives(String key) {
+        List<String> toks = tokenList(key);
+        while (!toks.isEmpty() && STANDALONE_POSSESSIVE.contains(fold(toks.get(toks.size() - 1))))
+            toks.remove(toks.size() - 1);
+        return String.join(" ", toks);
+    }
+
+    private static Command withConsumedName(Command cmd, String name) {
+        if (cmd == null) return new Command(Target.NONE, "", "");
+        if (name == null || name.isEmpty() || name.equals(cmd.name)) return cmd;
+        String leftover = trailingAfter(name, cmd.name);
+        String body;
+        if (!leftover.isEmpty()) {
+            body = (leftover + " " + (cmd.body == null ? "" : cmd.body)).trim();
+        } else {
+            body = stripLeadingWords(cmd.body, trailingAfter(cmd.name, name));
+        }
+        return new Command(cmd.target, name, body);
+    }
+
+    /** If {@code longer} starts with {@code prefix}, the leftover tokens; otherwise empty. */
+    private static String trailingAfter(String prefix, String longer) {
+        String a = prefix == null ? "" : prefix.trim();
+        String b = longer == null ? "" : longer.trim();
+        if (!a.isEmpty() && b.startsWith(a + " ")) return b.substring(a.length()).trim();
+        return "";
+    }
+
+    private static String stripLeadingWords(String body, String extra) {
+        if (body == null || body.isEmpty() || extra == null || extra.isEmpty()) return body == null ? "" : body;
+        List<String> have = new ArrayList<String>();
+        for (String w : body.trim().split("\s+")) if (!w.isEmpty()) have.add(w);
+        for (String w : extra.trim().split("\s+")) {
+            if (w.isEmpty() || have.isEmpty()) break;
+            if (!fold(have.get(0)).equals(fold(w))) break;
+            have.remove(0);
+        }
+        return String.join(" ", have);
     }
 
     private WhatsAppRecipients() {}

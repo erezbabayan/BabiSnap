@@ -608,7 +608,10 @@ public class VoiceActivity extends Activity {
                 showWaChooser(WhatsAppRecipients.search(waContacts, ""), true);
                 return;
             }
-            WhatsAppRecipients.Matches hits = WhatsAppRecipients.matchNames(waNames(), waContacts);
+            WhatsAppRecipients.Resolution resolved = WhatsAppRecipients.resolveHeard(heard, spoken, waContacts);
+            waCommand = resolved.command;
+            waBody = WhatsAppRecipients.shownText(waCommand);
+            WhatsAppRecipients.Matches hits = resolved.matches;
             if (hits.one()) showWaDirect(hits.hits.get(0), waBody);
             else if (hits.code == WhatsAppRecipients.MatchCode.MANY) showWaChooser(hits.hits, false);
             else showWaChooser(WhatsAppRecipients.search(waContacts, ""), true);
@@ -1016,6 +1019,7 @@ public class VoiceActivity extends Activity {
                 return;
             }
             WhatsAppRecipients.Matches hits = CallDial.matchNames(callNames(), callContacts);
+            callName = CallDial.heardName(callName, hits);
             if (hits.one()) showCallConfirm(hits.hits.get(0));
             else if (hits.code == WhatsAppRecipients.MatchCode.MANY) showCallPicker(hits.hits, false);
             else showCallPicker(new ArrayList<>(callContacts), true);
@@ -1069,16 +1073,6 @@ public class VoiceActivity extends Activity {
         }, "babisnap-call-contacts").start();
     }
 
-    private List<String> waNames() {
-        List<String> names = new ArrayList<>();
-        for (String h : heard) {
-            WhatsAppRecipients.Command cmd = WhatsAppRecipients.parse(h);
-            if (cmd.target == WhatsAppRecipients.Target.PERSON && !cmd.name.isEmpty() && !names.contains(cmd.name))
-                names.add(cmd.name);
-        }
-        if (names.isEmpty() && waCommand != null && !waCommand.name.isEmpty()) names.add(waCommand.name);
-        return names;
-    }
 
     private List<String> callNames() {
         List<String> names = new ArrayList<>();

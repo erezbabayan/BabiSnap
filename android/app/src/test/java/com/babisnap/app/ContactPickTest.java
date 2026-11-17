@@ -79,6 +79,8 @@ public class ContactPickTest {
         int callConfirm = voice.indexOf("private void showCallConfirm");
         assertTrue(callPicker > 0 && callConfirm > callPicker);
         String callBody = voice.substring(callPicker, callConfirm);
+        assertTrue(callBody.contains("שמעתי «"));
+        assertTrue(callBody.contains("callName"));
         assertTrue(callBody.contains("callConfirming = false"));
         assertTrue(callBody.contains("removeCallbacks(callExpire)"));
         assertFalse(callBody.contains("postDelayed"));
@@ -110,6 +112,8 @@ public class ContactPickTest {
         assertTrue(voice.contains("EXTRA_MAX_RESULTS"));
         assertTrue(voice.contains("SilenceDetector.hypotheses"));
         assertTrue(voice.contains("CallDial.matchNames"));
+        assertTrue(voice.contains("CallDial.heardName"));
+        assertTrue(voice.contains("WhatsAppRecipients.resolveHeard"));
         assertTrue(voice.contains("שיחה · בחירת איש קשר"));
     }
 
