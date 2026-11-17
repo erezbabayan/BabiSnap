@@ -200,6 +200,7 @@ public class ClassifierTest {
         assertEquals("שיעור פרטי", Classifier.stripConnectorShin("שיעור פרטי"));
         assertEquals("שמירה", Classifier.stripConnectorShin("שמירה"));
         assertEquals("שלי היי", Classifier.stripConnectorShin("שלי היי"));
+        assertEquals("של דני היי", Classifier.stripConnectorShin("של דני היי"));
     }
 
     static final String[] WA_TOKENS = {

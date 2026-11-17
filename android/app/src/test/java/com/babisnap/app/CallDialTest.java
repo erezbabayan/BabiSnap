@@ -36,6 +36,8 @@ public class CallDialTest {
         assertCall("תתקשר לאמא שלי", "אמא שלי");
         assertCall("תתקשר לאבא שלי", "אבא שלי");
         assertCall("תתקשר לאמא שלי בבקשה", "אמא שלי");
+        assertCall("תתקשר לאמא של דני", "אמא של דני");
+        assertCall("תתקשר לאמא של דני בבקשה", "אמא של דני");
         assertCall("תתקשר לתמרי בבקשה", "תמרי");
         // the WhatsApp flag does not change a phrase that has no channel word
         assertEquals(CALL, Classifier.classify("תתקשר לתמרי", false, true).kind);
@@ -262,8 +264,10 @@ public class CallDialTest {
             Collections.singletonList(mobile("0503333333")));
         List<WhatsAppRecipients.Contact> book = Arrays.asList(imaSheli, imaDani, ima);
         assertEquals("אמא שלי", CallDial.nameOf(Classifier.normalize("תתקשר לאמא שלי")));
-        assertEquals("אמא שלי", CallDial.nameOf(Classifier.normalize("תתקשר לאמא שלי היי")));
-        assertEquals("אמא", Classifier.classify("תתקשר לאמא של דני", false, false).stripped);
+        assertEquals("אמא של דני", CallDial.nameOf(Classifier.normalize("תתקשר לאמא של דני")));
+        assertEquals("אמא של דני", Classifier.classify("תתקשר לאמא של דני", false, false).stripped);
+        assertEquals("אמא שלי היי", CallDial.nameOf(Classifier.normalize("תתקשר לאמא שלי היי")));
+        assertEquals("אמא שלי", CallDial.match(CallDial.nameOf(Classifier.normalize("תתקשר לאמא שלי היי")), book).usedKey);
         WhatsAppRecipients.Matches hits = CallDial.match(CallDial.nameOf(Classifier.normalize("תתקשר לאמא שלי")), book);
         assertTrue(hits.one());
         assertEquals("אמא שלי", hits.hits.get(0).displayName);
@@ -289,6 +293,26 @@ public class CallDialTest {
         WhatsAppRecipients.Matches el = CallDial.match(CallDial.nameOf(Classifier.normalize("תתקשר לאלחנן אפרת")), els);
         assertTrue(el.one());
         assertEquals("אלחנן פרומן אפרת", el.hits.get(0).displayName);
+        assertTrue(CallDial.match(CallDial.nameOf(Classifier.normalize("תתקשר לאלחנן פרומן")), els).one());
+        assertEquals("אלחנן פרומן אפרת", CallDial.match("אלחנן פרומן", els).hits.get(0).displayName);
+
+        WhatsAppRecipients.Contact imaDaniOnly = imaDani;
+        WhatsAppRecipients.Matches clash = CallDial.match("אמא שלי", Collections.singletonList(imaDaniOnly));
+        assertFalse(clash.one());
+        assertEquals(WhatsAppRecipients.MatchCode.MANY, clash.code);
+        assertEquals("אמא של דני", clash.hits.get(0).displayName);
+
+        WhatsAppRecipients.Contact imaDaniBare = new WhatsAppRecipients.Contact("אמא דני", "אמא", "", "",
+            Collections.singletonList(mobile("0504444444")));
+        WhatsAppRecipients.Matches noShel = CallDial.match("אמא של דני", Arrays.asList(ima, imaSheli, imaDaniBare, new WhatsAppRecipients.Contact("דני כהן", "דני", "כהן", "", Collections.singletonList(mobile("0505555555")))));
+        assertTrue(noShel.one());
+        assertEquals("אמא דני", noShel.hits.get(0).displayName);
+
+        List<WhatsAppRecipients.Contact> imaDaniBook = Arrays.asList(imaSheli, imaDani, ima, new WhatsAppRecipients.Contact("דני כהן", "דני", "כהן", "", Collections.singletonList(mobile("0506666666"))));
+        WhatsAppRecipients.Matches shelDani = CallDial.match(CallDial.nameOf(Classifier.normalize("תתקשר לאמא של דני היי")), imaDaniBook);
+        assertTrue(shelDani.one());
+        assertEquals("אמא של דני", shelDani.hits.get(0).displayName);
+        assertEquals("אמא של דני", shelDani.usedKey);
     }
 
     private static void assertCall(String phrase, String name) {

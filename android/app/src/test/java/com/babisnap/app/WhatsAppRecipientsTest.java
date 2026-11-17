@@ -397,6 +397,62 @@ public class WhatsAppRecipientsTest {
         assertEquals("היי", fallback.command.body);
     }
 
+    @Test public void scoredMatchingPrefersMoreSpokenWordsAndKeepsTheBody() {
+        WhatsAppRecipients.Contact imaSheli = person("אמא שלי", "אמא", "", mobile("0501111111"));
+        WhatsAppRecipients.Contact imaDani = person("אמא של דני", "אמא", "", mobile("0502222222"));
+        WhatsAppRecipients.Contact ima = person("אמא", "אמא", "", mobile("0503333333"));
+        WhatsAppRecipients.Contact daniCohen = person("דני כהן", "דני", "", mobile("0504444444"));
+        List<WhatsAppRecipients.Contact> book = Arrays.asList(imaSheli, imaDani, ima, daniCohen);
+
+        WhatsAppRecipients.Matches exact = WhatsAppRecipients.match("אמא של דני", book);
+        assertTrue(exact.one());
+        assertEquals("אמא של דני", exact.hits.get(0).displayName);
+
+        WhatsAppRecipients.Matches imaSheliWins = WhatsAppRecipients.match("אמא שלי", Arrays.asList(imaSheli, imaDani));
+        assertTrue(imaSheliWins.one());
+        assertEquals("אמא שלי", imaSheliWins.hits.get(0).displayName);
+
+        WhatsAppRecipients.Matches clash = WhatsAppRecipients.match("אמא שלי", Collections.singletonList(imaDani));
+        assertFalse(clash.one());
+        assertEquals(WhatsAppRecipients.MatchCode.MANY, clash.code);
+
+        WhatsAppRecipients.Contact imaDaniBare = person("אמא דני", "אמא", "", mobile("0505555555"));
+        WhatsAppRecipients.Matches noShel = WhatsAppRecipients.match("אמא של דני", Arrays.asList(ima, imaSheli, imaDaniBare, daniCohen));
+        assertTrue(noShel.one());
+        assertEquals("אמא דני", noShel.hits.get(0).displayName);
+
+        WhatsAppRecipients.Resolution wa = WhatsAppRecipients.resolve("וואטסאפ לאמא של דני היי", book);
+        assertTrue(wa.matches.one());
+        assertEquals("אמא של דני", wa.matches.hits.get(0).displayName);
+        assertEquals("אמא של דני", wa.command.name);
+        assertEquals("היי", wa.command.body);
+
+        WhatsAppRecipients.Resolution after = WhatsAppRecipients.resolve("הודעה לאמא של דני בוואטסאפ היי", book);
+        assertTrue(after.matches.one());
+        assertEquals("אמא של דני", after.matches.hits.get(0).displayName);
+        assertEquals("היי", after.command.body);
+
+        WhatsAppRecipients.Contact efrat = person("אלחנן פרומן אפרת", "אלחנן", "", mobile("0521111111"));
+        WhatsAppRecipients.Contact el1 = person("אלחנן כהן", "אלחנן", "", mobile("0522222222"));
+        WhatsAppRecipients.Contact el2 = person("אלחנן לוי", "אלחנן", "", mobile("0523333333"));
+        List<WhatsAppRecipients.Contact> els = Arrays.asList(el1, efrat, el2);
+        assertTrue(WhatsAppRecipients.match("אלחנן אפרת", els).one());
+        assertEquals("אלחנן פרומן אפרת", WhatsAppRecipients.match("אלחנן אפרת", els).hits.get(0).displayName);
+        assertTrue(WhatsAppRecipients.match("אלחנן פרומן", els).one());
+        assertEquals("אלחנן פרומן אפרת", WhatsAppRecipients.match("אלחנן פרומן", els).hits.get(0).displayName);
+
+        WhatsAppRecipients.Contact mosheYechiel = person("משה יחיאל", "משה", "", mobile("0531111111"));
+        WhatsAppRecipients.Contact mosheCohen = person("משה כהן", "משה", "", mobile("0532222222"));
+        WhatsAppRecipients.Contact yechielLevi = person("יחיאל לוי", "יחיאל", "", mobile("0533333333"));
+        WhatsAppRecipients.Matches twoBeatsOne = WhatsAppRecipients.match("משה יחיאל לוי", Arrays.asList(mosheCohen, yechielLevi, mosheYechiel));
+        assertTrue(twoBeatsOne.one());
+        assertEquals("משה יחיאל", twoBeatsOne.hits.get(0).displayName);
+
+        WhatsAppRecipients.Matches prefixed = WhatsAppRecipients.match("לאמא של דני", book);
+        assertTrue(prefixed.one());
+        assertEquals("אמא של דני", prefixed.hits.get(0).displayName);
+    }
+
     private static WhatsAppRecipients.Contact named(String name, String phone) {
         return new WhatsAppRecipients.Contact(name, name, "", "", Collections.singletonList(mobile(phone)));
     }
