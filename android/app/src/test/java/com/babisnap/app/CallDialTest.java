@@ -313,6 +313,13 @@ public class CallDialTest {
         assertTrue(shelDani.one());
         assertEquals("אמא של דני", shelDani.hits.get(0).displayName);
         assertEquals("אמא של דני", shelDani.usedKey);
+        String rawImaDani = CallDial.nameOf(Classifier.normalize("תתקשר לאמא של דני היי"));
+        assertEquals("אמא של דני היי", rawImaDani);
+        assertEquals("אמא של דני", CallDial.heardName(rawImaDani, shelDani));
+        String rawImaSheli = CallDial.nameOf(Classifier.normalize("תתקשר לאמא שלי היי"));
+        assertEquals("אמא שלי היי", rawImaSheli);
+        assertEquals("אמא שלי", CallDial.heardName(rawImaSheli, CallDial.match(rawImaSheli, book)));
+        assertEquals("אין כזה", CallDial.heardName("אין כזה", CallDial.match("אין כזה", book)));
     }
 
     private static void assertCall(String phrase, String name) {

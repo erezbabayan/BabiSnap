@@ -1019,6 +1019,7 @@ public class VoiceActivity extends Activity {
                 return;
             }
             WhatsAppRecipients.Matches hits = CallDial.matchNames(callNames(), callContacts);
+            callName = CallDial.heardName(callName, hits);
             if (hits.one()) showCallConfirm(hits.hits.get(0));
             else if (hits.code == WhatsAppRecipients.MatchCode.MANY) showCallPicker(hits.hits, false);
             else showCallPicker(new ArrayList<>(callContacts), true);

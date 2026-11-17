@@ -236,6 +236,15 @@ public final class CallDial {
         return WhatsAppRecipients.matchAmong(spoken, eligible);
     }
 
+    /**
+     * The name shown after «שמעתי»: the trimmed matched span ({@code usedKey}),
+     * not a leftover message word from the raw spoken window.
+     */
+    public static String heardName(String spoken, WhatsAppRecipients.Matches hits) {
+        if (hits != null && hits.usedKey != null && !hits.usedKey.isEmpty()) return hits.usedKey;
+        return spoken == null ? "" : spoken.trim();
+    }
+
     /** Same rules as {@link #match}, across every speech hypothesis. */
     public static WhatsAppRecipients.Matches matchNames(List<String> names, List<WhatsAppRecipients.Contact> contacts) {
         List<WhatsAppRecipients.Contact> eligible = new ArrayList<>();
