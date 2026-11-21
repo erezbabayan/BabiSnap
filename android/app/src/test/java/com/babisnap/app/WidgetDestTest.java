@@ -38,5 +38,8 @@ public class WidgetDestTest {
         assertTrue(text("src/main/res/drawable/widget_logo_mic.xml").contains("@drawable/ic_mic_badge"));
         assertTrue(text("src/main/res/drawable/record_tile_mic.xml").contains("@drawable/ic_mic_badge"));
         assertTrue(text("src/main/res/layout/widget_button.xml").contains("@drawable/record_tile_mic"));
+        // Only the new red badge: the 1x1 tile under it has no old mic circle.
+        assertTrue(text("src/main/res/drawable/record_tile_mic.xml").contains("@drawable/record_tile_plain\""));
+        assertFalse(text("src/main/res/drawable/record_tile_plain.xml").contains("translateX=\"57\""));
     }
 }
