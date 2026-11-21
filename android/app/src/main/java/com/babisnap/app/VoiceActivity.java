@@ -15,6 +15,7 @@ import android.content.pm.PackageManager;
 import android.speech.RecognitionListener;
 import android.speech.SpeechRecognizer;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
 import android.widget.LinearLayout;
@@ -56,7 +57,8 @@ public class VoiceActivity extends Activity {
     private WhatsAppRecipients.Contact callPerson;
     private final List<WhatsAppRecipients.Contact> callContacts = new ArrayList<>();
     private Runnable callAfterContacts;
-    private android.animation.ObjectAnimator callAnim;
+    private CallCountdownView callRing;
+    private CountdownBarView callBar;
 
     @Override protected void onCreate(Bundle b) {
         super.onCreate(b);
@@ -117,7 +119,7 @@ public class VoiceActivity extends Activity {
         waText = ""; waBody = ""; waGroupName = ""; waPerson = null; waCommand = null; waAfterContacts = null; waContacts.clear();
         callPending = false; callConfirming = false; callAskingContacts = false; callDialed = false;
         callName = ""; callPerson = null; callAfterContacts = null; callContacts.clear();
-        if (callAnim != null) callAnim.cancel();
+        stopCallFx();
         pendingBody = null; pendingId = null; pendingMeeting = false; committed = false;
         cardClosed = false; awaitingConsent = false; pickerMode = false;
         invitees.clear(); inviteQueries = new ArrayList<>();
@@ -642,7 +644,7 @@ public class VoiceActivity extends Activity {
         chooserOpen = false; ui.removeCallbacks(chooserExpire);
         cardClosed = true; stopVoiceTake(); ui.removeCallbacks(closeCard); ui.removeCallbacks(commit); ui.removeCallbacks(pickerTimeout); ui.removeCallbacks(waExpire); ui.removeCallbacks(callExpire);
         if (waAnim != null) waAnim.cancel();
-        if (callAnim != null) callAnim.cancel();
+        stopCallFx();
         if (!waHandedOff) discardWa();
         if (msg != null) Toast.makeText(getApplicationContext(), msg, Toast.LENGTH_LONG).show();
         if (!isFinishing()) finish();
@@ -1086,7 +1088,7 @@ public class VoiceActivity extends Activity {
         callPending = false;
         callConfirming = false;
         ui.removeCallbacks(callExpire);
-        if (callAnim != null) callAnim.cancel();
+        stopCallFx();
         callPerson = null;
         if (toast != null) done(toast);
     }
@@ -1179,7 +1181,7 @@ public class VoiceActivity extends Activity {
         callConfirming = false;
         callPerson = null;
         ui.removeCallbacks(callExpire);
-        if (callAnim != null) callAnim.cancel();
+        stopCallFx();
         paintCallCard(search ? "שיחה · בחירת איש קשר" : "שיחה · כמה אנשי קשר", "שמעתי «" + callName + "»", false);
         preparePickerWindow();
         LinearLayout box = findViewById(R.id.invites);
@@ -1253,14 +1255,37 @@ public class VoiceActivity extends Activity {
         row.topMargin = InviteViews.dp(this, 12);
         actions.addView(pair, row);
         actions.setVisibility(View.VISIBLE);
-        android.widget.ProgressBar bar = findViewById(R.id.countdown);
-        bar.setVisibility(View.VISIBLE);
-        bar.setMax((int) CallDial.CONFIRM_MS);
-        bar.setProgress((int) CallDial.CONFIRM_MS);
-        if (callAnim != null) callAnim.cancel();
-        callAnim = android.animation.ObjectAnimator.ofInt(bar, "progress", (int) CallDial.CONFIRM_MS, 0);
-        callAnim.setDuration(CallDial.CONFIRM_MS);
-        callAnim.start();
+        startCallFx();
+    }
+
+    /**
+     * Animated countdown: a ring around the phone icon with ripples and seconds, and a shimmer bar.
+     * Drawing only; the call still fires from {@link #callExpire} after {@link CallDial#CONFIRM_MS}.
+     */
+    private void startCallFx() {
+        stopCallFx();
+        boolean reduced = CountdownMath.reducedMotion(android.provider.Settings.Global.getFloat(
+            getContentResolver(), android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f));
+        View check = findViewById(R.id.check);
+        ViewGroup root = (ViewGroup) check.getParent();
+        check.setVisibility(View.GONE);
+        callRing = new CallCountdownView(this);
+        root.addView(callRing, root.indexOfChild(check), new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+        View oldBar = findViewById(R.id.countdown);
+        oldBar.setVisibility(View.GONE);
+        callBar = new CountdownBarView(this);
+        LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, InviteViews.dp(this, 6));
+        bp.topMargin = InviteViews.dp(this, 14);
+        root.addView(callBar, root.indexOfChild(oldBar) + 1, bp);
+        callRing.start(CallDial.CONFIRM_MS, reduced);
+        callBar.start(CallDial.CONFIRM_MS, reduced);
+    }
+
+    private void stopCallFx() {
+        if (callRing != null) callRing.stop();
+        if (callBar != null) callBar.stop();
     }
 
     /** «חייג» uses the same decision as the countdown. A later WhatsApp voice action gets its own branch. */
@@ -1279,7 +1304,7 @@ public class VoiceActivity extends Activity {
         callConfirming = false;
         callPending = false;
         ui.removeCallbacks(callExpire);
-        if (callAnim != null) callAnim.cancel();
+        stopCallFx();
         if (how == CallDial.Handset.NONE || tel == null) {
             done(tel == null ? CallDial.NO_NUMBER : CallDial.CANCELLED);
             return;
