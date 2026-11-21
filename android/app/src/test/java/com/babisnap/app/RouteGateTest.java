@@ -103,10 +103,10 @@ public class RouteGateTest {
         assertTrue(settings.contains("אישור לבצע שיחות") || settings.contains("CallDial.TOGGLE_TITLE"));
         assertTrue(settings.contains("CallDial.TOGGLE_HINT"));
         assertTrue(text("src/main/java/com/babisnap/app/CallDial.java").contains("בסוף הספירה השיחה תצא ישירות, בלי חייגן"));
-        assertTrue(settings.contains("R.drawable.ic_route_call"));
-        assertTrue(settings.contains("R.drawable.ic_route_calendar"));
-        assertTrue(settings.contains("R.drawable.ic_route_whatsapp"));
-        assertTrue(settings.contains("R.drawable.ic_route_babitk"));
+        assertTrue(settings.contains("DestIcon.Dest.CALL"));
+        assertTrue(settings.contains("DestIcon.Dest.CALENDAR"));
+        assertTrue(settings.contains("DestIcon.Dest.WHATSAPP"));
+        assertTrue(settings.contains("DestIcon.Dest.TASK"));
         assertTrue(settings.contains("setMinHeight(dp(48))"));
         assertTrue(settings.contains("requestPermissions(new String[]{Manifest.permission.CALL_PHONE}, REQ_CALL)"));
         assertTrue(settings.contains("setMinimumHeight(dp(48))"));
