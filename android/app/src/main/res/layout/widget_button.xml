@@ -3,7 +3,7 @@
     android:orientation="vertical" android:gravity="top|center_horizontal">
     <!-- Launcher-icon size: 89% of the cell (70dp when the cell size is unknown). -->
     <ImageView android:id="@+id/mic" android:layout_width="70dp" android:layout_height="70dp" android:layout_marginTop="3dp"
-        android:src="@drawable/record_tile" android:scaleType="fitCenter" android:adjustViewBounds="true"
+        android:src="@drawable/record_tile_mic" android:scaleType="fitCenter" android:adjustViewBounds="true"
         android:contentDescription="@string/widget_button_desc" />
     <TextView android:id="@+id/label" android:layout_width="match_parent" android:layout_height="wrap_content"
         android:layout_marginTop="1dp" android:gravity="center" android:text="@string/app_name"

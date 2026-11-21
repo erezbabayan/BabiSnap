@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 1x1 record button with the same mic badge as the large widget. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@drawable/record_tile" android:bottom="5dp" android:right="5dp" />
+    <item android:drawable="@drawable/ic_mic_badge" android:gravity="bottom|right" android:width="21dp" android:height="21dp" />
+</layer-list>

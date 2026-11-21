@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Red mic badge on the B logo (approved sample E): the widget records. Cream ring separates it from the logo. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="20dp" android:height="20dp" android:viewportWidth="24" android:viewportHeight="24">
+    <path android:fillColor="#FFFFFBEA" android:pathData="M0,12a12,12 0,1 1,24,0a12,12 0,1 1,-24,0z"/>
+    <path android:pathData="M2,12a10,10 0,1 1,20,0a10,10 0,1 1,-20,0z">
+        <aapt:attr name="android:fillColor"><gradient android:type="linear" android:startX="2" android:startY="2" android:endX="22" android:endY="22" android:startColor="#FFFF5A5A" android:endColor="#FFC2185B"/></aapt:attr>
+    </path>
+    <path android:fillColor="#FFFFFFFF" android:pathData="M10.6,6.5h2.8a0.9,0.9 0,0 1,0.9 0.9v4.6a2.3,2.3 0,0 1,-4.6 0V7.4a0.9,0.9 0,0 1,0.9 -0.9z"/>
+    <path android:fillColor="#00000000" android:strokeColor="#FFFFFFFF" android:strokeWidth="1.4" android:strokeLineCap="round"
+        android:pathData="M8,11.6a4,4 0,0 0,8 0M12,15.6v2.4M10,18h4"/>
+</vector>
