@@ -33,7 +33,10 @@ public final class Classifier {
 
     public static final class Result {
         public final Kind kind; public final String stripped;
-        Result(Kind k, String s) { kind = k; stripped = s; }
+        /** True only for the last-resort NOTE: no routing word, no cue, nothing matched. The route chooser may ask. */
+        public final boolean guessed;
+        Result(Kind k, String s) { this(k, s, false); }
+        Result(Kind k, String s, boolean guessed) { kind = k; stripped = s; this.guessed = guessed; }
     }
 
     // Explicit leading command words (longest first). Stripped from the title.
@@ -167,7 +170,7 @@ public final class Classifier {
         if (t.startsWith("פגישה") || t.startsWith("ישיבה")) return new Result(Kind.MEETING, t);
 
         if (OBLIGATION.matcher(t).find()) return new Result(Kind.TASK, t);
-        return new Result(Kind.NOTE, t);
+        return new Result(Kind.NOTE, t, true);
     }
 
     static boolean meetingCue(String t) {
