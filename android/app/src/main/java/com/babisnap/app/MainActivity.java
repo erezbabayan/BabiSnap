@@ -37,8 +37,7 @@ import org.json.JSONObject;
 public class MainActivity extends Activity {
     static final int REQ_AUTH = 10, REQ_MIC = 11, REQ_CONTACTS = 12, REQ_CALENDAR = 13, REQ_NOTIF = 14, REQ_CALL = 15;
     private static final int PURPLE = 0xFF2A1B7A, PURPLE_DARK = 0xFF1E1458, BG = 0xFFF6F5FA, GREEN = 0xFF1A8A4A,
-        MUTED = 0xFF7A7888, SECTION = 0xFF6A5FA8, RED = 0xFFB3261E, DIVIDER = 0xFFEEECF5, ICON_BG = 0xFFEFEDF8, ICON_BG_Y = 0xFFFFF1C4,
-        CAL_ICON = 0xFF1A73E8, WA_ICON = 0xFF075E54, CALL_ICON = 0xFF148F4A, BABI_ICON = 0xFF2A1B7A;
+        MUTED = 0xFF7A7888, SECTION = 0xFF6A5FA8, RED = 0xFFB3261E, DIVIDER = 0xFFEEECF5, ICON_BG = 0xFFEFEDF8, ICON_BG_Y = 0xFFFFF1C4;
     private boolean ignoreCallToggle;
     private boolean askMic;
     private LinearLayout content;
@@ -88,13 +87,13 @@ public class MainActivity extends Activity {
         section("חיבורים");
         LinearLayout conn = card();
         String email = Core.prefs(this).getString("email", null);
-        if (email != null) markRow(conn, R.drawable.ic_route_calendar, CAL_ICON, "יומן Google", "Google יומן", ok("מחובר ✓", " · \u2066" + email + "\u2069"), link("התנתק", false, v -> signOut()));
-        else markRow(conn, R.drawable.ic_route_calendar, CAL_ICON, "יומן Google", "Google יומן", plain("לשמירת פגישות"), pill("התחבר", v -> signIn()));
+        if (email != null) markRow(conn, DestIcon.Dest.CALENDAR, "יומן Google", "Google יומן", ok("מחובר ✓", " · \u2066" + email + "\u2069"), link("התנתק", false, v -> signOut()));
+        else markRow(conn, DestIcon.Dest.CALENDAR, "יומן Google", "Google יומן", plain("לשמירת פגישות"), pill("התחבר", v -> signIn()));
         renderDeviceCalendar(conn);
         boolean btk = BabiTk.hasToken(this);
-        if (btk) markRow(conn, R.drawable.ic_route_babitk, BABI_ICON, "BabiTk", "BabiTk · מחברת", ok("מחובר ✓", " · משימות והערות"), link("נתק", false, v -> { BabiTk.disconnect(this);
+        if (btk) markRow(conn, DestIcon.Dest.TASK, "BabiTk", "BabiTk · מחברת", ok("מחובר ✓", " · משימות והערות"), link("נתק", false, v -> { BabiTk.disconnect(this);
             Toast.makeText(this, "נותק – הטוקן נמחק מהמכשיר", Toast.LENGTH_SHORT).show(); render(); }));
-        else markRow(conn, R.drawable.ic_route_babitk, BABI_ICON, "BabiTk", "BabiTk · מחברת", plain(BabiTk.needsRepair(this) ? BabiTk.NOT_CONNECTED : "משימות והערות"), pill("חבר", v -> openBabiTk()));
+        else markRow(conn, DestIcon.Dest.TASK, "BabiTk", "BabiTk · מחברת", plain(BabiTk.needsRepair(this) ? BabiTk.NOT_CONNECTED : "משימות והערות"), pill("חבר", v -> openBabiTk()));
         if (BabiTk.showDiagnostics(this)) {
             int pending = BabiTk.pending(this), failed = BabiTk.failed(this);
             String t = pending > 0 ? pending + " ממתינים לשליחה" : failed > 0 ? failed + " פריטים נדחו" : "בעיה בשליחה";
@@ -143,7 +142,7 @@ public class MainActivity extends Activity {
             Core.prefs(this).edit().putBoolean(WhatsAppLogic.PREF_ENABLED, on).apply();
             render();
         });
-        markRow(prefs, R.drawable.ic_route_whatsapp, WA_ICON, "וואטסאפ", "שליחה לוואטסאפ", plain("כבוי כברירת מחדל. השם נלקח מאנשי הקשר"), wa);
+        markRow(prefs, DestIcon.Dest.WHATSAPP, "וואטסאפ", "שליחה לוואטסאפ", plain("כבוי כברירת מחדל. השם נלקח מאנשי הקשר"), wa);
         if (waOn) {
             WhatsAppLogic.Mode mode = Core.whatsAppMode(this);
             row(prefs, "📤", false, "מה נשלח לוואטסאפ", plain(WhatsAppLogic.modeHint(mode)),
@@ -157,7 +156,7 @@ public class MainActivity extends Activity {
         callSw.setMinHeight(dp(48));
         callSw.setMinimumHeight(dp(48));
         callSw.setOnCheckedChangeListener(this::onCallToggle);
-        markRow(prefs, R.drawable.ic_route_call, CALL_ICON, CallDial.TOGGLE_TITLE, CallDial.TOGGLE_TITLE,
+        markRow(prefs, DestIcon.Dest.CALL, CallDial.TOGGLE_TITLE, CallDial.TOGGLE_TITLE,
             plain(CallDial.TOGGLE_HINT), callSw);
         row(prefs, "➕", true, "כפתור במסך הבית", null, link("הוסף", false, v -> addWidget()));
         TextView side = new TextView(this);
@@ -194,24 +193,24 @@ public class MainActivity extends Activity {
         boolean destDevice = DeviceCalendarLogic.DEVICE.equals(Core.prefs(this).getString(DeviceCalendar.PREF_DEST, DeviceCalendarLogic.GOOGLE));
         if (on) {
             String name = DeviceCalendar.savedName(this);
-            markRow(conn, R.drawable.ic_route_calendar, CAL_ICON, "יומן המכשיר", "יומן המכשיר", ok("מחובר ✓", " · " + name), link("נתק", false, v -> disconnectDeviceCalendar()));
-            markRow(conn, R.drawable.ic_route_calendar, CAL_ICON, "יומן המכשיר", "יומן", null, link(name + " ▾", false, v -> pickDeviceCalendar()));
+            markRow(conn, DestIcon.Dest.CALENDAR, "יומן המכשיר", "יומן המכשיר", ok("מחובר ✓", " · " + name), link("נתק", false, v -> disconnectDeviceCalendar()));
+            markRow(conn, DestIcon.Dest.CALENDAR, "יומן המכשיר", "יומן", null, link(name + " ▾", false, v -> pickDeviceCalendar()));
         } else if (saved) {
-            markRow(conn, R.drawable.ic_route_calendar, CAL_ICON, "יומן המכשיר", "יומן המכשיר", plain("היומן שנבחר לא זמין"), link("נתק", false, v -> disconnectDeviceCalendar()));
-            markRow(conn, R.drawable.ic_route_calendar, CAL_ICON, "יומן המכשיר", "יומן", null, link("בחרו ▾", false, v -> pickDeviceCalendar()));
+            markRow(conn, DestIcon.Dest.CALENDAR, "יומן המכשיר", "יומן המכשיר", plain("היומן שנבחר לא זמין"), link("נתק", false, v -> disconnectDeviceCalendar()));
+            markRow(conn, DestIcon.Dest.CALENDAR, "יומן המכשיר", "יומן", null, link("בחרו ▾", false, v -> pickDeviceCalendar()));
         } else if (blocked) {
-            markRow(conn, R.drawable.ic_route_calendar, CAL_ICON, "יומן המכשיר", "יומן המכשיר", plain("נחסם – אפשר לאשר בהגדרות המערכת"), pill("אשר", v -> {
+            markRow(conn, DestIcon.Dest.CALENDAR, "יומן המכשיר", "יומן המכשיר", plain("נחסם – אפשר לאשר בהגדרות המערכת"), pill("אשר", v -> {
                 Toast.makeText(this, "הרשאות ← יומן ← אפשר", Toast.LENGTH_LONG).show(); openAppInfo();
             }));
         } else {
-            markRow(conn, R.drawable.ic_route_calendar, CAL_ICON, "יומן המכשיר", "יומן המכשיר", plain("לשמירה ביומן שבטלפון"), pill("חבר", v -> connectDeviceCalendar()));
+            markRow(conn, DestIcon.Dest.CALENDAR, "יומן המכשיר", "יומן המכשיר", plain("לשמירה ביומן שבטלפון"), pill("חבר", v -> connectDeviceCalendar()));
         }
         if (on || destDevice) {
             String cur = destDevice ? "יומן המכשיר" : "Google יומן";
             String sub = destDevice
                 ? (on ? "פגישות נשמרות ביומן המכשיר" : "אין יומן זמין – בחרו יומן או חזרו ל-Google")
                 : "פגישות נשמרות ב-Google";
-            markRow(conn, R.drawable.ic_route_calendar, CAL_ICON, "יעד ליומן", "יעד לפגישות", plain(sub), link(cur + " ▾", false, v -> pickDestination(on)));
+            markRow(conn, DestIcon.Dest.CALENDAR, "יעד ליומן", "יעד לפגישות", plain(sub), link(cur + " ▾", false, v -> pickDestination(on)));
         }
     }
 
@@ -596,19 +595,13 @@ public class MainActivity extends Activity {
     }
 
     /** Generic glyph in the route colors. Not a third-party logo. 24dp art, 48dp row. */
-    private void markRow(LinearLayout card, int iconRes, int bg, String description, String title, CharSequence sub, View action) {
-        FrameLayout box = new FrameLayout(this);
-        box.setBackground(round(bg, dp(10)));
+    /** Settings row with the shared destination tile (same icon as the cards). */
+    private void markRow(LinearLayout card, DestIcon.Dest dest, String description, String title, CharSequence sub, View action) {
         ImageView iv = new ImageView(this);
-        Drawable raw = getDrawable(iconRes);
-        if (raw != null) {
-            Drawable icon = raw.mutate();
-            icon.setTint(0xFFFFFFFF);
-            iv.setImageDrawable(icon);
-        }
+        iv.setImageResource(DestIcon.tile(dest));
+        iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
         iv.setContentDescription(description);
-        box.addView(iv, new FrameLayout.LayoutParams(dp(24), dp(24), Gravity.CENTER));
-        finishRow(card, box, title, sub, action);
+        finishRow(card, iv, title, sub, action);
     }
 
     private void row(LinearLayout card, String icon, boolean yellow, String title, CharSequence sub, View action) {

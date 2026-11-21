@@ -413,12 +413,11 @@ public class VoiceActivity extends Activity {
         JSONObject p = parsed;
         setContentView(R.layout.card_saved);
         getWindow().setBackgroundDrawableResource(android.R.color.transparent);
-        ((TextView) findViewById(R.id.check)).setText("📅");
+        DestIcon.head(findViewById(R.id.check), DestIcon.Dest.CALENDAR);
         ((TextView) findViewById(R.id.headline)).setText(
             CalQueueLogic.cardHeadline(meetingRoute == DeviceCalendarLogic.Route.DEVICE));
         TextView chip = findViewById(R.id.chip); chip.setText("פגישה");
-        chip.setBackgroundResource(R.drawable.chip_meeting); chip.setTextColor(0xFFFFFFFF);
-        RouteMark.apply(chip, RouteMark.Route.CALENDAR, 0xFFFFFFFF);
+        DestIcon.chip(chip, DestIcon.Dest.CALENDAR);
         ((TextView) findViewById(R.id.summary)).setText(CardText.meeting(p.optString("title"), p.optInt("d"), p.optInt("m"), p.optInt("y"),
             p.optInt("hour"), p.optInt("minute"), p.optBoolean("timeDefaulted"), p.optBoolean("allDay"), p.optString("location", "")));
         if (InviteFlow.needsPicker(invitees)) { startPickers(); return; }
@@ -503,8 +502,8 @@ public class VoiceActivity extends Activity {
         ((TextView) findViewById(R.id.headline)).setText(hasTok ? "נכנס למחברת ב-BabiTk · " + c.kind.he()
             : "נשמר במכשיר · " + c.kind.he() + "\n" + (BabiTk.needsRepair(this) ? "BabiTk " + BabiTk.NOT_CONNECTED : "BabiTk לא מחובר") + " – פתחו את BabiSnap ← הגדרות ← BabiTk");
         TextView chip = findViewById(R.id.chip); chip.setText(c.kind.he() + (spokenTags.isEmpty() ? "" : " · #" + String.join(" #", spokenTags)));
-        if (c.kind == Classifier.Kind.NOTE) { chip.setBackgroundResource(R.drawable.chip_note); chip.setTextColor(0xFF2A1B7A); }
-        RouteMark.apply(chip, RouteMark.Route.BABITK, chip.getCurrentTextColor());
+        DestIcon.head(findViewById(R.id.check), DestIcon.of(c.kind));
+        DestIcon.chip(chip, DestIcon.of(c.kind));
         ((TextView) findViewById(R.id.summary)).setText(CardText.saved(title, date != null, p.optInt("d"), p.optInt("m"), p.optInt("y"), time, p.optString("location", "")));
         android.widget.ProgressBar bar = findViewById(R.id.countdown);
         android.animation.ObjectAnimator.ofInt(bar, "progress", (int) UNDO_MS, 0).setDuration(UNDO_MS).start();
@@ -902,13 +901,11 @@ public class VoiceActivity extends Activity {
         setFinishOnTouchOutside(true);
         setContentView(R.layout.card_saved);
         getWindow().setBackgroundDrawableResource(android.R.color.transparent);
-        ((TextView) findViewById(R.id.check)).setText("💬");
+        DestIcon.head(findViewById(R.id.check), DestIcon.Dest.WHATSAPP);
         ((TextView) findViewById(R.id.headline)).setText(headline);
         TextView chip = findViewById(R.id.chip);
         chip.setText(chipText);
-        chip.setBackgroundResource(R.drawable.chip_whatsapp);
-        chip.setTextColor(0xFFFFFFFF);
-        RouteMark.apply(chip, RouteMark.Route.WHATSAPP, 0xFFFFFFFF);
+        DestIcon.chip(chip, DestIcon.Dest.WHATSAPP);
         ((TextView) findViewById(R.id.summary)).setText(summary);
         findViewById(R.id.undo).setOnClickListener(v -> cancelWhatsApp("בוטל – לא נשלח לוואטסאפ"));
         if (!counting) {
@@ -1124,13 +1121,11 @@ public class VoiceActivity extends Activity {
         setFinishOnTouchOutside(true);
         setContentView(R.layout.card_saved);
         getWindow().setBackgroundDrawableResource(android.R.color.transparent);
-        ((TextView) findViewById(R.id.check)).setText("📞");
+        DestIcon.head(findViewById(R.id.check), DestIcon.Dest.CALL);
         ((TextView) findViewById(R.id.headline)).setText(headline);
         TextView chip = findViewById(R.id.chip);
         chip.setText("שיחה");
-        chip.setBackgroundResource(R.drawable.chip_call);
-        chip.setTextColor(0xFFFFFFFF);
-        RouteMark.apply(chip, RouteMark.Route.CALL, 0xFFFFFFFF);
+        DestIcon.chip(chip, DestIcon.Dest.CALL);
         ((TextView) findViewById(R.id.summary)).setText(summary);
         TextView undo = findViewById(R.id.undo);
         undo.setText("ביטול");

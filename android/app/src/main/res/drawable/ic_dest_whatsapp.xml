@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- BabiSnap destination icon (whatsapp, tile). One set used everywhere: cards, pills, Settings, widget. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="48dp" android:height="48dp" android:viewportWidth="64" android:viewportHeight="64">
+    <path android:pathData="M20,2h24a18,18 0,0 1,18,18v24a18,18 0,0 1,-18,18h-24a18,18 0,0 1,-18,-18v-24a18,18 0,0 1,18,-18z"><aapt:attr name="android:fillColor"><gradient android:type="linear" android:startX="2" android:startY="2" android:endX="62" android:endY="62" android:startColor="#FF3BE37F" android:endColor="#FF0E8F4A"/></aapt:attr></path>
+    <path android:pathData="M20,2h24a18,18 0,0 1,18,18v24a18,18 0,0 1,-18,18h-24a18,18 0,0 1,-18,-18v-24a18,18 0,0 1,18,-18z"><aapt:attr name="android:fillColor"><gradient android:type="linear" android:startX="32" android:startY="2" android:endX="32" android:endY="32" android:startColor="#59FFFFFF" android:endColor="#00FFFFFF"/></aapt:attr></path>
+    <path android:fillColor="#00000000" android:strokeColor="#59FFFFFF" android:strokeWidth="1.5" android:pathData="M20.05,2.75h23.9a17.3,17.3 0,0 1,17.3,17.3v23.9a17.3,17.3 0,0 1,-17.3,17.3h-23.9a17.3,17.3 0,0 1,-17.3,-17.3v-23.9a17.3,17.3 0,0 1,17.3,-17.3z"/>
+    <path android:fillColor="#00000000" android:strokeColor="#FFFFFFFF" android:strokeWidth="3.2" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M32,13a18,18 0,0 0,-15.6,27L14,50l10.3,-2.4A18,18 0,1 0,32,13z"/>
+    <path android:fillColor="#FFFFFFFF" android:pathData="M25.5,25.5c0,7 5.8,12.8 12.8,12.8l2.2,-3 -3.6,-1.9 -1.6,1.6c-2.4,-1 -4.4,-3 -5.4,-5.4l1.6,-1.6 -1.9,-3.6z"/>
+</vector>
