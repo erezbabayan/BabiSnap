@@ -62,7 +62,7 @@ public final class Classifier {
     /** "תזמין את תמר לפגישה מחר" is a meeting with an invite (stage 2), not a "תזמין" (order) task. */
     static final Pattern INVITE_TO_MEETING = Pattern.compile("^ו?(?:תזמין|תזמיני|תזמינו|הזמן|הזמיני|הזמינו|לזמן|תזמן|תזמני|תזמנו|זמן|זמני)\\s+(?:גם\\s+)?את\\s.*(?:^|\\s)ל?(?:פגישה|פגישת|ישיבה|ישיבת|מפגש)(?:\\s|$)");
     /** "יומן" family (any variation, with ו/ב/ל/ה/מ prefixes) = calendar destination; stripped from the title. */
-    static final Pattern CALENDAR = Pattern.compile("(^|\\s)(?:ו?[בלהמ]?(?:יומן|יומנים|יומני|יומנך|יומנו|היומן|לוח שנה|לוח השנה|קלנדר|קלנדאר|גוגל קלנדר|יומן גוגל)|calendar|google calendar)(?=\\s|$)", Pattern.CASE_INSENSITIVE);
+    static final Pattern CALENDAR = Pattern.compile("(^|\\s)(?:ו?[בלהמ]?(?:יומן|יומנים|יומני|יומנך|יומנו|היומן|לוח שנה|לוח השנה|קלנדר|קלנדאר|גוגל קלנדר|יומן גוגל)|calendar|google calendar):?(?=\\s|$|[,.;!?])", Pattern.CASE_INSENSITIVE);
     /**
      * WhatsApp channel word, whole token only. Listed forms plus the same ו/ב/ל/ה/מ prefix
      * the calendar words use ("לוואטסאפ", "בוואטסאפ"). Removed from the message, not from other routes.
@@ -142,7 +142,7 @@ public final class Classifier {
             String c = CALENDAR.matcher(t).replaceAll(" ").replaceAll("\\s+", " ").trim();
             if (c.isEmpty()) return new Result(Kind.MEETING, t);
             // leftover command word + connector ש ("תרשום שהרכב")
-            String afterCmd = strip(c, new String[]{"תוסיף","תוסיפי","הוסף","הוסיפי","תקבע","תקבעי","קבע","קבעי","תרשום","תרשמי","רשום","רשמי","שים","תשים","תשימי","תכניס","תכניסי","הכנס","תיצור","תיצרי","צור","צרי","תזמן","תזמני","תזכיר לי","תזכירי לי"});
+            String afterCmd = strip(c, new String[]{"תוסיף","תוסיפי","הוסף","הוסיפי","תקבע","תקבעי","קבע","קבעי","תרשום","תרשמי","רשום","רשמי","שים","תשים","תשימי","תכניס","תכניסי","הכנס","תיצור","תיצרי","צור","צרי","תזמן","תזמני","תזכיר לי","תזכירי לי","לרשום","להוסיף","להכניס","לשים","לקבוע"});
             if (afterCmd != null) c = afterCmd;
             return new Result(Kind.MEETING, stripConnectorShin(c));
         }
