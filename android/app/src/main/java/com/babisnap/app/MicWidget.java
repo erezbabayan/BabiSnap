@@ -11,7 +11,19 @@ import android.widget.RemoteViews;
 
 public class MicWidget extends AppWidgetProvider {
     protected int layout() { return R.layout.widget_mic; }
-    protected void customize(AppWidgetManager m, int id, RemoteViews v) {}
+    /** Large widget: show the destination row that fits the current width (sample E). */
+    protected void customize(AppWidgetManager m, int id, RemoteViews v) {
+        int w = 0;
+        try {
+            Bundle o = m.getAppWidgetOptions(id);
+            boolean land = android.content.res.Resources.getSystem().getConfiguration().orientation
+                == android.content.res.Configuration.ORIENTATION_LANDSCAPE;
+            if (o != null) w = o.getInt(land ? AppWidgetManager.OPTION_APPWIDGET_MAX_WIDTH : AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH);
+        } catch (Exception ignored) { /* unknown size: default style */ }
+        WidgetSize.DestStyle style = WidgetSize.destStyle(w);
+        v.setViewVisibility(R.id.dest_labels, style == WidgetSize.DestStyle.LABELS ? android.view.View.VISIBLE : android.view.View.GONE);
+        v.setViewVisibility(R.id.dest_icons, style == WidgetSize.DestStyle.ICONS ? android.view.View.VISIBLE : android.view.View.GONE);
+    }
     /** Same target for the large and the small widget: only the recording screen, in its own task. */
     static PendingIntent recordIntent(Context c) {
         return PendingIntent.getActivity(c, 0, RecordLaunch.recording(c), PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);

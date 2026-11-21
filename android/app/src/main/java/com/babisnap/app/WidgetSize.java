@@ -19,6 +19,18 @@ public final class WidgetSize {
     public static final int LABEL_DP = 18;
     public static final int MIN_DP = 40, MAX_DP = 110;
 
+    /** Large widget destination row: icon + label when wide, icons only when medium, none when narrow. */
+    public enum DestStyle { LABELS, ICONS, NONE }
+    public static final int LABELS_MIN_DP = 250, ICONS_MIN_DP = 180;
+
+    /** Width 0 means the launcher did not say: show icons, they fit the default 2-cell tile. */
+    public static DestStyle destStyle(int widthDp) {
+        if (widthDp <= 0) return DestStyle.ICONS;
+        if (widthDp >= LABELS_MIN_DP) return DestStyle.LABELS;
+        if (widthDp >= ICONS_MIN_DP) return DestStyle.ICONS;
+        return DestStyle.NONE;
+    }
+
     public static void forgetOldPref(SharedPreferences prefs) {
         if (prefs != null && prefs.contains(OLD_PREF)) prefs.edit().remove(OLD_PREF).apply();
     }
