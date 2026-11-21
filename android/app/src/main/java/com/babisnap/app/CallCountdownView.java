@@ -14,22 +14,23 @@ import android.os.SystemClock;
 import android.view.View;
 
 /**
- * Call confirm countdown: a ring that drains around the phone icon, ripple rings that pulse out of it,
- * and the seconds left in the middle. Pure Canvas drawing, no extra libraries.
- * It only draws; the call itself is still fired by VoiceActivity's own timer.
- * Reduced motion: no ripples, the ring steps once a second.
+ * Call confirm countdown (design A, approved by Erez): a purple-to-green ring that drains around a navy disc,
+ * a phone icon that wiggles, and the seconds left (5→0) inside. The ring tip turns amber in the last second.
+ * Pure Canvas drawing, no extra libraries. It only draws; the call is still fired by VoiceActivity's own timer.
+ * Reduced motion: no wiggle, the ring steps once a second.
  */
 public final class CallCountdownView extends View {
     private static final int PURPLE = 0xFF6A5FA8;
     private static final int PURPLE_DARK = 0xFF2A1B7A;
     private static final int GREEN = 0xFF0E7A3A;
     private static final int GREEN_LIGHT = 0xFF34C76F;
+    private static final int TEAL_DARK = 0xFF1F5A55;
     private static final int AMBER = 0xFFFFC72C;
     private static final int TRACK = 0xFFEADFB5;
 
     private final Paint ring = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint track = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Paint ripple = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint glow = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint disc = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint digits = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final RectF arc = new RectF();
@@ -46,17 +47,19 @@ public final class CallCountdownView extends View {
         super(c);
         dp = c.getResources().getDisplayMetrics().density;
         track.setStyle(Paint.Style.STROKE);
-        track.setStrokeWidth(6f * dp);
+        track.setStrokeWidth(7f * dp);
         track.setColor(TRACK);
         ring.setStyle(Paint.Style.STROKE);
-        ring.setStrokeWidth(6f * dp);
+        ring.setStrokeWidth(7f * dp);
         ring.setStrokeCap(Paint.Cap.ROUND);
-        ripple.setStyle(Paint.Style.STROKE);
-        ripple.setStrokeWidth(2.5f * dp);
+        glow.setStyle(Paint.Style.STROKE);
+        glow.setStrokeWidth(13f * dp);
+        glow.setStrokeCap(Paint.Cap.ROUND);
+        glow.setAlpha(70);
         digits.setColor(Color.WHITE);
         digits.setTextAlign(Paint.Align.CENTER);
         digits.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
-        digits.setTextSize(15f * dp);
+        digits.setTextSize(22f * dp);
         Drawable d = c.getDrawable(R.drawable.ic_dial_answer);
         phone = d == null ? null : d.mutate();
         setContentDescription("ספירה לאחור לפני השיחה");
@@ -97,19 +100,9 @@ public final class CallCountdownView extends View {
         float cx = getWidth() / 2f, cy = getHeight() / 2f;
         float outer = Math.min(cx, cy);
         float ringR = outer - 20f * dp;
-        float discR = ringR - 12f * dp;
+        float discR = ringR - 10f * dp;
         float urgency = CountdownMath.urgency(t, totalMs);
         boolean done = t >= totalMs;
-
-        // Ripples come out of the disc and fade before the card edge.
-        if (!reduced && !done) {
-            for (int i = 0; i < CountdownMath.RIPPLES; i++) {
-                float ph = CountdownMath.ripplePhase(t, i);
-                ripple.setColor(GREEN_LIGHT);
-                ripple.setAlpha(CountdownMath.rippleAlpha(ph));
-                canvas.drawCircle(cx, cy, discR + (outer - discR) * ph, ripple);
-            }
-        }
 
         canvas.drawCircle(cx, cy, ringR, track);
         float left = reduced ? CountdownMath.steppedRemaining(t, totalMs) : CountdownMath.remaining(t, totalMs);
@@ -120,29 +113,29 @@ public final class CallCountdownView extends View {
             m.setRotate(-90f, cx, cy);
             sg.setLocalMatrix(m);
             ring.setShader(sg);
+            glow.setShader(sg);
             arc.set(cx - ringR, cy - ringR, cx + ringR, cy + ringR);
+            canvas.drawArc(arc, -90f, 360f * left, false, glow);
             canvas.drawArc(arc, -90f, 360f * left, false, ring);
         }
 
-        // Inner disc: deep purple to green, with a soft breathing scale when motion is allowed.
-        float breathe = reduced || done ? 1f : 1f + 0.03f * (float) Math.sin(t / 1000.0 * Math.PI * 2);
-        float r = discR * breathe;
-        disc.setShader(new LinearGradient(cx, cy - r, cx, cy + r, PURPLE_DARK, blend(GREEN, PURPLE_DARK, 0.25f), Shader.TileMode.CLAMP));
-        canvas.drawCircle(cx, cy, r, disc);
+        // Inner disc: navy to dark teal.
+        disc.setShader(new LinearGradient(cx, cy - discR, cx, cy + discR, PURPLE_DARK, TEAL_DARK, Shader.TileMode.CLAMP));
+        canvas.drawCircle(cx, cy, discR, disc);
 
         if (phone != null) {
-            int ic = Math.round(discR * 0.85f);
+            int ic = Math.round(discR * 0.78f);
             float wiggle = reduced || done ? 0f : (float) (8.0 * Math.sin(t / 90.0)) * (((t / 700L) % 2 == 0) ? 1f : 0f);
             canvas.save();
-            canvas.rotate(wiggle, cx, cy - discR * 0.22f);
-            int l = Math.round(cx - ic / 2f), top = Math.round(cy - discR * 0.22f - ic / 2f);
+            canvas.rotate(wiggle, cx, cy - discR * 0.25f);
+            int l = Math.round(cx - ic / 2f), top = Math.round(cy - discR * 0.25f - ic / 2f);
             phone.setBounds(l, top, l + ic, top + ic);
             phone.setTint(Color.WHITE);
             phone.draw(canvas);
             canvas.restore();
         }
         int secs = CountdownMath.secondsLeft(t, totalMs);
-        canvas.drawText(String.valueOf(secs), cx, cy + discR * 0.72f, digits);
+        canvas.drawText(String.valueOf(secs), cx, cy + discR * 0.66f, digits);
 
         if (running && !done) {
             if (reduced) postInvalidateDelayed(1000L - (t % 1000L));

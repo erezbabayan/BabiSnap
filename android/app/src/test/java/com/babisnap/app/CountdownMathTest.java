@@ -40,26 +40,6 @@ public class CountdownMathTest {
         assertFalse(CountdownMath.reducedMotion(1f));
     }
 
-    @Test public void ripplesAreOffsetAndLoop() {
-        assertEquals(0f, CountdownMath.ripplePhase(0, 0), 0f);
-        assertEquals(0.5f, CountdownMath.ripplePhase(0, 1), 1e-6);
-        assertEquals(CountdownMath.ripplePhase(100, 0), CountdownMath.ripplePhase(100 + CountdownMath.RIPPLE_PERIOD_MS, 0), 1e-6);
-        float p = CountdownMath.ripplePhase(1399, 0);
-        assertTrue(p >= 0f && p < 1f);
-    }
-
-    @Test public void rippleFadesAsItGrows() {
-        assertTrue(CountdownMath.rippleAlpha(0f) > CountdownMath.rippleAlpha(0.5f));
-        assertTrue(CountdownMath.rippleAlpha(0.5f) > CountdownMath.rippleAlpha(0.9f));
-        assertEquals(0, CountdownMath.rippleAlpha(1f));
-    }
-
-    @Test public void shimmerLoops() {
-        assertEquals(0f, CountdownMath.shimmerPos(0), 0f);
-        assertEquals(0f, CountdownMath.shimmerPos(CountdownMath.SHIMMER_PERIOD_MS), 0f);
-        assertTrue(CountdownMath.shimmerPos(800) > 0f && CountdownMath.shimmerPos(800) < 1f);
-    }
-
     @Test public void urgencyOnlyInLastSecond() {
         assertEquals(0f, CountdownMath.urgency(0, T), 0f);
         assertEquals(0f, CountdownMath.urgency(4000, T), 0f);

@@ -5,11 +5,6 @@ package com.babisnap.app;
  * The view only draws what these functions return; the call decision stays in {@link CallDial}.
  */
 public final class CountdownMath {
-    /** Two ripple rings, offset by half a period. */
-    public static final int RIPPLES = 2;
-    public static final long RIPPLE_PERIOD_MS = 1400L;
-    public static final long SHIMMER_PERIOD_MS = 1600L;
-
     /** Fraction of the countdown still left, 1 at the start and 0 at the end. */
     public static float remaining(long elapsedMs, long totalMs) {
         if (totalMs <= 0) return 0f;
@@ -32,24 +27,6 @@ public final class CountdownMath {
     public static float steppedRemaining(long elapsedMs, long totalMs) {
         if (totalMs <= 0) return 0f;
         return Math.min(1f, secondsLeft(elapsedMs, totalMs) * 1000f / (float) totalMs);
-    }
-
-    /** Ripple i phase in [0,1): 0 = born at the icon edge, near 1 = fully expanded and faded. */
-    public static float ripplePhase(long elapsedMs, int i) {
-        long offset = RIPPLE_PERIOD_MS * i / RIPPLES;
-        long t = Math.max(0L, elapsedMs) + offset;
-        return (t % RIPPLE_PERIOD_MS) / (float) RIPPLE_PERIOD_MS;
-    }
-
-    /** Ripple alpha 0..255 that fades out as it grows. */
-    public static int rippleAlpha(float phase) {
-        float a = 1f - clamp01(phase);
-        return Math.round(110f * a * a);
-    }
-
-    /** Shimmer highlight position in [0,1) across the bar. */
-    public static float shimmerPos(long elapsedMs) {
-        return (Math.max(0L, elapsedMs) % SHIMMER_PERIOD_MS) / (float) SHIMMER_PERIOD_MS;
     }
 
     /** Settings › Developer › Animator duration scale = 0 means the user turned animations off. */

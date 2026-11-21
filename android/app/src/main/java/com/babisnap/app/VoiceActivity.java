@@ -58,7 +58,6 @@ public class VoiceActivity extends Activity {
     private final List<WhatsAppRecipients.Contact> callContacts = new ArrayList<>();
     private Runnable callAfterContacts;
     private CallCountdownView callRing;
-    private CountdownBarView callBar;
 
     @Override protected void onCreate(Bundle b) {
         super.onCreate(b);
@@ -1259,7 +1258,7 @@ public class VoiceActivity extends Activity {
     }
 
     /**
-     * Animated countdown: a ring around the phone icon with ripples and seconds, and a shimmer bar.
+     * Animated countdown (design A): a ring around the phone icon with the seconds inside.
      * Drawing only; the call still fires from {@link #callExpire} after {@link CallDial#CONFIRM_MS}.
      */
     private void startCallFx() {
@@ -1272,20 +1271,13 @@ public class VoiceActivity extends Activity {
         callRing = new CallCountdownView(this);
         root.addView(callRing, root.indexOfChild(check), new LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
-        View oldBar = findViewById(R.id.countdown);
-        oldBar.setVisibility(View.GONE);
-        callBar = new CountdownBarView(this);
-        LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, InviteViews.dp(this, 6));
-        bp.topMargin = InviteViews.dp(this, 14);
-        root.addView(callBar, root.indexOfChild(oldBar) + 1, bp);
+        // Design A: the ring is the only countdown; the plain bar is hidden.
+        findViewById(R.id.countdown).setVisibility(View.GONE);
         callRing.start(CallDial.CONFIRM_MS, reduced);
-        callBar.start(CallDial.CONFIRM_MS, reduced);
     }
 
     private void stopCallFx() {
         if (callRing != null) callRing.stop();
-        if (callBar != null) callBar.stop();
     }
 
     /** «חייג» uses the same decision as the countdown. A later WhatsApp voice action gets its own branch. */
