@@ -74,6 +74,7 @@ public class VoiceActivity extends Activity {
         setIntent(intent);
         // Back-to-back from MainActivity/widget while Undo (or listen) is open: commit then re-listen.
         // A WhatsApp card and a call card are not queue items — leaving them cancels, it does not save.
+        if (chooserOpen) chooseRoute(RouteChooser.DEFAULT); // unanswered chooser keeps the old default: a note
         if (callPending && !callDialed) cancelCall(null);
         else if (waPending && !waHandedOff) cancelWhatsApp(null);
         else if ((pendingBody != null || pendingMeeting) && !committed) commitPending();
@@ -107,6 +108,7 @@ public class VoiceActivity extends Activity {
 
     /** Reset session state and open the mic again (after onNewIntent commit). */
     private void restartListening() {
+        chooserOpen = false; chooserFor = null; ui.removeCallbacks(chooserExpire);
         ui.removeCallbacks(commit); ui.removeCallbacks(closeCard); ui.removeCallbacks(pickerTimeout); ui.removeCallbacks(waExpire); ui.removeCallbacks(callExpire);
         ended = true; tick.removeCallbacks(ticker); stopRec();
         if (waHandedOff) { waAudio = null; waUri = null; } else discardWa();
@@ -297,6 +299,16 @@ public class VoiceActivity extends Activity {
             c = Classifier.classify(spoken, explicitTime, false);
             dest = RouteGate.dest(c.kind);
         }
+        if (RouteChooser.shouldAsk(c, parsed.optBoolean("dateDefaulted", true),
+                parsed.optBoolean("timeDefaulted", true), !spokenTags.isEmpty())) {
+            showChooser(c); return;
+        }
+        routeClassified(c);
+    }
+
+    /** Everything after classification: unchanged routing, also used once the chooser has an answer. */
+    private void routeClassified(Classifier.Result c) {
+        RouteGate.Dest dest = RouteGate.dest(c.kind);
         if (dest == RouteGate.Dest.CALL) { showCall(c); return; }
         discardWa();
         if (dest != RouteGate.Dest.CALENDAR) { showSaved(c); return; }
@@ -369,6 +381,86 @@ public class VoiceActivity extends Activity {
     private final List<InviteFlow.Invitee> invitees = new ArrayList<>();
     private List<String> inviteQueries = new ArrayList<>();
     private boolean pickerMode;
+
+    private boolean chooserOpen;
+    private Classifier.Result chooserFor;
+    private final Runnable chooserExpire = () -> chooseRoute(RouteChooser.DEFAULT);
+
+    /** «לאן לשלוח?»: only for a guessed note with no date and no contact. Silence = BabiTk note, as before. */
+    private void showChooser(Classifier.Result c) {
+        chooserOpen = true; chooserFor = c;
+        setFinishOnTouchOutside(false);
+        setContentView(R.layout.card_chooser);
+        getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+        ((TextView) findViewById(R.id.headline)).setText(RouteChooser.TITLE);
+        ((TextView) findViewById(R.id.summary)).setText("\u201C" + (spoken == null ? c.stripped : spoken.trim()) + "\u201D");
+        ((TextView) findViewById(R.id.hint)).setText(RouteChooser.DEFAULT_HINT);
+        LinearLayout box = findViewById(R.id.choices);
+        LinearLayout row = null;
+        java.util.List<RouteChooser.Choice> list = RouteChooser.choices(Core.whatsAppEnabled(this));
+        for (int i = 0; i < list.size(); i++) {
+            if (i % 2 == 0) {
+                row = new LinearLayout(this);
+                row.setOrientation(LinearLayout.HORIZONTAL);
+                row.setGravity(Gravity.CENTER);
+                box.addView(row, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+            }
+            row.addView(chooserCircle(list.get(i)), new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        }
+        findViewById(R.id.cancel).setOnClickListener(v -> {
+            chooserOpen = false; ui.removeCallbacks(chooserExpire); done(RouteChooser.CANCELLED);
+        });
+        android.widget.ProgressBar bar = findViewById(R.id.countdown);
+        bar.setMax((int) RouteChooser.TIMEOUT_MS);
+        android.animation.ObjectAnimator.ofInt(bar, "progress", (int) RouteChooser.TIMEOUT_MS, 0).setDuration(RouteChooser.TIMEOUT_MS).start();
+        ui.removeCallbacks(chooserExpire);
+        ui.postDelayed(chooserExpire, RouteChooser.TIMEOUT_MS);
+    }
+
+    private View chooserCircle(RouteChooser.Choice choice) {
+        LinearLayout cell = new LinearLayout(this);
+        cell.setOrientation(LinearLayout.VERTICAL);
+        cell.setGravity(Gravity.CENTER_HORIZONTAL);
+        int pad = InviteViews.dp(this, 6);
+        cell.setPadding(pad, pad, pad, pad);
+        android.widget.ImageView iv = new android.widget.ImageView(this);
+        iv.setImageResource(DestIcon.round(RouteChooser.dest(choice)));
+        iv.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        int size = InviteViews.dp(this, 76);
+        cell.addView(iv, new LinearLayout.LayoutParams(size, size));
+        if (choice == RouteChooser.DEFAULT) {
+            android.graphics.drawable.GradientDrawable ring = new android.graphics.drawable.GradientDrawable();
+            ring.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+            ring.setStroke(InviteViews.dp(this, 3), 0xFF8E3BD9);
+            iv.setBackground(ring);
+            int in = InviteViews.dp(this, 5);
+            iv.setPadding(in, in, in, in);
+        }
+        TextView t = new TextView(this);
+        t.setText(RouteChooser.label(choice));
+        t.setTextColor(0xFF2A1B7A);
+        t.setTextSize(14);
+        t.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        t.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams tl = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        tl.topMargin = InviteViews.dp(this, 4);
+        cell.addView(t, tl);
+        cell.setMinimumHeight(InviteViews.dp(this, 48));
+        cell.setContentDescription(RouteChooser.label(choice));
+        cell.setOnClickListener(v -> chooseRoute(choice));
+        return cell;
+    }
+
+    /** Tap, timeout, or leaving the card: route the same text to the chosen destination with the normal flow. */
+    private void chooseRoute(RouteChooser.Choice choice) {
+        if (!chooserOpen || cardClosed) return;
+        chooserOpen = false;
+        ui.removeCallbacks(chooserExpire);
+        setFinishOnTouchOutside(true);
+        Classifier.Result r = RouteChooser.chosen(choice, chooserFor);
+        if (choice == RouteChooser.Choice.WHATSAPP) { showWhatsApp(r); return; }
+        routeClassified(r);
+    }
 
     private void showMeeting() {
         inviteQueries = new ArrayList<>();
@@ -532,6 +624,7 @@ public class VoiceActivity extends Activity {
     @Override protected void onStop() {
         if (callAskingContacts || waAskingContacts) { super.onStop(); return; }
         if ((callConfirming || callPending) && !callDialed) cancelCall(CallDial.CANCELLED);
+        if (chooserOpen) chooseRoute(RouteChooser.DEFAULT); // leaving an unanswered chooser saves the note, nothing is lost
         if (waHandedOff) waLeft = true;
         else if (waConfirming) runWaCommit();
         else if (waPending) cancelWhatsApp("בוטל – לא נשלח לוואטסאפ");
@@ -546,6 +639,7 @@ public class VoiceActivity extends Activity {
     }
 
     private void done(String msg) {
+        chooserOpen = false; ui.removeCallbacks(chooserExpire);
         cardClosed = true; stopVoiceTake(); ui.removeCallbacks(closeCard); ui.removeCallbacks(commit); ui.removeCallbacks(pickerTimeout); ui.removeCallbacks(waExpire); ui.removeCallbacks(callExpire);
         if (waAnim != null) waAnim.cancel();
         if (callAnim != null) callAnim.cancel();
