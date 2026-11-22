@@ -4,12 +4,12 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * «לאן לשלוח?» (approved sample F). Shown only when the phrase had no routing word, no date or time,
+ * «לאן לשלוח?» (approved sample F, plus «שיחה» approved 2026-11-22). Shown only when the phrase had no routing word, no date or time,
  * no contact and no tag, i.e. the classifier fell back to a guessed NOTE. Every other phrase routes exactly as before.
  * No answer within {@link #TIMEOUT_MS} keeps the old behaviour: a BabiTk note.
  */
 public final class RouteChooser {
-    public enum Choice { CALENDAR, WHATSAPP, TASK, NOTE }
+    public enum Choice { CALENDAR, WHATSAPP, CALL, TASK, NOTE }
 
     public static final long TIMEOUT_MS = 8000L;
     public static final Choice DEFAULT = Choice.NOTE;
@@ -33,15 +33,23 @@ public final class RouteChooser {
         List<Choice> out = new ArrayList<>();
         out.add(Choice.CALENDAR);
         if (whatsappEnabled) out.add(Choice.WHATSAPP);
+        out.add(Choice.CALL);
         out.add(Choice.TASK);
         out.add(Choice.NOTE);
         return out;
     }
 
+    /** Circles per row: 5 → 3+2, 4 → 2+2, 3 → 2+1. */
+    public static int perRow(int count) { return count >= 5 ? 3 : 2; }
+
+    /** Circle edge in dp: a little smaller when three share a row. */
+    public static int circleDp(int count) { return perRow(count) == 3 ? 66 : 76; }
+
     public static Classifier.Kind kind(Choice c) {
         switch (c) {
             case CALENDAR: return Classifier.Kind.MEETING;
             case WHATSAPP: return Classifier.Kind.WHATSAPP;
+            case CALL: return Classifier.Kind.CALL;
             case TASK: return Classifier.Kind.TASK;
             default: return Classifier.Kind.NOTE;
         }
@@ -56,6 +64,7 @@ public final class RouteChooser {
         switch (c) {
             case CALENDAR: return DestIcon.Dest.CALENDAR;
             case WHATSAPP: return DestIcon.Dest.WHATSAPP;
+            case CALL: return DestIcon.Dest.CALL;
             case TASK: return DestIcon.Dest.TASK;
             default: return DestIcon.Dest.NOTE;
         }
@@ -65,6 +74,7 @@ public final class RouteChooser {
         switch (c) {
             case CALENDAR: return "יומן";
             case WHATSAPP: return "וואטסאפ";
+            case CALL: return "שיחה";
             case TASK: return "משימה ב־BabiTk";
             default: return "הערה ב־BabiTk";
         }
