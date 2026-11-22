@@ -49,9 +49,28 @@ public class RouteChooserTest {
         assertFalse(c("פגישה מחר").guessed);
     }
 
-    @Test public void fourCirclesWithWhatsAppOnlyWhenEnabled() {
-        assertEquals(Arrays.asList(CALENDAR, WHATSAPP, TASK, NOTE), RouteChooser.choices(true));
-        assertEquals(Arrays.asList(CALENDAR, TASK, NOTE), RouteChooser.choices(false));
+    @Test public void fiveCirclesWithWhatsAppOnlyWhenEnabled() {
+        assertEquals(Arrays.asList(CALENDAR, WHATSAPP, CALL, TASK, NOTE), RouteChooser.choices(true));
+        assertEquals(Arrays.asList(CALENDAR, CALL, TASK, NOTE), RouteChooser.choices(false));
+    }
+
+    @Test public void gridIsThreePlusTwoForFiveElseTwoPerRow() {
+        assertEquals(3, RouteChooser.perRow(5));
+        assertEquals(2, RouteChooser.perRow(4));
+        assertEquals(2, RouteChooser.perRow(3));
+        assertTrue(RouteChooser.circleDp(5) < RouteChooser.circleDp(4));
+        assertTrue(RouteChooser.circleDp(5) >= 48);
+    }
+
+    @Test public void callCircleUsesTheExistingCallFlow() {
+        Classifier.Result g = c("אבא שלי");
+        Classifier.Result r = RouteChooser.chosen(CALL, g);
+        assertEquals(Classifier.Kind.CALL, r.kind);
+        assertEquals(RouteGate.Dest.CALL, RouteGate.dest(r.kind));
+        assertEquals(g.stripped, r.stripped);          // the spoken name goes to the contact search
+        assertFalse(RouteGate.toBabiTk(r.kind));
+        assertFalse(RouteGate.toCalQueue(r.kind));
+        assertEquals("שיחה", RouteChooser.label(CALL));
     }
 
     @Test public void defaultIsNoteAfterEightSeconds() {
@@ -76,6 +95,7 @@ public class RouteChooserTest {
     @Test public void circlesUseTheSharedIcons() {
         assertEquals(DestIcon.Dest.CALENDAR, RouteChooser.dest(CALENDAR));
         assertEquals(DestIcon.Dest.WHATSAPP, RouteChooser.dest(WHATSAPP));
+        assertEquals(DestIcon.Dest.CALL, RouteChooser.dest(CALL));
         assertEquals(DestIcon.Dest.TASK, RouteChooser.dest(TASK));
         assertEquals(DestIcon.Dest.NOTE, RouteChooser.dest(NOTE));
     }

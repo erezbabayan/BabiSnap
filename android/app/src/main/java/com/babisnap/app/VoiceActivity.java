@@ -400,13 +400,13 @@ public class VoiceActivity extends Activity {
         LinearLayout row = null;
         java.util.List<RouteChooser.Choice> list = RouteChooser.choices(Core.whatsAppEnabled(this));
         for (int i = 0; i < list.size(); i++) {
-            if (i % 2 == 0) {
+            if (i % RouteChooser.perRow(list.size()) == 0) {
                 row = new LinearLayout(this);
                 row.setOrientation(LinearLayout.HORIZONTAL);
                 row.setGravity(Gravity.CENTER);
                 box.addView(row, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
             }
-            row.addView(chooserCircle(list.get(i)), new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+            row.addView(chooserCircle(list.get(i), RouteChooser.circleDp(list.size())), new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         }
         findViewById(R.id.cancel).setOnClickListener(v -> {
             chooserOpen = false; ui.removeCallbacks(chooserExpire); done(RouteChooser.CANCELLED);
@@ -418,7 +418,7 @@ public class VoiceActivity extends Activity {
         ui.postDelayed(chooserExpire, RouteChooser.TIMEOUT_MS);
     }
 
-    private View chooserCircle(RouteChooser.Choice choice) {
+    private View chooserCircle(RouteChooser.Choice choice, int circleDp) {
         LinearLayout cell = new LinearLayout(this);
         cell.setOrientation(LinearLayout.VERTICAL);
         cell.setGravity(Gravity.CENTER_HORIZONTAL);
@@ -427,7 +427,7 @@ public class VoiceActivity extends Activity {
         android.widget.ImageView iv = new android.widget.ImageView(this);
         iv.setImageResource(DestIcon.round(RouteChooser.dest(choice)));
         iv.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-        int size = InviteViews.dp(this, 76);
+        int size = InviteViews.dp(this, circleDp);
         cell.addView(iv, new LinearLayout.LayoutParams(size, size));
         if (choice == RouteChooser.DEFAULT) {
             android.graphics.drawable.GradientDrawable ring = new android.graphics.drawable.GradientDrawable();
