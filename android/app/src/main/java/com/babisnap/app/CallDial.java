@@ -20,6 +20,27 @@ public final class CallDial {
     public static final long CONFIRM_MS = 5000L;
     /** Settings switch. Default off. Auto-call also needs CALL_PHONE. */
     public static final String PREF_DIRECT = "call_direct";
+    /**
+     * «אישור לבצע שיחות» on a fresh install (approved 24.11). Only the default for a pref that was never saved:
+     * a saved true/false always wins. Direct dialing still needs CALL_PHONE and keeps the confirm card and 5s countdown.
+     */
+    public static final boolean DEFAULT_DIRECT = true;
+    /** Set once the one-time CALL_PHONE prompt was shown from Settings, whatever the answer. */
+    public static final String PREF_ASKED = "call_perm_asked";
+
+    /** The saved toggle, or {@link #DEFAULT_DIRECT} when the user never saved one. */
+    public static boolean directPref(android.content.SharedPreferences p) {
+        return p.getBoolean(PREF_DIRECT, DEFAULT_DIRECT);
+    }
+
+    /**
+     * Settings asks for CALL_PHONE once on its own, only when the toggle is (by default or by choice) on,
+     * the permission is missing, it was never asked before, and the system has not blocked it.
+     * A denial saves the toggle off through the existing permission result path.
+     */
+    public static boolean askOnce(boolean toggleOn, boolean granted, boolean askedBefore, boolean blocked) {
+        return toggleOn && !granted && !askedBefore && !blocked;
+    }
     public static final String TOGGLE_TITLE = "אישור לבצע שיחות";
     public static final String TOGGLE_HINT = "בסוף הספירה השיחה תצא ישירות, בלי חייגן";
     public static final String HINT = "המספר מולא מראש. הלחיצה בחייגן היא זו שמתחילה את השיחה.";

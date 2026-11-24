@@ -10,7 +10,7 @@ import java.util.regex.Pattern;
  * MEETING -> Google Calendar only (existing flow). TASK / NOTE -> BabiTk "notebook" board.
  * Task vs note is decided by CONTENT (something to do vs information), never by presence of a date.
  * Exception: an explicit date+time with no action verb and no destination word is a calendar item.
- * WHATSAPP is returned only when the caller passes whatsappEnabled (the setting, default off).
+ * WHATSAPP is returned only when the caller passes whatsappEnabled (the setting, default on since 24.11).
  * {@link #classify(String, boolean)} passes false and never returns WHATSAPP.
  * The live path is {@link #classify(String, boolean, boolean)} with the saved setting.
  * CALL is an immediate dial ("תתקשר לתמרי", no future date or time). It is not a task.
@@ -127,7 +127,7 @@ public final class Classifier {
     }
 
     /**
-     * @param whatsappEnabled setting, default off. When false the result matches {@link #classify(String, boolean)}.
+     * @param whatsappEnabled setting, default on. When false the result matches {@link #classify(String, boolean)}.
      *        When true, a channel word is the only destination and is removed from the text.
      */
     public static Result classify(String text, boolean explicitTime, boolean whatsappEnabled) {

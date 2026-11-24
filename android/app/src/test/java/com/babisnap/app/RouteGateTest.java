@@ -155,12 +155,13 @@ public class RouteGateTest {
         assertTrue(manifest.contains("${pairScheme}"));
         assertFalse(manifest.contains("android:scheme=\"babisnap\""));
         String gradle = text("build.gradle");
-        assertTrue(gradle.contains("WHATSAPP_DEFAULT_ON\", \"false\""));
+        // 24.11: WhatsApp defaults to on in the product build too; the watest build stays on.
+        assertFalse(gradle.contains("WHATSAPP_DEFAULT_ON\", \"false\""));
         assertTrue(gradle.contains("applicationIdSuffix \".watest\""));
-        assertTrue(gradle.contains("WHATSAPP_DEFAULT_ON\", \"true\""));
         int watest = gradle.indexOf("watest {");
-        int on = gradle.indexOf("WHATSAPP_DEFAULT_ON\", \"true\"");
-        assertTrue(watest > 0 && on > watest);
+        int first = gradle.indexOf("WHATSAPP_DEFAULT_ON\", \"true\"");
+        int last = gradle.lastIndexOf("WHATSAPP_DEFAULT_ON\", \"true\"");
+        assertTrue(first > 0 && first < watest && last > watest);
         String label = text("src/watest/res/values/strings.xml");
         assertTrue(label.contains("BabiSnap וואטסאפ בדיקה"));
     }

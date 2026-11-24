@@ -15,7 +15,7 @@
 | יומן המכשיר | אותו אירוע | ספק היומן של Android במכשיר (`READ/WRITE_CALENDAR`) |
 | BabiTk | כותרת, תאריך/שעה, מיקום, סוג (משימה/הערה), #תגיות | שרת BabiTk, עם טוקן מכשיר שנשמר מוצפן |
 | שיחה | מספר הטלפון של איש הקשר | החייגן, או חיוג ישיר רק אם הפעלתם «אישור לבצע שיחות» (`CALL_PHONE`) |
-| WhatsApp | הטקסט או קובץ הקול | אפליקציית WhatsApp במכשיר (שיתוף). כבוי כברירת מחדל |
+| WhatsApp | הטקסט או קובץ הקול | אפליקציית WhatsApp במכשיר (שיתוף). פועל כברירת מחדל, אפשר לכבות |
 
 אנשי הקשר (`READ_CONTACTS`) נקראים במכשיר רק כדי למצוא שם או מספר. הם לא מועלים לשום מקום.
 
@@ -51,7 +51,7 @@
 ---
 
 ## English summary
-- Data stays on the device. Content goes **only to the destination you choose**: Google Calendar API, the device calendar, BabiTk, the phone dialer, or the WhatsApp app (off by default).
+- Data stays on the device. Content goes **only to the destination you choose**: Google Calendar API, the device calendar, BabiTk, the phone dialer, or the WhatsApp app (on by default, can be turned off in Settings).
 - Speech-to-text is done by Android/Google `SpeechRecognizer`. BabiSnap has no audio server of its own.
 - Device registry (Supabase `snap-users`) receives only: Google account email, random install ID, event (`signin`/`heartbeat`/`disconnect`), active sources (`google_calendar`/`babitk`), app version, and device maker/model. It receives no recording content.
 - The update check reads the public GitHub releases API and sends no personal data.

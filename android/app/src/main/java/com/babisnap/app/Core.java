@@ -36,13 +36,14 @@ public final class Core {
     /** Stage-2 invites ('שליחת הזמנות'), default OFF. */
     public static boolean sendInvites(Context c) { return prefs(c).getBoolean("send_invites", false); }
     /**
-     * WhatsApp share. Product default is off, so a channel word stays on the calendar / BabiTk path.
-     * The watest APK defaults the missing pref to on; a saved toggle still wins.
+     * WhatsApp share. On by default since 24.11 (BuildConfig.WHATSAPP_DEFAULT_ON in the product and watest builds).
+     * Only a pref that was never saved takes the default; a saved toggle (including an explicit off) always wins.
      */
-    public static boolean whatsAppEnabled(Context c) {
-        return prefs(c).getBoolean(WhatsAppLogic.PREF_ENABLED,
-            WhatsAppLogic.DEFAULT_ENABLED || BuildConfig.WHATSAPP_DEFAULT_ON);
+    public static boolean whatsAppEnabled(Context c) { return whatsAppEnabled(prefs(c)); }
+    public static boolean whatsAppEnabled(SharedPreferences p) {
+        return p.getBoolean(WhatsAppLogic.PREF_ENABLED, whatsAppDefault());
     }
+    public static boolean whatsAppDefault() { return WhatsAppLogic.DEFAULT_ENABLED || BuildConfig.WHATSAPP_DEFAULT_ON; }
     public static WhatsAppLogic.Mode whatsAppMode(Context c) {
         return WhatsAppLogic.mode(prefs(c).getString(WhatsAppLogic.PREF_MODE, WhatsAppLogic.DEFAULT_MODE));
     }
