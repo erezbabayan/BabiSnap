@@ -37,8 +37,8 @@ android {
         applicationId = 'com.babisnap.app'
         minSdk = 26
         targetSdk = 34
-        versionCode = 56
-        versionName = '2.45'
+        versionCode = 57
+        versionName = '2.46'
         // WhatsApp is on by default for a fresh install (approved 24.11). A saved toggle always wins.
         buildConfigField "boolean", "WHATSAPP_DEFAULT_ON", "true"
         manifestPlaceholders = [pairScheme: "babisnap"]
