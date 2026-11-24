@@ -28,8 +28,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 /** Widget/launcher target: speech (he-IL) -> parse on device -> (optional confirm) -> durable calendar / BabiTk queue.
- *  WhatsApp is a separate opt-in destination (setting off by default) and never writes those queues.
- *  An immediate call ("תתקשר לתמרי", no future date or time) opens the system dialer and never writes those queues. */
+ *  WhatsApp is a separate destination (setting on by default, can be turned off) and never writes those queues.
+ *  An immediate call ("תתקשר לתמרי", no future date or time) opens the system dialer (or dials directly when «אישור לבצע שיחות» is on and CALL_PHONE granted) and never writes those queues. */
 public class VoiceActivity extends Activity {
     static final int REQ_SPEECH = 1, REQ_AUTH = 2, REQ_MIC = 3, REQ_CONTACTS = 4, REQ_WA = WhatsAppShare.REQ;
     private JSONObject parsed; private String spoken; private java.util.List<String> spokenTags = new java.util.ArrayList<>();
@@ -1202,7 +1202,7 @@ public class VoiceActivity extends Activity {
         ui.postDelayed(callExpire, CallDial.CONFIRM_MS);
     }
 
-    private boolean directPref() { return Core.prefs(this).getBoolean(CallDial.PREF_DIRECT, false); }
+    private boolean directPref() { return CallDial.directPref(Core.prefs(this)); }
 
     private boolean callPhoneGranted() {
         return checkSelfPermission(Manifest.permission.CALL_PHONE) == PackageManager.PERMISSION_GRANTED;

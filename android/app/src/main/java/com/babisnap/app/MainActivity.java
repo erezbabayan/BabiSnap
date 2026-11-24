@@ -70,13 +70,26 @@ public class MainActivity extends Activity {
         super.onResume();
         if (content == null) return;
         render(); // permissions may have changed in App info
-        if (!askMic) return;
+        if (!askMic) { maybeAskCallOnce(); return; }
         askMic = false;
-        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) return;
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) { maybeAskCallOnce(); return; }
         if (isBlocked(this, Manifest.permission.RECORD_AUDIO)) {
             Toast.makeText(this, "הרשאות ← מיקרופון ← אפשר", Toast.LENGTH_LONG).show();
             openAppInfo();
         } else requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, REQ_MIC);
+    }
+
+    /**
+     * «אישור לבצע שיחות» is on by default, so Settings shows the system CALL_PHONE prompt once.
+     * Never from the call card. A denial goes through the existing REQ_CALL result: the toggle is saved off.
+     */
+    private void maybeAskCallOnce() {
+        boolean granted = checkSelfPermission(Manifest.permission.CALL_PHONE) == PackageManager.PERMISSION_GRANTED;
+        boolean asked = Core.prefs(this).getBoolean(CallDial.PREF_ASKED, false);
+        if (!CallDial.askOnce(CallDial.directPref(Core.prefs(this)), granted, asked,
+                isBlocked(this, Manifest.permission.CALL_PHONE))) return;
+        Core.prefs(this).edit().putBoolean(CallDial.PREF_ASKED, true).apply();
+        requestPermissions(new String[]{Manifest.permission.CALL_PHONE}, REQ_CALL);
     }
 
     private void render() {
@@ -142,14 +155,14 @@ public class MainActivity extends Activity {
             Core.prefs(this).edit().putBoolean(WhatsAppLogic.PREF_ENABLED, on).apply();
             render();
         });
-        markRow(prefs, DestIcon.Dest.WHATSAPP, "וואטסאפ", "שליחה לוואטסאפ", plain("כבוי כברירת מחדל. השם נלקח מאנשי הקשר"), wa);
+        markRow(prefs, DestIcon.Dest.WHATSAPP, "וואטסאפ", "שליחה לוואטסאפ", plain("פועל כברירת מחדל, אפשר לכבות. השם נלקח מאנשי הקשר"), wa);
         if (waOn) {
             WhatsAppLogic.Mode mode = Core.whatsAppMode(this);
             row(prefs, "📤", false, "מה נשלח לוואטסאפ", plain(WhatsAppLogic.modeHint(mode)),
                 link(WhatsAppLogic.modeLabel(mode) + " ▾", false, v -> pickWhatsAppMode()));
         }
         boolean callGranted = checkSelfPermission(Manifest.permission.CALL_PHONE) == PackageManager.PERMISSION_GRANTED;
-        boolean callPref = Core.prefs(this).getBoolean(CallDial.PREF_DIRECT, false);
+        boolean callPref = CallDial.directPref(Core.prefs(this));
         Switch callSw = new Switch(this);
         callSw.setChecked(CallDial.effective(callPref, callGranted));
         callSw.setContentDescription(CallDial.TOGGLE_TITLE);
@@ -500,8 +513,8 @@ public class MainActivity extends Activity {
         "• אם בחרתם יעד \"יומן המכשיר\", הפגישה נכתבת ליומן שבטלפון בלבד. BabiSnap לא שולח את האירוע לשרת. אם היומן מסונכרן באפליקציה אחרת, הסנכרון הוא שלה. זימון במייל נשלח רק מיומן Google.\n\n" +
         "• משימות והערות נשלחות רק ללוח \"מחברת\" ב-BabiTk שלך. מפתח החיבור נשמר מוצפן בטלפון.\n\n" +
         "• אנשי קשר נקראים בטלפון בלבד ולא נשלחים לשום מקום (אימייל מוזמן עובר ל-Google רק אם ביקשת לשלוח הזמנה, ומספר נמען נפתח בוואטסאפ רק אם ביקשת).\n\n" +
-        "• שליחה לוואטסאפ כבויה כברירת מחדל. כשהיא דלוקה ואומרים «וואטסאפ», השם נבדק מול אנשי הקשר בטלפון ונפתחת שיחה פרטית עם הטקסט מוכן. לקבוצה נפתח השיתוף של וואטסאפ ובוחרים את הקבוצה שם. השליחה רק בלחיצה שלך. אין רשימת כינויים ואין שרת.\n\n" +
-        "• שיחה מיידית: שם מדויק ויחיד נפתח בכרטיס גם אם שמור שם דומה. שם של כמה מילים נפתח בכרטיס כשאיש קשר אחד מכיל את כולן, ובורר של אותם אנשי קשר כשיש כמה. אותו כלל חל על נמען וואטסאפ. בורר גם בלי התאמה מדויקת, או כשכמה אנשי קשר באותו שם. נפתח כחייגן, אלא אם הפעלתם «אישור לבצע שיחות» ואושרה הרשאת הטלפון. אז השיחה יוצאת בסוף 5 השניות. ההרשאה משמשת רק לחיוג שביקשתם. אין יומן שיחות ואין הקלטה.\n\n" +
+        "• שליחה לוואטסאפ פועלת כברירת מחדל ואפשר לכבות אותה בהגדרות. כשהיא דלוקה ואומרים «וואטסאפ», השם נבדק מול אנשי הקשר בטלפון ונפתחת שיחה פרטית עם הטקסט מוכן. לקבוצה נפתח השיתוף של וואטסאפ ובוחרים את הקבוצה שם. השליחה רק בלחיצה שלך. אין רשימת כינויים ואין שרת.\n\n" +
+        "• שיחה מיידית: שם מדויק ויחיד נפתח בכרטיס גם אם שמור שם דומה. שם של כמה מילים נפתח בכרטיס כשאיש קשר אחד מכיל את כולן, ובורר של אותם אנשי קשר כשיש כמה. אותו כלל חל על נמען וואטסאפ. בורר גם בלי התאמה מדויקת, או כשכמה אנשי קשר באותו שם. «אישור לבצע שיחות» פועל כברירת מחדל: אם אושרה הרשאת הטלפון השיחה יוצאת בסוף 5 השניות, ואחרת נפתח החייגן. אפשר לכבות בהגדרות. ההרשאה משמשת רק לחיוג שביקשתם. אין יומן שיחות ואין הקלטה.\n\n" +
         "• האימייל של חשבון Google שחיברתם, יחד עם מזהה התקנה אקראי (לא IMEI), גרסה ושם דגם, נשמרים לניהול הגישה בלבד. לא נשלחים הקלטות, תמלילים, תוכן יומן או טוקן Google.\n\n" +
         "• בדיקת עדכונים: פעם ביום, או בלחיצה על «בדוק עדכונים», האפליקציה קוראת מ-GitHub את מספר הגרסה האחרונה בלבד. לא נשלח שום מידע עליך.\n\n" +
         "• אין פרסומות ואין מעקב תוכן. \"מחק את כל הנתונים מהמכשיר\" מוחק את נתוני האפליקציה מהטלפון ומסמן את ההתקנה כמנותקת.\n\n" +
