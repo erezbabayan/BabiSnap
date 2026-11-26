@@ -698,11 +698,12 @@ public class VoiceActivity extends Activity {
         }
         waAfterContacts = () -> {
             if (isFinishing() || cardClosed) return;
-            if (waCommand.target != WhatsAppRecipients.Target.PERSON || waCommand.name.isEmpty()) {
+            // A name said without ל («וואטסאפ תמרי מה שלומך») is still tried against the contacts.
+            WhatsAppRecipients.Resolution resolved = WhatsAppRecipients.resolveHeard(heard, spoken, waContacts);
+            if (resolved.command.target != WhatsAppRecipients.Target.PERSON || resolved.command.name.isEmpty()) {
                 showWaChooser(WhatsAppRecipients.search(waContacts, ""), true);
                 return;
             }
-            WhatsAppRecipients.Resolution resolved = WhatsAppRecipients.resolveHeard(heard, spoken, waContacts);
             waCommand = resolved.command;
             waBody = WhatsAppRecipients.shownText(waCommand);
             WhatsAppRecipients.Matches hits = resolved.matches;

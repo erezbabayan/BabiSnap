@@ -31,8 +31,16 @@ public final class WhatsAppRecipients {
     private static final int EXTRA_NAME_TOKENS = 4;
     private static final Pattern GROUP = Pattern.compile(
         "(?:^|\\s)((?:אל\\s+)?ל?(?:קבוצת|קבוצה))(?=\\s|$)");
-    private static final Pattern EL = Pattern.compile("(?:^|\\s)אל\\s+(\\S+)");
-    private static final Pattern LAMED = Pattern.compile("(?:^|\\s)ל(\\S+)");
+    /** «אל תמרי», and a ל the recognizer split off: «ל תמרי» / «ל- תמרי». */
+    private static final Pattern EL = Pattern.compile("(?:^|\\s)(?:אל|ל-?)\\s+(\\S+)");
+    /** «לתמרי», also with a hyphen: «ל-תמרי». */
+    private static final Pattern LAMED = Pattern.compile("(?:^|\\s)ל-?([^\\s-]\\S*)");
+    /** Words a connector ש may stand in front of («שאני בדרך»). Any other ש-word is the message itself. */
+    private static final Set<String> AFTER_CONNECTOR = new HashSet<>(Arrays.asList(
+        "אני", "את", "אתה", "אתם", "אתן", "אנחנו", "הוא", "היא", "הם", "הן",
+        "יש", "אין", "לא", "כבר", "עוד", "אולי", "מחר", "היום", "אתמול"));
+    /** Words tried right after the channel word when no «ל+name» was said. */
+    private static final int BARE_NAME_TOKENS = 3;
 
     public enum Target { PERSON, GROUP, NONE }
 
@@ -313,9 +321,14 @@ public final class WhatsAppRecipients {
      */
     public static Resolution resolve(String utterance, List<Contact> contacts) {
         Command cmd = parse(utterance);
+        if (cmd.target == Target.NONE) {
+            Resolution bare = resolveBareName(utterance, contacts);
+            if (bare != null) return bare;
+        }
         if (cmd.target != Target.PERSON || cmd.name.isEmpty()) return new Resolution(cmd, none());
         String longKey = longestPersonKey(cmd);
-        Matches m = match(longKey, contacts);
+        // The words after the name are the message here, so one saved first name confirms on its own.
+        Matches m = matchAmong(longKey, withNumber(contacts), true);
         String used = m.usedKey != null && !m.usedKey.isEmpty() ? m.usedKey : cmd.name;
         return new Resolution(withConsumedName(cmd, used), m);
     }
@@ -325,13 +338,22 @@ public final class WhatsAppRecipients {
      * A phone call passes every contact with a dialable number, including numbers outside Israel.
      */
     public static Matches matchAmong(String spoken, List<Contact> eligible) {
+        return matchAmong(spoken, eligible, false);
+    }
+
+    /**
+     * @param tailIsMessage true when the words after the name are the message (WhatsApp body).
+     *     Then a unique saved first name confirms. False (a call: every word is the name) keeps
+     *     a leftover unmatched word as a picker.
+     */
+    static Matches matchAmong(String spoken, List<Contact> eligible, boolean tailIsMessage) {
         List<Contact> list = new ArrayList<>();
         if (eligible != null) for (Contact c : eligible) if (c != null) list.add(c);
         String raw = spoken == null ? "" : spoken.replaceAll("\\s+", " ").trim();
-        Matches direct = matchWindows(raw, list);
+        Matches direct = matchWindows(raw, list, tailIsMessage);
         String stripped = stripOnePrefix(raw);
         if (stripped.equals(raw)) return direct;
-        Matches alt = matchWindows(stripped, list);
+        Matches alt = matchWindows(stripped, list, tailIsMessage);
         if (direct.code == MatchCode.NONE) return alt;
         if (alt.code == MatchCode.NONE) return direct;
         if (alt.tier < direct.tier) return alt;
@@ -341,7 +363,7 @@ public final class WhatsAppRecipients {
     }
 
     /** Longest prefix first, so a trailing message word («היי») is not kept as part of the name. */
-    private static Matches matchWindows(String key, List<Contact> contacts) {
+    private static Matches matchWindows(String key, List<Contact> contacts, boolean tailIsMessage) {
         if (key == null || fold(key).length() < 2) return none();
         List<String> toks = new ArrayList<>();
         for (String w : key.split(" ")) if (!w.isEmpty()) toks.add(w);
@@ -350,14 +372,95 @@ public final class WhatsAppRecipients {
         for (int len = toks.size(); len >= 2; len--) {
             String window = joinWords(toks, len);
             if (!windowUseful(window, contacts)) continue;
-            Matches m = matchKey(window, contacts);
+            Matches m = belongingHits(window, matchKey(window, contacts));
             if (m.code == MatchCode.NONE) continue;
             return m.withUsed(window);
         }
-        // A leftover first name after a longer phrase is a picker, not a unique confirm.
         Matches firstName = matchSingle(toks.get(0), contacts);
         if (firstName.code == MatchCode.NONE) return none();
+        // WhatsApp: the rest is the message, so one saved name confirms. A call keeps the picker,
+        // because an unmatched word after the name is probably a surname that is not saved.
+        if (tailIsMessage) return firstName.withUsed(toks.get(0));
         return new Matches(MatchCode.MANY, firstName.hits, 1).withUsed(toks.get(0));
+    }
+
+    /**
+     * Strict cutoff: a longer window counts only for contacts whose own name holds every spoken
+     * content word of it (spelling variants and ל/ב/ה/ו prefixes as in {@link #wordIn}; possessive
+     * words pass). «תמרי מה» never consumes «מה» because another contact is called מיה.
+     */
+    private static Matches belongingHits(String window, Matches m) {
+        if (m == null || m.code == MatchCode.NONE) return none();
+        List<Contact> keep = new ArrayList<>();
+        for (Contact c : m.hits) if (wordsBelong(window, c)) keep.add(c);
+        if (keep.isEmpty()) return none();
+        if (keep.size() == m.hits.size()) return m;
+        return new Matches(MatchCode.MANY, keep, Math.max(1, m.tier));
+    }
+
+    private static boolean wordsBelong(String window, Contact c) {
+        if (c == null) return false;
+        List<String> got = nameWords(c);
+        for (String raw : tokenList(window)) {
+            String w = fold(raw);
+            if (w.length() < 2 || isPossessive(w)) continue;
+            if (!wordIn(w, got)) return false;
+        }
+        return true;
+    }
+
+    /**
+     * «וואטסאפ תמרי מה שלומך» — no ל. The first one to three words after the channel word are
+     * tried as a saved name, exact words only (no near names, no spelling variants), longest first.
+     * A match leaves the message without the name. Null when nothing matches.
+     */
+    private static Resolution resolveBareName(String utterance, List<Contact> contacts) {
+        String prepared = prep(utterance);
+        int bar = prepared.indexOf('¦');
+        String left = side(bar < 0 ? prepared : prepared.substring(0, bar));
+        String right = bar < 0 ? "" : side(prepared.substring(bar + 1));
+        Matcher ch = Classifier.WHATSAPP.matcher(left);
+        if (!ch.find()) return null;
+        String before = left.substring(0, ch.start()).trim();
+        List<String> toks = tokenList(left.substring(ch.end()).trim());
+        List<Contact> list = withNumber(contacts);
+        if (toks.isEmpty() || list.isEmpty()) return null;
+        for (int len = Math.min(BARE_NAME_TOKENS, toks.size()); len >= 1; len--) {
+            List<String> win = toks.subList(0, len);
+            List<Contact> hits = bareHits(win, list);
+            if (hits.isEmpty()) continue;
+            String name = String.join(" ", win);
+            String rest = String.join(" ", toks.subList(len, toks.size()));
+            String body = cleanBody(stripChannel((before + " " + rest + " " + right).trim()));
+            Matches m = new Matches(hits.size() == 1 ? MatchCode.ONE : MatchCode.MANY, hits, 0, name);
+            return new Resolution(new Command(Target.PERSON, name, body), m);
+        }
+        return null;
+    }
+
+    /** Contacts whose saved name is the spoken words exactly, or holds each of them as a whole word. */
+    private static List<Contact> bareHits(List<String> words, List<Contact> contacts) {
+        List<Contact> exact = new ArrayList<>();
+        List<Contact> all = new ArrayList<>();
+        String key = String.join(" ", words);
+        for (Contact c : contacts) {
+            if (c == null) continue;
+            if (exactFull(key, c)) { exact.add(c); continue; }
+            List<String> got = new ArrayList<>();
+            for (String w : nameWords(c)) got.add(fold(w));
+            boolean every = true;
+            for (String raw : words) {
+                String w = fold(raw);
+                if (w.length() < 2 || isPossessive(w) || Classifier.WHATSAPP.matcher(raw).matches() || !got.contains(w)) {
+                    every = false;
+                    break;
+                }
+            }
+            if (every) all.add(c);
+        }
+        List<Contact> out = exact.isEmpty() ? all : exact;
+        byUse(out);
+        return out;
     }
 
     private static boolean windowUseful(String window, List<Contact> contacts) {
@@ -773,14 +876,15 @@ public final class WhatsAppRecipients {
         Matcher el = EL.matcher(left);
         while (el.find()) {
             Span s = spanAt(left, el.start(1), el.start(1), el.end(1), channelAt);
-            int from = left.lastIndexOf("אל", el.start(1));
-            if (from < 0) from = el.start(1);
+            int from = el.start();
+            if (from < left.length() && Character.isWhitespace(left.charAt(from))) from++;
             found.add(new Span(from, s.end, s.name));
         }
         Matcher lam = LAMED.matcher(left);
         while (lam.find()) {
             if (lam.group(1).startsWith("קבוצ")) continue;
-            int lamed = lam.start(1) - 1;
+            int lamed = lam.start();
+            if (lamed < left.length() && Character.isWhitespace(left.charAt(lamed))) lamed++;
             found.add(spanAt(left, lamed, lam.start(1), lam.end(1), channelAt));
         }
         if (found.isEmpty()) return null;
@@ -863,7 +967,23 @@ public final class WhatsAppRecipients {
             }
         }
         if (text.startsWith(":")) text = Classifier.normalize(text.substring(1));
-        return Classifier.stripConnectorShin(text).trim();
+        return dropConnectorShin(text).trim();
+    }
+
+    /**
+     * The message keeps its own first letter: «שלומך», «שמעתי» stay. Only a lone «ש», or a ש in
+     * front of a short clause word («שאני בדרך» → «אני בדרך»), is a connector and is dropped.
+     */
+    static String dropConnectorShin(String raw) {
+        String s = raw == null ? "" : raw.trim();
+        if (s.equals("ש")) return "";
+        if (s.startsWith("ש ")) return s.substring(2).trim();
+        if (s.length() > 1 && s.charAt(0) == 'ש') {
+            int sp = s.indexOf(' ');
+            String first = sp < 0 ? s : s.substring(0, sp);
+            if (AFTER_CONNECTOR.contains(first.substring(1))) return s.substring(1).trim();
+        }
+        return s;
     }
 
     /** The parsed name plus up to four body tokens, for longest-prefix matching. */
