@@ -453,6 +453,124 @@ public class WhatsAppRecipientsTest {
         assertEquals("אמא של דני", prefixed.hits.get(0).displayName);
     }
 
+    // ---- Name / message split (one recording): strict cutoff, unique name confirms, no-ל, leading ש ----
+
+    private static WhatsAppRecipients.Contact full(String display, String given, String family, String phone) {
+        return new WhatsAppRecipients.Contact(display, given, family, "", Collections.singletonList(mobile(phone)));
+    }
+
+    private static void split(String said, List<WhatsAppRecipients.Contact> book,
+                              String name, String body, WhatsAppRecipients.MatchCode code) {
+        WhatsAppRecipients.Resolution r = WhatsAppRecipients.resolve(said, book);
+        assertEquals(said + " → name", name, r.command.name);
+        assertEquals(said + " → body", body, r.command.body);
+        assertEquals(said + " → code", code, r.matches.code);
+    }
+
+    @Test public void uniqueFirstNameWithAMessageOpensTheConfirmCard() {
+        WhatsAppRecipients.Contact tamari = named("תמרי", "0501111111");
+        List<WhatsAppRecipients.Contact> book = Arrays.asList(tamari, full("דני כהן", "דני", "כהן", "0502222222"));
+        split("וואטסאפ לתמרי מה שלומך", book, "תמרי", "מה שלומך", WhatsAppRecipients.MatchCode.ONE);
+        split("שלח בוואטסאפ לתמרי מה שלומך", book, "תמרי", "מה שלומך", WhatsAppRecipients.MatchCode.ONE);
+        split("לתמרי בוואטסאפ מה שלומך", book, "תמרי", "מה שלומך", WhatsAppRecipients.MatchCode.ONE);
+        split("וואטסאפ לתמרי היי מה שלומך", book, "תמרי", "היי מה שלומך", WhatsAppRecipients.MatchCode.ONE);
+        split("הודעה לתמרי מה שלומך בוואטסאפ", book, "תמרי", "מה שלומך", WhatsAppRecipients.MatchCode.ONE);
+        assertEquals(tamari, WhatsAppRecipients.resolve("וואטסאפ לתמרי מה שלומך", book).matches.hits.get(0));
+    }
+
+    @Test public void anotherContactsNameWordIsNotSwallowedFromTheMessage() {
+        // «מה» is a spelling variant of «מיה»; it belongs to another contact, so it stays in the message.
+        List<WhatsAppRecipients.Contact> book = Arrays.asList(named("תמרי", "0501111111"),
+            full("מיה לוי", "מיה", "לוי", "0503333333"));
+        split("וואטסאפ לתמרי מה שלומך", book, "תמרי", "מה שלומך", WhatsAppRecipients.MatchCode.ONE);
+        split("וואטסאפ לתמרי היי מה שלומך", book, "תמרי", "היי מה שלומך", WhatsAppRecipients.MatchCode.ONE);
+        split("וואטסאפ לתמרי מה נשמע", book, "תמרי", "מה נשמע", WhatsAppRecipients.MatchCode.ONE);
+        split("וואטסאפ לתמרי הודעה מה שלומך", book, "תמרי", "מה שלומך", WhatsAppRecipients.MatchCode.ONE);
+    }
+
+    @Test public void extraWordsJoinTheNameOnlyWhenTheyAreThatContactsName() {
+        WhatsAppRecipients.Contact love = full("תמרי אהובתי", "תמרי", "", "0501111111");
+        List<WhatsAppRecipients.Contact> book = Arrays.asList(love, full("מיה לוי", "מיה", "לוי", "0503333333"));
+        split("וואטסאפ לתמרי אהובתי מה שלומך", book, "תמרי אהובתי", "מה שלומך", WhatsAppRecipients.MatchCode.ONE);
+
+        List<WhatsAppRecipients.Contact> cohen = Arrays.asList(full("תמרי כהן", "תמרי", "כהן", "0501111111"),
+            named("דני", "0502222222"));
+        split("וואטסאפ לתמרי כהן מה שלומך", cohen, "תמרי כהן", "מה שלומך", WhatsAppRecipients.MatchCode.ONE);
+        split("וואטסאפ לתמרי מה שלומך", cohen, "תמרי", "מה שלומך", WhatsAppRecipients.MatchCode.ONE);
+
+        // A surname that is not saved is not part of the name: it stays visible in the message.
+        List<WhatsAppRecipients.Contact> bare = Collections.singletonList(named("תמרי", "0501111111"));
+        split("וואטסאפ לתמרי כהן מה שלומך", bare, "תמרי", "כהן מה שלומך", WhatsAppRecipients.MatchCode.ONE);
+    }
+
+    @Test public void sharedNameStaysAPickerAndUnknownNameFindsNobody() {
+        List<WhatsAppRecipients.Contact> two = Arrays.asList(full("תמרי כהן", "תמרי", "כהן", "0501111111"),
+            full("תמרי לוי", "תמרי", "לוי", "0502222222"));
+        WhatsAppRecipients.Resolution both = WhatsAppRecipients.resolve("וואטסאפ לתמרי מה שלומך", two);
+        assertEquals(WhatsAppRecipients.MatchCode.MANY, both.matches.code);
+        assertEquals(2, both.matches.hits.size());
+        assertEquals("מה שלומך", both.command.body);
+        split("וואטסאפ לתמרי לוי מה שלומך", two, "תמרי לוי", "מה שלומך", WhatsAppRecipients.MatchCode.ONE);
+
+        List<WhatsAppRecipients.Contact> none = Collections.singletonList(named("דני", "0502222222"));
+        split("וואטסאפ לתמרי מה שלומך", none, "תמרי", "מה שלומך", WhatsAppRecipients.MatchCode.NONE);
+    }
+
+    @Test public void possessiveNamesStillSplitCleanly() {
+        List<WhatsAppRecipients.Contact> book = Arrays.asList(person("אמא שלי", "אמא", "", mobile("0501111111")),
+            person("אמא של דני", "אמא", "", mobile("0502222222")), full("מיה לוי", "מיה", "לוי", "0503333333"));
+        split("וואטסאפ לאמא שלי מה שלומך", book, "אמא שלי", "מה שלומך", WhatsAppRecipients.MatchCode.ONE);
+        split("וואטסאפ לאמא של דני מה שלומך", book, "אמא של דני", "מה שלומך", WhatsAppRecipients.MatchCode.ONE);
+    }
+
+    @Test public void nameSaidWithoutLamedIsFoundAndLeavesTheMessage() {
+        List<WhatsAppRecipients.Contact> book = Arrays.asList(named("תמרי", "0501111111"),
+            full("מיה לוי", "מיה", "לוי", "0503333333"), full("דני כהן", "דני", "כהן", "0502222222"));
+        split("וואטסאפ תמרי מה שלומך", book, "תמרי", "מה שלומך", WhatsAppRecipients.MatchCode.ONE);
+        split("שלח בוואטסאפ תמרי מה שלומך", book, "תמרי", "מה שלומך", WhatsAppRecipients.MatchCode.ONE);
+        split("וואטסאפ תמרי: מה שלומך", book, "תמרי", "מה שלומך", WhatsAppRecipients.MatchCode.ONE);
+        split("וואטסאפ דני כהן מה שלומך", book, "דני כהן", "מה שלומך", WhatsAppRecipients.MatchCode.ONE);
+        split("וואטסאפ ל תמרי מה שלומך", book, "תמרי", "מה שלומך", WhatsAppRecipients.MatchCode.ONE);
+        split("וואטסאפ ל-תמרי מה שלומך", book, "תמרי", "מה שלומך", WhatsAppRecipients.MatchCode.ONE);
+        // Exact words only: «מה» is not taken as מיה, so a message with no name keeps the old picker.
+        WhatsAppRecipients.Resolution noName = WhatsAppRecipients.resolve("וואטסאפ מה שלומך", book);
+        assertEquals(WhatsAppRecipients.Target.NONE, noName.command.target);
+        assertEquals("מה שלומך", noName.command.body);
+        assertEquals(WhatsAppRecipients.MatchCode.NONE, noName.matches.code);
+        WhatsAppRecipients.Resolution stranger = WhatsAppRecipients.resolve("וואטסאפ אני בדרך", book);
+        assertEquals(WhatsAppRecipients.Target.NONE, stranger.command.target);
+        assertEquals("אני בדרך", stranger.command.body);
+    }
+
+    @Test public void theMessageKeepsItsLeadingShin() {
+        List<WhatsAppRecipients.Contact> book = Collections.singletonList(named("תמרי", "0501111111"));
+        split("וואטסאפ לתמרי שלומך", book, "תמרי", "שלומך", WhatsAppRecipients.MatchCode.ONE);
+        split("וואטסאפ לתמרי שמעתי שאת חולה", book, "תמרי", "שמעתי שאת חולה", WhatsAppRecipients.MatchCode.ONE);
+        assertEquals("שבוע טוב", WhatsAppRecipients.parse("וואטסאפ לתמרי שבוע טוב").body);
+        // A connector ש before a clause is still dropped.
+        assertEquals("אני בדרך", WhatsAppRecipients.parse("הודעה לאמא בוואטסאפ שאני בדרך").body);
+        assertEquals("אני בדרך", WhatsAppRecipients.parse("תגיד לתמרי בוואטסאפ ש אני בדרך").body);
+    }
+
+    @Test public void heardHypothesesPreferTheOneThatFindsTheContact() {
+        List<WhatsAppRecipients.Contact> book = Collections.singletonList(named("תמרי", "0501111111"));
+        WhatsAppRecipients.Resolution r = WhatsAppRecipients.resolveHeard(
+            Arrays.asList("וואטסאפ תמרי מה שלומך", "וואטסאפ לתמרי מה שלומך"), "וואטסאפ תמרי מה שלומך", book);
+        assertTrue(r.matches.one());
+        assertEquals("תמרי", r.command.name);
+        assertEquals("מה שלומך", r.command.body);
+    }
+
+    @Test public void aCallKeepsTheLeftoverWordAsAPicker() {
+        // Calls pass the whole spoken name: an unsaved surname after a unique first name stays a picker.
+        List<WhatsAppRecipients.Contact> book = Arrays.asList(named("תמרי", "0501111111"),
+            full("מיה לוי", "מיה", "לוי", "0503333333"));
+        WhatsAppRecipients.Matches m = WhatsAppRecipients.matchAmong("תמרי כהן", book);
+        assertEquals(WhatsAppRecipients.MatchCode.MANY, m.code);
+        assertEquals("תמרי", m.usedKey);
+        assertTrue(WhatsAppRecipients.matchAmong("תמרי", book).one());
+    }
+
     private static WhatsAppRecipients.Contact named(String name, String phone) {
         return new WhatsAppRecipients.Contact(name, name, "", "", Collections.singletonList(mobile(phone)));
     }
